@@ -414,6 +414,65 @@
   #play.posing .tiltbar,
   #play.posing .choices { display: none; }
 
+  /* AI painting loader — blurred captured pose behind a brand veil */
+  #screenPainting { padding: 0; overflow: hidden; background: var(--bg-dark); }
+  .painting-bg {
+    position: absolute; inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(28px) brightness(0.65) saturate(1.05);
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
+  .painting-veil {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(60% 50% at 15% 10%, rgba(253,136,57,0.30) 0%, transparent 60%),
+      radial-gradient(70% 60% at 95% 100%, rgba(153,17,47,0.45) 0%, transparent 60%),
+      radial-gradient(circle at center, rgba(26,6,16,0.50) 30%, rgba(26,6,16,0.85) 100%);
+  }
+  .painting-stack {
+    position: absolute; inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px;
+  }
+  .painting-eyebrow {
+    font-family: "Aileron", sans-serif;
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-size: 14px;
+    color: var(--peach);
+    margin-bottom: 28px;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.75);
+  }
+  .painting-dots { display: flex; gap: 14px; }
+  .painting-dots span {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--orange);
+    box-shadow: 0 0 16px rgba(253,136,57,0.6);
+    animation: painting-pulse 1.2s ease-in-out infinite;
+  }
+  .painting-dots span:nth-child(2) { animation-delay: 0.18s; }
+  .painting-dots span:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes painting-pulse {
+    0%, 100% { transform: scale(0.7); opacity: 0.45; }
+    50%      { transform: scale(1.15); opacity: 1; }
+  }
+  .painting-hint {
+    margin-top: 26px;
+    font-family: "General Sans", sans-serif;
+    font-size: 13px;
+    color: rgba(255,214,187,0.7);
+    max-width: 320px;
+    letter-spacing: 0.02em;
+  }
+
   /* Email-capture button arrangement: primary full-width, secondaries split */
   #screenResult .btnrow {
     flex-direction: row;
@@ -609,6 +668,17 @@
     <div class="pose-count" id="poseCount">3</div>
     <div class="pose-hint">Sit tall. Look into the lens.</div>
   </div>
+
+  <!-- AI painting loader: between pose capture and result -->
+  <div class="screen" id="screenPainting">
+    <div class="painting-bg" id="paintingBg"></div>
+    <div class="painting-veil"></div>
+    <div class="painting-stack">
+      <div class="painting-eyebrow">Painting your portrait</div>
+      <div class="painting-dots"><span></span><span></span><span></span></div>
+      <p class="painting-hint">A few seconds — the brushwork takes a moment.</p>
+    </div>
+  </div>
 </div>
 
 <!-- offscreen render target for the share image -->
@@ -667,13 +737,17 @@ const TILT_THRESHOLD_DEG = 9;
 const HOLD_MS = 280;
 const COOLDOWN_MS = 550;
 
-// Email capture: POST { email, archetype, archetypeName, image } as JSON.
-// `image` is a `data:image/jpeg;base64,...` URL of the 1080×1920 share card.
-// The endpoint should: 1) decode the image, 2) attach or upload it, 3) send
-// the email via your ESP (Resend / Mailchimp / Loops / Brevo) with an
-// archetype-specific note. Until that endpoint exists this will fail
-// gracefully and the user sees a friendly retry message.
-const EMAIL_ENDPOINT = "/api/send-card";
+// ---------- BACKEND ENDPOINTS ----------
+// Both routes live on the same Cloudflare Worker (see worker/README.md).
+// Set them to your deployed Worker URL after running `wrangler deploy`:
+//   https://vonpeach-portrait.<your-subdomain>.workers.dev/portrait
+//   https://vonpeach-portrait.<your-subdomain>.workers.dev/send-card
+//
+// Leave AI_PORTRAIT_ENDPOINT empty to skip the AI step (the result will
+// then use the original photo with the duotone treatment). EMAIL_ENDPOINT
+// when empty will just disable the email button gracefully.
+const AI_PORTRAIT_ENDPOINT = "";
+const EMAIL_ENDPOINT       = "";
 
 // ---------- STATE ----------
 let faceLandmarker = null;
@@ -687,6 +761,7 @@ let acceptingInput = false;
 let rafId = null;
 let frozenFrame = null;       // canvas snapshot of camera at moment of result
 let frozenArchetype = null;   // key into ARCHETYPES
+let usingAIPortrait = false;  // true once an AI-painted portrait has replaced frozenFrame
 
 // Pre-load brand logo so the share canvas can render it
 const brandLogo = new Image();
@@ -716,6 +791,8 @@ const resultPreview = $("resultPreview");
 const wash = $("wash");
 const posePanel = $("posePanel");
 const poseCount = $("poseCount");
+const paintingScreen = $("screenPainting");
+const paintingBg = $("paintingBg");
 const emailMeBtn = $("emailMeBtn");
 const emailModal = $("emailModal");
 const emailClose = $("emailClose");
@@ -896,25 +973,114 @@ function commit(side) {
 
 // "Royal pose" countdown — the captured portrait should look composed,
 // not mid-tilt. We hide the gameplay UI but keep the live camera so the
-// user can see themselves, run a 3-2-1 count, then snapshot.
-function beginPose() {
+// user can see themselves, run a 3-2-1 count, snapshot, then hand the
+// frame to the AI portrait endpoint (if configured) before rendering.
+async function beginPose() {
   acceptingInput = false;
   playOverlay.classList.add("posing");
   posePanel.style.display = "flex";
 
-  let n = 3;
-  poseCount.textContent = n;
-  const tick = setInterval(() => {
-    n--;
-    if (n > 0) {
-      poseCount.textContent = n;
-    } else {
-      clearInterval(tick);
-      posePanel.style.display = "none";
-      playOverlay.classList.remove("posing");
-      finish();
+  await runPoseCountdown();
+
+  posePanel.style.display = "none";
+  playOverlay.classList.remove("posing");
+
+  // Decide the archetype + capture the user's frame
+  frozenArchetype = pickArchetype();
+  captureFrozenFrame();
+
+  // Hand off to the AI painter (or skip, depending on config). The captured
+  // frame goes in; an AI-painted canvas comes out and replaces frozenFrame.
+  await paintPortrait();
+
+  await renderTarotCard();
+
+  paintingScreen.classList.remove("show");
+  playOverlay.style.display = "none";
+  wash.style.display = "none";
+  resultScreen.classList.add("show");
+}
+
+function runPoseCountdown() {
+  return new Promise((resolve) => {
+    let n = 3;
+    poseCount.textContent = n;
+    const tick = setInterval(() => {
+      n--;
+      if (n > 0) {
+        poseCount.textContent = n;
+      } else {
+        clearInterval(tick);
+        resolve();
+      }
+    }, 800);
+  });
+}
+
+function pickArchetype() {
+  const order = ["charmer", "magician", "alchemist"];
+  let bestKey = order[0], bestScore = -1;
+  for (const k of order) if (scores[k] > bestScore) { bestScore = scores[k]; bestKey = k; }
+  return bestKey;
+}
+
+function captureFrozenFrame() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  frozenFrame = document.createElement("canvas");
+  frozenFrame.width = vw;
+  frozenFrame.height = vh;
+  const fctx = frozenFrame.getContext("2d");
+  // Mirror to match what they saw on screen
+  fctx.translate(vw, 0);
+  fctx.scale(-1, 1);
+  fctx.drawImage(video, 0, 0, vw, vh);
+}
+
+// Show the painting loader while we wait, then either swap in an AI
+// portrait or fall through to the original frame with duotone treatment.
+async function paintPortrait() {
+  usingAIPortrait = false;
+
+  // Show the loader with the captured photo blurred behind it
+  try {
+    paintingBg.style.backgroundImage = `url(${frozenFrame.toDataURL("image/jpeg", 0.85)})`;
+  } catch (_) { /* tainted canvas — leave the loader bg empty */ }
+  paintingScreen.classList.add("show");
+
+  if (!AI_PORTRAIT_ENDPOINT) return; // AI step intentionally skipped
+
+  try {
+    const img = await requestAIPortrait(frozenFrame, frozenArchetype);
+    if (img && img.naturalWidth) {
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext("2d").drawImage(img, 0, 0);
+      frozenFrame = c;
+      usingAIPortrait = true;
     }
-  }, 800);
+  } catch (err) {
+    console.warn("AI portrait failed; falling back to the original frame.", err);
+    // usingAIPortrait stays false — renderTarotCard will apply duotone.
+  }
+}
+
+async function requestAIPortrait(canvas, archetype) {
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  const res = await fetch(AI_PORTRAIT_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: dataUrl, archetype }),
+  });
+  if (!res.ok) throw new Error(`AI endpoint returned ${res.status}`);
+  const data = await res.json();
+  if (!data || !data.image) throw new Error("AI response missing image");
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("AI image failed to decode"));
+    img.src = data.image;
+  });
 }
 
 function renderQuestion() {
@@ -927,37 +1093,15 @@ function renderQuestion() {
   }
 }
 
-// ---------- FINISH ----------
-async function finish() {
-  acceptingInput = false;
-  const order = ["charmer", "magician", "alchemist"];
-  let bestKey = order[0], bestScore = -1;
-  for (const k of order) if (scores[k] > bestScore) { bestScore = scores[k]; bestKey = k; }
-  frozenArchetype = bestKey;
-
-  // Capture the current video frame at full resolution (un-mirrored canvas)
-  frozenFrame = document.createElement("canvas");
-  const vw = video.videoWidth, vh = video.videoHeight;
-  frozenFrame.width = vw; frozenFrame.height = vh;
-  const fctx = frozenFrame.getContext("2d");
-  // Mirror so it matches what they see on screen
-  fctx.translate(vw, 0);
-  fctx.scale(-1, 1);
-  fctx.drawImage(video, 0, 0, vw, vh);
-
-  // Build the tarot card composition into shareCanvas + preview
-  await renderTarotCard();
-
-  playOverlay.style.display = "none";
-  wash.style.display = "none";
-  resultScreen.classList.add("show");
-}
-
 function reset() {
   resultScreen.classList.remove("show");
+  paintingScreen.classList.remove("show");
   shareHint.textContent = "";
   qIndex = 0;
   scores = { charmer: 0, magician: 0, alchemist: 0 };
+  usingAIPortrait = false;
+  frozenFrame = null;
+  frozenArchetype = null;
   if (faceLandmarker && stream) {
     playOverlay.style.display = "flex";
     wash.style.display = "block";
@@ -1058,7 +1202,10 @@ async function renderTarotCard() {
   roundRect(ctx, photoX, photoY, photoW, photoH, 16);
   ctx.clip();
 
-  // Draw frozen frame (cover fit) then apply duotone
+  // Draw frozen frame (cover fit). If we have an AI-painted portrait, skip
+  // the heavy duotone — the painting is already styled — and apply only a
+  // gentle warm overlay for brand cohesion. Otherwise use the original
+  // duotone treatment.
   if (frozenFrame) {
     const vw = frozenFrame.width, vh = frozenFrame.height;
     const s = Math.max(photoW / vw, photoH / vh);
@@ -1067,18 +1214,27 @@ async function renderTarotCard() {
     const dy = photoY + (photoH - dH) / 2;
     ctx.drawImage(frozenFrame, dx, dy, dW, dH);
 
-    // Duotone treatment of just the photo area
-    const id = ctx.getImageData(photoX, photoY, photoW, photoH);
-    const data = id.data;
-    const [dr, dg, db] = arche.duotone.dark;
-    const [lr, lg, lb] = arche.duotone.light;
-    for (let i = 0; i < data.length; i += 4) {
-      const lum = (0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2]) / 255;
-      data[i]   = dr + (lr - dr) * lum;
-      data[i+1] = dg + (lg - dg) * lum;
-      data[i+2] = db + (lb - db) * lum;
+    if (usingAIPortrait) {
+      // Subtle warm tint, preserves painterly detail
+      ctx.save();
+      ctx.globalCompositeOperation = "soft-light";
+      ctx.fillStyle = "rgba(253,136,57,0.18)";
+      ctx.fillRect(photoX, photoY, photoW, photoH);
+      ctx.restore();
+    } else {
+      // Full duotone of the photo area
+      const id = ctx.getImageData(photoX, photoY, photoW, photoH);
+      const data = id.data;
+      const [dr, dg, db] = arche.duotone.dark;
+      const [lr, lg, lb] = arche.duotone.light;
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = (0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2]) / 255;
+        data[i]   = dr + (lr - dr) * lum;
+        data[i+1] = dg + (lg - dg) * lum;
+        data[i+2] = db + (lb - db) * lum;
+      }
+      ctx.putImageData(id, photoX, photoY);
     }
-    ctx.putImageData(id, photoX, photoY);
   } else {
     ctx.fillStyle = "#3a0812";
     ctx.fillRect(photoX, photoY, photoW, photoH);
@@ -1269,8 +1425,12 @@ async function shareSnapshot(forceDownload) {
 }
 
 // ---------- EMAIL CAPTURE ----------
+// Hide the email button entirely when no endpoint is configured.
+if (!EMAIL_ENDPOINT) emailMeBtn.style.display = "none";
+
 function openEmailModal() {
   if (!frozenArchetype) return;
+  if (!EMAIL_ENDPOINT) return;
   const arche = ARCHETYPES[frozenArchetype];
   emailTitle.textContent = arche.name;
   emailBody.textContent =
