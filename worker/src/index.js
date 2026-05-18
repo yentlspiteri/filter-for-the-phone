@@ -199,16 +199,20 @@ async function handlePortraitEmail(request, env, ctx, cors) {
     if (!PROMPTS[archetype])             return jsonResp({ error: "unknown_archetype" }, 400, cors);
 
     ctx.waitUntil((async () => {
+      const bgT0 = Date.now();
+      console.log(`[portrait-email] background start email=${email} archetype=${archetype}`);
       try {
         const portraitDataUrl = await runPortraitPipeline(env, image, archetype);
+        console.log(`[portrait-email] pipeline done t+${Date.now()-bgT0}ms, sending via Resend`);
         await sendCardEmail(env, {
           email,
           archetype,
           archetypeName,
           image: portraitDataUrl,
         });
+        console.log(`[portrait-email] send complete t+${Date.now()-bgT0}ms`);
       } catch (err) {
-        console.error("portrait-email background pipeline failed:", err?.message);
+        console.error(`[portrait-email] FAILED t+${Date.now()-bgT0}ms: ${err?.message}`);
       }
     })());
 
@@ -223,6 +227,9 @@ async function runPortraitPipeline(env, image, archetype) {
   const prompt = PROMPTS[archetype];
   if (!prompt) throw new Error("unknown_archetype");
   if (!env.FAL_KEY) throw new Error("no_fal_key");
+
+  const t0 = Date.now();
+  console.log(`[pipeline] start archetype=${archetype}`);
 
   const falRes = await fetch(FAL_URL, {
       method: "POST",
@@ -265,12 +272,17 @@ async function runPortraitPipeline(env, image, archetype) {
 
   if (!falRes.ok) {
     const detail = await falRes.text();
+    console.error(`[pipeline] PuLID FAILED status=${falRes.status} detail=${detail.slice(0,300)}`);
     throw new Error(`pulid_upstream:${falRes.status}:${detail}`);
   }
 
   const data = await falRes.json();
   const pulidUrl = data?.images?.[0]?.url;
-  if (!pulidUrl) throw new Error("pulid_no_image");
+  if (!pulidUrl) {
+    console.error(`[pipeline] PuLID returned no image, data=${JSON.stringify(data).slice(0,300)}`);
+    throw new Error("pulid_no_image");
+  }
+  console.log(`[pipeline] PuLID ok t+${Date.now()-t0}ms`);
 
   // The "current best" URL — each stage overwrites if it succeeds.
     let workingUrl = pulidUrl;
@@ -296,11 +308,12 @@ async function runPortraitPipeline(env, image, archetype) {
           swapData?.images?.[0]?.url ||
           swapData?.output_url;
         if (swappedUrl) workingUrl = swappedUrl;
+        console.log(`[pipeline] face-swap ok t+${Date.now()-t0}ms`);
       } else {
-        console.warn("Face-swap failed:", swapRes.status, await swapRes.text());
+        console.warn(`[pipeline] face-swap failed status=${swapRes.status} detail=${(await swapRes.text()).slice(0,300)}`);
       }
     } catch (swapErr) {
-      console.warn("Face-swap threw:", swapErr?.message);
+      console.warn(`[pipeline] face-swap threw: ${swapErr?.message}`);
     }
 
     // Step 3: CodeFormer face-detail polish (best-effort). Operates on the
@@ -327,11 +340,12 @@ async function runPortraitPipeline(env, image, archetype) {
           polishData?.images?.[0]?.url ||
           polishData?.output_url;
         if (polishedUrl) workingUrl = polishedUrl;
+        console.log(`[pipeline] CodeFormer ok t+${Date.now()-t0}ms`);
       } else {
-        console.warn("CodeFormer polish failed:", polishRes.status, await polishRes.text());
+        console.warn(`[pipeline] CodeFormer failed status=${polishRes.status} detail=${(await polishRes.text()).slice(0,300)}`);
       }
     } catch (polishErr) {
-      console.warn("CodeFormer polish threw:", polishErr?.message);
+      console.warn(`[pipeline] CodeFormer threw: ${polishErr?.message}`);
     }
 
     // Step 4: Clarity Upscaler realism pass (best-effort). Low creativity
@@ -371,19 +385,23 @@ async function runPortraitPipeline(env, image, archetype) {
           realismData?.images?.[0]?.url ||
           realismData?.output_url;
         if (realismOut) workingUrl = realismOut;
+        console.log(`[pipeline] Clarity ok t+${Date.now()-t0}ms`);
       } else {
-        console.warn("Clarity realism pass failed:", realismRes.status, await realismRes.text());
+        console.warn(`[pipeline] Clarity failed status=${realismRes.status} detail=${(await realismRes.text()).slice(0,300)}`);
       }
     } catch (realismErr) {
-      console.warn("Clarity realism pass threw:", realismErr?.message);
+      console.warn(`[pipeline] Clarity threw: ${realismErr?.message}`);
     }
 
   // Proxy the final image as inline base64 — avoids cross-origin canvas
   // taint and keeps fal.ai's transient URLs off the client.
+  console.log(`[pipeline] fetching final image t+${Date.now()-t0}ms`);
   const imgRes = await fetch(workingUrl);
   if (!imgRes.ok) throw new Error(`image_fetch_failed:${imgRes.status}`);
   const buf = await imgRes.arrayBuffer();
-  return `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
+  const result = `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
+  console.log(`[pipeline] done t+${Date.now()-t0}ms size=${buf.byteLength}b`);
+  return result;
 }
 
 // ---------- /send-card — synchronous, uses a pre-rendered image ----------
