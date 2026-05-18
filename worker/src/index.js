@@ -65,13 +65,14 @@ const RESEND_URL = "https://api.resend.com/emails";
 const FLATTERING =
   " Black and white studio portrait photograph, fine-art monochrome — " +
   "no colour, rich tonal range, deep blacks, luminous mid-tones. " +
-  "STUDIO SETUP (identical across all portraits): a single large " +
-  "soft-box key light at 45 degrees from the camera, a subtle reflector " +
-  "fill on the opposite side approximately 1.5 stops below the key, " +
-  "plain mid-grey seamless studio backdrop softly graduated darker at " +
-  "the edges. Same studio, same lighting, same backdrop, same lens for " +
-  "every portrait — only the subject's expression, wardrobe and " +
-  "accessories change. " +
+  "STUDIO SETUP (identical across all portraits): a large soft-box key " +
+  "light at 45 degrees from the camera, GENEROUS reflector fill on the " +
+  "opposite side about 1 stop below the key (not heavily shadowed, no " +
+  "harsh chiaroscuro), plain mid-grey seamless studio backdrop softly " +
+  "graduated darker at the edges. The overall mood is approachable and " +
+  "warm — bright editorial portrait, not moody or gloomy. Same studio, " +
+  "same lighting, same backdrop, same lens for every portrait — only " +
+  "the subject's expression, wardrobe and accessories change. " +
   "Professional editorial HEADSHOT crop: framed from mid-chest to just " +
   "above the top of the head, the eyes positioned on the upper third of " +
   "the frame, the face fills the central area generously. Camera at " +
@@ -108,10 +109,11 @@ const FLATTERING =
 const PROMPT_TEMPLATES = {
   charmer: {
     base:
-      "Editorial B&W studio headshot. Expression: a warm relaxed open " +
-      "expression, hint of a natural half-smile, eyes engaging the " +
-      "camera with quiet warmth. Wardrobe: contemporary open-collar " +
-      "shirt or fine knit, no jacket. ",
+      "Editorial B&W studio headshot. Expression: a genuine warm smile " +
+      "that reaches the eyes, slightly parted lips, an inviting open " +
+      "expression — magnetic and welcoming, like greeting a close " +
+      "friend. Wardrobe: contemporary open-collar shirt or fine knit, " +
+      "no jacket. ",
     props: [
       "Prop: holds a vintage crystal champagne coupe casually at chest " +
         "height, slightly tilted, the glass surface catching the " +
@@ -135,9 +137,11 @@ const PROMPT_TEMPLATES = {
   },
   magician: {
     base:
-      "Editorial B&W studio headshot. Expression: a knowing slight " +
-      "smirk, sharp intelligent eyes that read the viewer. Wardrobe: " +
-      "sleek dark turtleneck or a structured dark jacket. ",
+      "Editorial B&W studio headshot. Expression: a playful confident " +
+      "half-smile with a knowing glint in the eye — mischief and " +
+      "intelligence, the kind of person who's about to show you " +
+      "something brilliant. Approachable, not stern. Wardrobe: sleek " +
+      "dark turtleneck or a structured dark jacket. ",
     props: [
       "Prop: holds a fanned spread of three tarot cards between thumb " +
         "and forefinger, raised near the chest, the backs of the cards " +
@@ -163,10 +167,12 @@ const PROMPT_TEMPLATES = {
   },
   alchemist: {
     base:
-      "Editorial B&W studio headshot. Expression: a calm steady " +
-      "contemplative expression, a quiet inner authority at the corners " +
-      "of the eyes. Wardrobe: refined intellectual attire — a fine " +
-      "knit, a tweed jacket, or considered tailoring. ",
+      "Editorial B&W studio headshot. Expression: a calm warm " +
+      "contemplative expression with a small natural smile playing at " +
+      "the corners of the mouth — quiet inner authority but visibly " +
+      "kind, the look of someone who's pleased you've stopped by. " +
+      "Wardrobe: refined intellectual attire — a fine knit, a tweed " +
+      "jacket, or considered tailoring. ",
     props: [
       "Prop: wears a classic monocle fixed in one eye by a fine chain, " +
         "with a hint of leather-bound books or a vintage brass instrument " +
@@ -362,7 +368,10 @@ async function runPortraitPipeline(env, image, archetype) {
           "head covering, hair extensions, " +
           "AI generated look, plastic skin, over-smoothed, waxy skin, " +
           "fake, synthetic, CGI, 3D render, doll-like, uncanny, airbrushed, " +
-          "perfect symmetry, glossy, polished plastic, smooth perfection",
+          "perfect symmetry, glossy, polished plastic, smooth perfection, " +
+          "stern, gloomy, melancholic, joyless, severe, sad, depressed, " +
+          "scowling, frowning, grim, moody, sombre, heavy shadows on the " +
+          "face, deep chiaroscuro, low-key lighting",
       }),
     });
 
