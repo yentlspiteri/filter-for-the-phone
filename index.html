@@ -3,26 +3,34 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<meta name="theme-color" content="#1a0a0a" />
+<meta name="theme-color" content="#1a0610" />
 <title>Von Peach — Filter for the Phone</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,500;1,600;1,700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<link rel="preconnect" href="https://fonts.cdnfonts.com" crossorigin>
+<!-- Von Peach brand fonts: Aileron (primary, headlines) + General Sans (secondary, body) -->
+<link href="https://fonts.cdnfonts.com/css/aileron" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@300,400,500,600,700&display=swap" rel="stylesheet">
 <style>
   :root {
-    /* Von Peach palette */
-    --peach: #ff7a4a;
-    --peach-bright: #ff9466;
-    --peach-deep: #d44a2a;
-    --wine: #4a1414;
-    --bg-dark: #1a0a0a;
-    --bg-darker: #0a0404;
-    --cream: #f7ecdf;
-    --accent: #ff7a4a;
-    --left-glow: #ffb18a;
-    --right-glow: #ff5f3d;
-    --text: #ffffff;
-    --card-border: #6b1a14;
+    /* Von Peach core palette */
+    --wine:   #99112F;  /* deep wine */
+    --red:    #CC1C0E;  /* red */
+    --orange: #FD8839;  /* orange */
+    --peach:  #FFD6BB;  /* light peach */
+
+    /* Functional aliases */
+    --peach-bright: #FFD6BB;
+    --peach-deep:   #CC1C0E;
+    --accent:       #FD8839;
+    --left-glow:    #FFD6BB;
+    --right-glow:   #FD8839;
+    --bg-dark:      #1a0610;
+    --bg-darker:    #0d0308;
+    --cream:        #FFD6BB;
+    --text:         #ffffff;
+    --card-border:  #99112F;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -30,7 +38,7 @@
     height: 100%;
     background: var(--bg-dark);
     color: var(--text);
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "General Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     overflow: hidden;
     touch-action: manipulation;
     -webkit-user-select: none;
@@ -62,9 +70,9 @@
     position: absolute; inset: 0;
     pointer-events: none;
     background:
-      radial-gradient(60% 50% at 15% 10%, rgba(255,122,74,0.35) 0%, transparent 60%),
-      radial-gradient(70% 60% at 95% 100%, rgba(212,74,42,0.35) 0%, transparent 60%),
-      linear-gradient(180deg, rgba(26,10,10,0.35) 0%, rgba(26,10,10,0.05) 30%, rgba(26,10,10,0.55) 100%);
+      radial-gradient(60% 50% at 15% 10%, rgba(253,136,57,0.35) 0%, transparent 60%),
+      radial-gradient(70% 60% at 95% 100%, rgba(153,17,47,0.40) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(26,6,16,0.35) 0%, rgba(26,6,16,0.05) 30%, rgba(26,6,16,0.55) 100%);
   }
   .overlay {
     position: absolute;
@@ -75,16 +83,19 @@
   }
   .overlay > * { pointer-events: auto; }
 
-  /* VON PEACH wordmark */
-  .wordmark {
-    font-style: italic;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    font-size: 14px;
-    text-transform: uppercase;
-    color: var(--cream);
-    text-shadow: 0 1px 6px rgba(0,0,0,0.6);
+  /* Von Peach logo (PNG masked → tinted via background-color) */
+  .brand-logo {
+    display: inline-block;
+    background-color: var(--peach);
+    -webkit-mask: url('vonpeach-logo.png') no-repeat center / contain;
+            mask: url('vonpeach-logo.png') no-repeat center / contain;
+    filter: drop-shadow(0 1px 6px rgba(0,0,0,0.55));
   }
+  .brand-logo.sm { width: 132px; height: 20px; }
+  .brand-logo.md { width: 200px; height: 30px; }
+  .brand-logo.lg { width: 280px; height: 42px; }
+  .brand-logo.wine { background-color: var(--wine); filter: none; }
+  .brand-logo.orange { background-color: var(--orange); filter: none; }
 
   .topbar {
     display: flex;
@@ -103,7 +114,7 @@
     width: 26px; height: 3px; border-radius: 2px;
     background: rgba(255,255,255,0.22);
   }
-  .progress span.on { background: var(--peach); }
+  .progress span.on { background: var(--orange); }
   .center {
     flex: 1;
     display: flex;
@@ -114,16 +125,17 @@
     text-align: center;
   }
   .question {
+    font-family: "Aileron", "General Sans", sans-serif;
     font-size: clamp(22px, 6vw, 34px);
-    font-weight: 600;
+    font-weight: 700;
     line-height: 1.2;
     max-width: 720px;
     letter-spacing: -0.01em;
     text-shadow: 0 2px 12px rgba(0,0,0,0.75);
     padding: 16px 20px;
-    background: rgba(26,10,10,0.42);
+    background: rgba(26,6,16,0.45);
     border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,214,187,0.18);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
@@ -139,33 +151,35 @@
     position: relative;
     padding: 16px 14px;
     border-radius: 16px;
-    background: rgba(26,10,10,0.40);
+    background: rgba(26,6,16,0.45);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    border: 1.5px solid rgba(255,255,255,0.15);
+    border: 1.5px solid rgba(255,214,187,0.20);
     overflow: hidden;
     transition: border-color 120ms, transform 120ms;
   }
   .choice .arrow {
+    font-family: "Aileron", "General Sans", sans-serif;
     font-size: 11px;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    opacity: 0.85;
+    opacity: 0.9;
     margin-bottom: 8px;
-    color: var(--peach-bright);
+    color: var(--orange);
   }
   .choice .label {
-    font-size: 17px; font-weight: 600; line-height: 1.25;
+    font-family: "Aileron", "General Sans", sans-serif;
+    font-size: 17px; font-weight: 700; line-height: 1.25;
   }
   .choice .fill {
     position: absolute;
     left: 0; bottom: 0; right: 0;
     height: 0%;
-    background: linear-gradient(180deg, transparent 0%, rgba(255,122,74,0.45) 100%);
+    background: linear-gradient(180deg, transparent 0%, rgba(253,136,57,0.55) 100%);
     transition: height 80ms linear;
     pointer-events: none;
   }
-  .choice.active { border-color: var(--peach); transform: translateY(-2px); }
+  .choice.active { border-color: var(--orange); transform: translateY(-2px); }
   .tiltbar {
     height: 4px;
     background: rgba(255,255,255,0.12);
@@ -180,10 +194,10 @@
     width: 10px;
     margin-left: -5px;
     left: 50%;
-    background: var(--peach);
+    background: var(--orange);
     border-radius: 5px;
     transition: left 60ms linear;
-    box-shadow: 0 0 10px var(--peach);
+    box-shadow: 0 0 12px var(--orange);
   }
   .tiltbar .zone {
     position: absolute; top: 0; bottom: 0;
@@ -203,60 +217,69 @@
     padding: 28px;
     text-align: center;
     background:
-      radial-gradient(60% 50% at 15% 10%, rgba(255,122,74,0.45) 0%, transparent 60%),
-      radial-gradient(70% 60% at 95% 100%, rgba(212,74,42,0.45) 0%, transparent 60%),
-      linear-gradient(180deg, rgba(10,4,4,0.85) 0%, rgba(26,10,10,0.92) 100%);
+      radial-gradient(60% 50% at 15% 10%, rgba(253,136,57,0.45) 0%, transparent 60%),
+      radial-gradient(70% 60% at 95% 100%, rgba(153,17,47,0.55) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(13,3,8,0.90) 0%, rgba(26,6,16,0.95) 100%);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
   .screen.show { display: flex; }
   .screen .eyebrow {
-    font-style: italic;
+    font-family: "Aileron", "General Sans", sans-serif;
     font-weight: 700;
-    letter-spacing: 0.25em;
+    letter-spacing: 0.28em;
     text-transform: uppercase;
     font-size: 12px;
-    color: var(--peach);
+    color: var(--orange);
     margin-bottom: 16px;
   }
   .screen h1 {
+    font-family: "Aileron", "General Sans", sans-serif;
     font-size: clamp(32px, 9vw, 56px);
     margin: 0 0 14px 0;
     letter-spacing: -0.015em;
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1.05;
+    color: var(--peach);
   }
   .screen p {
+    font-family: "General Sans", sans-serif;
     font-size: 16px;
     max-width: 520px;
     line-height: 1.55;
-    color: rgba(247,236,223,0.85);
+    color: rgba(255,214,187,0.88);
     margin: 0 0 24px 0;
   }
   .btn {
     appearance: none;
     border: 0;
-    background: linear-gradient(135deg, var(--peach) 0%, var(--peach-deep) 100%);
-    color: white;
-    font-weight: 700;
-    font-size: 16px;
-    padding: 15px 26px;
+    background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
+    color: #fff;
+    font-family: "Aileron", "General Sans", sans-serif;
+    font-weight: 800;
+    font-size: 14px;
+    padding: 16px 32px;
     border-radius: 999px;
     cursor: pointer;
-    letter-spacing: 0.02em;
-    box-shadow: 0 10px 30px rgba(255,122,74,0.35);
-    font-family: inherit;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    box-shadow: 0 12px 28px rgba(204,28,14,0.32);
+    transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
   }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.06); box-shadow: 0 16px 36px rgba(204,28,14,0.42); }
+  .btn:active { transform: translateY(0); filter: brightness(0.96); }
   .btn.ghost {
     background: transparent;
-    color: var(--cream);
-    border: 1.5px solid rgba(247,236,223,0.4);
+    color: var(--peach);
+    border: 1.5px solid rgba(255,214,187,0.55);
     box-shadow: none;
   }
+  .btn.ghost:hover { background: rgba(255,214,187,0.08); border-color: var(--peach); }
   .btnrow { display: flex; flex-direction: column; gap: 10px; align-items: center; }
   .hint {
+    font-family: "General Sans", sans-serif;
     font-size: 13px;
-    color: rgba(247,236,223,0.6);
+    color: rgba(255,214,187,0.65);
     margin-top: 10px;
     max-width: 360px;
   }
@@ -264,22 +287,32 @@
     position: absolute;
     bottom: 18px;
     left: 0; right: 0;
-    text-align: center;
-    font-style: italic;
-    font-weight: 700;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    opacity: 0.7;
+  }
+  .footer-mark .dot {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--orange);
+  }
+  .footer-mark .tag {
+    font-family: "General Sans", sans-serif;
+    font-weight: 500;
     font-size: 11px;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: rgba(247,236,223,0.5);
+    color: rgba(255,214,187,0.75);
   }
   .err {
-    background: rgba(255,70,70,0.18);
-    border: 1px solid rgba(255,70,70,0.5);
+    background: rgba(204,28,14,0.20);
+    border: 1px solid rgba(204,28,14,0.55);
     border-radius: 12px;
     padding: 12px 14px;
     max-width: 480px;
     font-size: 14px;
-    color: var(--cream);
+    color: var(--peach);
   }
 
   /* Result screen: tarot card preview */
@@ -318,7 +351,7 @@
 
   <!-- intro -->
   <div class="screen show" id="screenIntro">
-    <div class="eyebrow">Von Peach · Filter for the Phone</div>
+    <span class="brand-logo lg" style="margin-bottom: 28px;" aria-label="Von Peach"></span>
     <h1>Which one are you?</h1>
     <p>Three questions. Tilt your head <b>left</b> or <b>right</b> to answer. We'll reveal your card: <i>The Charmer</i>, <i>The Magician</i>, or <i>The Alchemist</i>.</p>
     <div class="btnrow">
@@ -326,13 +359,13 @@
       <div class="hint">Camera stays on your device. Nothing is uploaded.</div>
     </div>
     <div id="introErr" style="margin-top:14px; display:none;" class="err"></div>
-    <div class="footer-mark">Von Peach</div>
+    <div class="footer-mark"><span class="dot"></span><span class="tag">vonpeach.com</span><span class="dot"></span></div>
   </div>
 
   <!-- gameplay overlay -->
   <div class="overlay" id="play" style="display:none;">
     <div class="topbar">
-      <div class="wordmark">Von Peach</div>
+      <span class="brand-logo sm" aria-label="Von Peach"></span>
       <div class="progress" id="progress">
         <span></span><span></span><span></span>
       </div>
@@ -371,7 +404,10 @@
       <button class="btn ghost" id="againBtn">Try again</button>
       <div class="hint" id="shareHint"></div>
     </div>
-    <div class="footer-mark">Von Peach · vonpeach.com</div>
+    <div class="footer-mark">
+      <span class="brand-logo sm" aria-label="Von Peach"></span>
+      <span class="tag" style="margin-left:4px;">vonpeach.com</span>
+    </div>
   </div>
 </div>
 
@@ -383,25 +419,29 @@ import { FaceLandmarker, FilesetResolver }
   from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
 // ---------- CONTENT (swap copy here) ----------
+// Brand-aligned duotones built from Von Peach core palette:
+//   wine #99112F · red #CC1C0E · orange #FD8839 · peach #FFD6BB
 const ARCHETYPES = {
   charmer: {
     name: "The Charmer",
     blurb: "You move through rooms like warm light. People say yes before they know why.",
-    // duotone shadow + highlight (deep wine → warm peach)
-    duotone: { dark: [60, 14, 14],  light: [255, 198, 156] },
-    accents: ["#e5a45c", "#c64a3b", "#f0bfa2"]
+    // wine → peach
+    duotone: { dark: [153, 17, 47],  light: [255, 214, 187] },
+    accents: ["#FD8839", "#99112F", "#FFD6BB"]
   },
   magician: {
     name: "The Magician",
     blurb: "You bend the obvious. Where others see a wall, you see a curtain.",
-    duotone: { dark: [40, 8, 20],   light: [255, 158, 120] },
-    accents: ["#d68044", "#8a2e2e", "#f7d6b8"]
+    // deep wine → orange
+    duotone: { dark: [60, 8, 22],    light: [253, 136, 57] },
+    accents: ["#CC1C0E", "#99112F", "#FD8839"]
   },
   alchemist: {
     name: "The Alchemist",
     blurb: "You take the raw and the broken and turn it to gold. Slow fire, true gold.",
-    duotone: { dark: [50, 18, 8],   light: [255, 214, 154] },
-    accents: ["#c8852d", "#a23b1f", "#ead7b3"]
+    // red → peach
+    duotone: { dark: [120, 14, 22],  light: [255, 214, 187] },
+    accents: ["#FD8839", "#CC1C0E", "#FFD6BB"]
   }
 };
 
@@ -439,6 +479,15 @@ let acceptingInput = false;
 let rafId = null;
 let frozenFrame = null;       // canvas snapshot of camera at moment of result
 let frozenArchetype = null;   // key into ARCHETYPES
+
+// Pre-load brand logo so the share canvas can render it
+const brandLogo = new Image();
+brandLogo.crossOrigin = "anonymous";
+brandLogo.src = "vonpeach-logo.png";
+const brandLogoReady = new Promise(res => {
+  brandLogo.onload = () => res();
+  brandLogo.onerror = () => res(); // fail soft — text fallback handles it
+});
 
 // ---------- DOM ----------
 const $ = id => document.getElementById(id);
@@ -679,21 +728,21 @@ async function renderTarotCard() {
 
   const arche = ARCHETYPES[frozenArchetype];
 
-  // ----- Background: Von Peach moody peach gradient -----
-  // Base
-  ctx.fillStyle = "#1a0a0a";
+  // ----- Background: Von Peach moody brand gradient -----
+  // Base — near-black wine
+  ctx.fillStyle = "#1a0610";
   ctx.fillRect(0, 0, W, H);
-  // Big radial peach gradient top-left
+  // Big radial orange gradient top-left (orange #FD8839)
   let g = ctx.createRadialGradient(W*0.2, H*0.15, 0, W*0.2, H*0.15, W*1.1);
-  g.addColorStop(0, "rgba(255,140,90,0.85)");
-  g.addColorStop(0.4, "rgba(180,60,40,0.55)");
-  g.addColorStop(1, "rgba(20,5,5,0)");
+  g.addColorStop(0, "rgba(253,136,57,0.85)");
+  g.addColorStop(0.4, "rgba(204,28,14,0.55)");
+  g.addColorStop(1, "rgba(26,6,16,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0,0,W,H);
-  // Deeper wine glow bottom-right
+  // Deeper wine glow bottom-right (wine #99112F)
   g = ctx.createRadialGradient(W*0.85, H*0.95, 0, W*0.85, H*0.95, W*0.9);
-  g.addColorStop(0, "rgba(120,30,30,0.9)");
-  g.addColorStop(1, "rgba(20,5,5,0)");
+  g.addColorStop(0, "rgba(153,17,47,0.92)");
+  g.addColorStop(1, "rgba(26,6,16,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0,0,W,H);
   // Soft vignette
@@ -713,42 +762,42 @@ async function renderTarotCard() {
   const cardY = (H - cardH) / 2 - 30;
   const cardR = 36;
 
-  // Card shadow
+  // Card shadow — paper is brand peach #FFD6BB
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.5)";
   ctx.shadowBlur = 60;
   ctx.shadowOffsetY = 30;
-  ctx.fillStyle = "#f7ecdf";
+  ctx.fillStyle = "#FFD6BB";
   roundRect(ctx, cardX, cardY, cardW, cardH, cardR);
   ctx.fill();
   ctx.restore();
 
-  // Card border (Von Peach deep peach)
-  ctx.strokeStyle = "#6b1a14";
+  // Card border — brand wine #99112F
+  ctx.strokeStyle = "#99112F";
   ctx.lineWidth = 8;
   roundRect(ctx, cardX + 14, cardY + 14, cardW - 28, cardH - 28, cardR - 10);
   ctx.stroke();
 
   // Inner thin line
-  ctx.strokeStyle = "rgba(107,26,20,0.35)";
+  ctx.strokeStyle = "rgba(153,17,47,0.40)";
   ctx.lineWidth = 2;
   roundRect(ctx, cardX + 24, cardY + 24, cardW - 48, cardH - 48, cardR - 18);
   ctx.stroke();
 
   // Card corner ornaments (XIII top-left only, like the inspiration)
-  ctx.fillStyle = "#6b1a14";
-  ctx.font = "italic 700 28px 'Playfair Display', Georgia, serif";
+  ctx.fillStyle = "#99112F";
+  ctx.font = "700 28px 'Aileron', sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   ctx.fillText("XIII", cardX + 56, cardY + 54);
 
   // Top center infinity
-  ctx.font = "700 48px 'Playfair Display', Georgia, serif";
+  ctx.font = "700 48px 'Aileron', sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("∞", cardX + cardW / 2, cardY + 46);
 
   // Top right heart
-  drawHeart(ctx, cardX + cardW - 64, cardY + 72, 16, "#6b1a14");
+  drawHeart(ctx, cardX + cardW - 64, cardY + 72, 16, "#99112F");
 
   // ----- Photo window inside card -----
   const photoMargin = 60;
@@ -784,7 +833,7 @@ async function renderTarotCard() {
     }
     ctx.putImageData(id, photoX, photoY);
   } else {
-    ctx.fillStyle = "#3a1414";
+    ctx.fillStyle = "#3a0812";
     ctx.fillRect(photoX, photoY, photoW, photoH);
   }
   ctx.restore();
@@ -793,28 +842,49 @@ async function renderTarotCard() {
   drawLeaf(ctx, cardX + cardW * 0.18, photoY + photoH - 30, 110, 70, arche.accents[0], -0.35);
   drawLeaf(ctx, cardX + cardW * 0.82, photoY + photoH - 50, 130, 80, arche.accents[1],  0.45);
 
-  // ----- Archetype name band -----
+  // ----- Archetype name band — Aileron, brand wine -----
   const nameY = cardY + cardH - 110;
-  ctx.fillStyle = "#6b1a14";
-  ctx.font = "italic 700 84px 'Playfair Display', Georgia, serif";
+  ctx.fillStyle = "#99112F";
+  ctx.font = "800 84px 'Aileron', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(arche.name, cardX + cardW / 2, nameY);
+  ctx.fillText(arche.name.toUpperCase(), cardX + cardW / 2, nameY);
 
-  // Tiny tagline under the card, in cream
-  ctx.fillStyle = "rgba(247,236,223,0.9)";
-  ctx.font = "italic 500 32px 'Playfair Display', Georgia, serif";
+  // Tagline under the card — General Sans, brand peach
+  ctx.fillStyle = "rgba(255,214,187,0.92)";
+  ctx.font = "500 30px 'General Sans', sans-serif";
   ctx.textAlign = "center";
-  wrapText(ctx, arche.blurb, W / 2, cardY + cardH + 70, W - 200, 42);
+  wrapText(ctx, arche.blurb, W / 2, cardY + cardH + 70, W - 200, 40);
 
-  // ----- Von Peach wordmark + URL -----
-  ctx.fillStyle = "rgba(247,236,223,0.85)";
-  ctx.font = "italic 800 30px 'Inter', sans-serif";
+  // ----- Von Peach logo (tinted peach) + URL -----
+  await brandLogoReady;
+  if (brandLogo.naturalWidth) {
+    const logoH = 56;
+    const logoW = logoH * (brandLogo.naturalWidth / brandLogo.naturalHeight);
+    const lx = (W - logoW) / 2;
+    const ly = H - 130;
+    // Tint via offscreen canvas: draw logo, then fill with brand peach using source-in
+    const off = document.createElement("canvas");
+    off.width = Math.ceil(logoW);
+    off.height = Math.ceil(logoH);
+    const octx = off.getContext("2d");
+    octx.drawImage(brandLogo, 0, 0, logoW, logoH);
+    octx.globalCompositeOperation = "source-in";
+    octx.fillStyle = "#FFD6BB";
+    octx.fillRect(0, 0, logoW, logoH);
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(off, lx, ly);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = "rgba(255,214,187,0.92)";
+    ctx.font = "800 36px 'Aileron', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("VON PEACH", W / 2, H - 95);
+  }
+  ctx.font = "500 22px 'General Sans', sans-serif";
+  ctx.fillStyle = "rgba(255,214,187,0.65)";
   ctx.textAlign = "center";
-  ctx.fillText("VON PEACH", W / 2, H - 90);
-  ctx.font = "500 22px 'Inter', sans-serif";
-  ctx.fillStyle = "rgba(247,236,223,0.55)";
-  ctx.fillText("filter for the phone", W / 2, H - 55);
+  ctx.fillText("vonpeach.com", W / 2, H - 50);
 
   // Push into preview <img>
   const dataUrl = c.toDataURL("image/jpeg", 0.92);
@@ -833,9 +903,9 @@ function drawDecor(ctx, W, H, accents) {
   ];
   for (const p of presets) drawLeaf(ctx, p.x, p.y, p.w, p.h, p.c, p.rot, 0.7);
 
-  // Hand-drawn squiggle/scribble in deep peach
+  // Hand-drawn squiggle/scribble in brand red
   ctx.save();
-  ctx.strokeStyle = "rgba(212,74,42,0.55)";
+  ctx.strokeStyle = "rgba(204,28,14,0.60)";
   ctx.lineWidth = 16;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -849,8 +919,8 @@ function drawDecor(ctx, W, H, accents) {
   ctx.stroke();
   ctx.restore();
 
-  // Bottom-left floral doodle in peach
-  drawFlowerDoodle(ctx, W*0.16, H*0.96, 70, "rgba(255,140,90,0.85)");
+  // Bottom-left floral doodle in brand orange
+  drawFlowerDoodle(ctx, W*0.16, H*0.96, 70, "rgba(253,136,57,0.90)");
 }
 
 function drawLeaf(ctx, cx, cy, w, h, color, rot=0, alpha=1) {
@@ -964,8 +1034,11 @@ window.addEventListener("pagehide", () => {
   if (stream) stream.getTracks().forEach(t => t.stop());
 });
 
-// Warm the serif font so the canvas renders with it
-document.fonts && document.fonts.load("italic 700 84px 'Playfair Display'");
+// Warm the brand fonts so the canvas renders with them
+if (document.fonts) {
+  document.fonts.load("800 84px 'Aileron'");
+  document.fonts.load("500 30px 'General Sans'");
+}
 </script>
 </body>
 </html>

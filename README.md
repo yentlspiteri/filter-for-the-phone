@@ -4,7 +4,7 @@ Web app version of the workshop concept, in Von Peach colours. Three placeholder
 
 ## What's deployable
 
-Only **`index.html`** is needed. Everything else in this folder is local scratch (PDF assets, the headless render preview, npm artifacts) and should not be uploaded to the GitHub Pages repo.
+**`index.html`** + **`vonpeach-logo.png`** + **`CNAME`**. Everything else in this folder is local scratch (PDF assets, the headless render preview, npm artifacts) and should not be uploaded to the GitHub Pages repo.
 
 ## What it does
 - Loads the camera on the user's phone (HTTPS required — GitHub Pages handles this).
