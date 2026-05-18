@@ -1345,10 +1345,12 @@ paintingSkipForm.addEventListener("submit", async (e) => {
     showSkipConfirmation(email);
   } catch (err) {
     console.error("skip-the-wait failed:", err);
-    paintingSkipState.textContent = "Couldn't queue it right now. Try again.";
+    // Surface the actual error so we can diagnose silent failures on phones.
+    const detail = err?.message || err?.name || "unknown";
+    paintingSkipState.textContent = `Couldn't queue it: ${detail}`;
     paintingSkipState.className = "painting-skip-state error";
     paintingSkipSubmit.disabled = false;
-    paintingSkipSubmit.textContent = "Send when ready";
+    paintingSkipSubmit.textContent = "Try again";
   }
 });
 

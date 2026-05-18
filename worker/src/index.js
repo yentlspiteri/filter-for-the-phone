@@ -159,9 +159,13 @@ export default {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+      "Vary": "Origin",
     };
 
-    if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+    // Some mobile Safari builds are pickier about preflight responses —
+    // 204 + Max-Age is the most-compatible answer.
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     if (request.method !== "POST") return jsonResp({ error: "method_not_allowed" }, 405, cors);
 
     const url = new URL(request.url);
