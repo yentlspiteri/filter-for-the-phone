@@ -315,30 +315,23 @@
     color: var(--peach);
   }
 
-  /* Result screen: tarot card preview */
+  /* Result screen: logo on top, card preview as hero, compact buttons */
   #screenResult {
-    padding: 14px 16px 12px;
+    padding: 12px 16px 14px;
     justify-content: flex-start;
-    gap: 10px;
+    gap: 8px;
     overflow-y: auto;
   }
-  /* Footer flows in the result screen (not absolute) so the card never gets
-     squished by overlapping fixed elements. */
-  #screenResult .footer-mark {
-    position: relative;
-    bottom: auto;
-    margin-top: auto;
-    padding-top: 6px;
-  }
+  .result-logo { margin: 2px auto 4px; }
   /* Size the wrap from available HEIGHT so aspect-ratio derives a true 9:16
      width — prevents the flex column from crushing it. */
   #resultPreviewWrap {
     width: auto;
-    height: clamp(280px, calc(100dvh - 320px), 600px);
+    height: clamp(300px, calc(100dvh - 230px), 640px);
     aspect-ratio: 9 / 16;
     max-width: 100%;
     flex-shrink: 0;
-    margin: 4px 0 8px;
+    margin: 0;
     border-radius: 22px;
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,0.55);
@@ -349,7 +342,76 @@
     display: block;
     background: #1a0610;
   }
+  /* Compact buttons row so the card stays the focal point */
+  #screenResult .btnrow {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  #screenResult .btn {
+    padding: 11px 20px;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+  }
+  #screenResult .hint {
+    flex-basis: 100%;
+    text-align: center;
+    margin: 4px 0 0;
+    font-size: 12px;
+  }
   #shareCanvas { display: none; }
+
+  /* Royal-pose countdown — sits over the camera, no background tint */
+  #posePanel {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    text-align: center;
+    padding: 24px;
+  }
+  .pose-eyebrow {
+    font-family: "Aileron", "General Sans", sans-serif;
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-size: 13px;
+    color: var(--peach);
+    text-shadow: 0 2px 10px rgba(0,0,0,0.7);
+    margin-bottom: 18px;
+  }
+  .pose-count {
+    font-family: "Aileron", "General Sans", sans-serif;
+    font-weight: 900;
+    font-size: clamp(120px, 32vw, 200px);
+    line-height: 1;
+    color: var(--peach);
+    text-shadow: 0 4px 28px rgba(0,0,0,0.65);
+    animation: pose-pulse 800ms ease-in-out infinite;
+  }
+  .pose-hint {
+    margin-top: 18px;
+    font-family: "General Sans", sans-serif;
+    font-size: 13px;
+    color: rgba(255,214,187,0.78);
+    text-shadow: 0 1px 6px rgba(0,0,0,0.7);
+    letter-spacing: 0.04em;
+  }
+  @keyframes pose-pulse {
+    0%, 100% { transform: scale(1);    opacity: 1; }
+    50%      { transform: scale(0.92); opacity: 0.85; }
+  }
+  /* When posing, hide the gameplay UI but keep the camera + wash for context */
+  #play.posing .topbar,
+  #play.posing .center,
+  #play.posing .tiltbar,
+  #play.posing .choices { display: none; }
 
   .topbar-vp {
     position: absolute;
@@ -413,19 +475,23 @@
 
   <!-- result -->
   <div class="screen" id="screenResult">
-    <div class="eyebrow">Your card</div>
+    <span class="brand-logo md result-logo" aria-label="Von Peach"></span>
     <div id="resultPreviewWrap">
       <img id="resultPreview" alt="Your archetype card" />
     </div>
     <div class="btnrow">
-      <button class="btn" id="shareBtn">Share to Instagram</button>
+      <button class="btn" id="shareBtn">Share</button>
       <button class="btn ghost" id="downloadBtn">Save image</button>
       <button class="btn ghost" id="againBtn">Try again</button>
       <div class="hint" id="shareHint"></div>
     </div>
-    <div class="footer-mark">
-      <span class="brand-logo sm" aria-label="Von Peach"></span>
-    </div>
+  </div>
+
+  <!-- royal-pose countdown overlay (lives over the camera) -->
+  <div id="posePanel" style="display:none;">
+    <div class="pose-eyebrow">Strike your royal pose</div>
+    <div class="pose-count" id="poseCount">3</div>
+    <div class="pose-hint">Sit tall. Look into the lens.</div>
   </div>
 </div>
 
@@ -524,6 +590,8 @@ const shareBtn = $("shareBtn"), downloadBtn = $("downloadBtn"), againBtn = $("ag
 const shareHint = $("shareHint");
 const resultPreview = $("resultPreview");
 const wash = $("wash");
+const posePanel = $("posePanel");
+const poseCount = $("poseCount");
 
 startBtn.addEventListener("click", begin);
 againBtn.addEventListener("click", reset);
@@ -680,11 +748,34 @@ function commit(side) {
 
   qIndex++;
   if (qIndex >= QUESTIONS.length) {
-    finish();
+    beginPose();
   } else {
     renderQuestion();
     setTimeout(() => { acceptingInput = true; }, 400);
   }
+}
+
+// "Royal pose" countdown — the captured portrait should look composed,
+// not mid-tilt. We hide the gameplay UI but keep the live camera so the
+// user can see themselves, run a 3-2-1 count, then snapshot.
+function beginPose() {
+  acceptingInput = false;
+  playOverlay.classList.add("posing");
+  posePanel.style.display = "flex";
+
+  let n = 3;
+  poseCount.textContent = n;
+  const tick = setInterval(() => {
+    n--;
+    if (n > 0) {
+      poseCount.textContent = n;
+    } else {
+      clearInterval(tick);
+      posePanel.style.display = "none";
+      playOverlay.classList.remove("posing");
+      finish();
+    }
+  }, 800);
 }
 
 function renderQuestion() {
@@ -770,8 +861,7 @@ async function renderTarotCard() {
   ctx.fillStyle = g;
   ctx.fillRect(0,0,W,H);
 
-  // ----- Decorative organic shapes behind card -----
-  drawDecor(ctx, W, H, arche.accents);
+  // (decor intentionally omitted — image is the focal point)
 
   // ----- Card geometry -----
   const cardW = W * 0.78;
@@ -855,10 +945,6 @@ async function renderTarotCard() {
     ctx.fillRect(photoX, photoY, photoW, photoH);
   }
   ctx.restore();
-
-  // Subtle gold flourish behind photo bottom (peeking past photo edge)
-  drawLeaf(ctx, cardX + cardW * 0.18, photoY + photoH - 30, 110, 70, arche.accents[0], -0.35);
-  drawLeaf(ctx, cardX + cardW * 0.82, photoY + photoH - 50, 130, 80, arche.accents[1],  0.45);
 
   // ----- Archetype name band — Aileron, brand wine -----
   const nameY = cardY + cardH - 110;
