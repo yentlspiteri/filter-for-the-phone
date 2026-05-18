@@ -352,31 +352,46 @@ function jsonResp(data, status, extraHeaders) {
   });
 }
 
+// Where the email pulls the logo from. Must be publicly fetchable.
+const LOGO_URL = "https://tarot.vonpeach.com/vonpeach-logo.png";
+
 function emailHtml(name, note) {
   const safe = (note || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Light cream theme — the brand logo PNG is black, so a light background
+  // is the only reliable way for it to render across email clients.
   return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#1a0610;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#FFD6BB;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#1a0610;padding:32px 16px;">
+<html>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+<body style="margin:0;padding:0;background:#FFF6EE;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3a0812;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFF6EE;padding:40px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" style="max-width:520px;" cellpadding="0" cellspacing="0">
-        <tr><td style="padding:0 0 20px 0;">
-          <div style="font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#FD8839;font-weight:700;">Von Peach</div>
-          <h1 style="margin:8px 0 0 0;font-size:28px;font-weight:800;color:#FFD6BB;letter-spacing:-0.01em;">${name}</h1>
+      <table role="presentation" width="100%" style="max-width:520px;background:#FFFFFF;border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(58,8,18,0.08);" cellpadding="0" cellspacing="0">
+        <tr><td style="padding:36px 36px 4px 36px;">
+          <img src="${LOGO_URL}" alt="Von Peach" width="180" style="display:block;width:180px;height:auto;border:0;outline:none;" />
         </td></tr>
-        <tr><td style="padding:0 0 24px 0;font-size:15px;line-height:1.6;color:rgba(255,214,187,0.88);">
+        <tr><td style="padding:28px 36px 0 36px;">
+          <h1 style="margin:0;font-size:28px;font-weight:800;color:#99112F;letter-spacing:-0.01em;line-height:1.2;">${name}</h1>
+        </td></tr>
+        <tr><td style="padding:16px 36px 0 36px;font-size:15px;line-height:1.6;color:#3a0812;">
           ${safe}
         </td></tr>
-        <tr><td style="padding:0 0 24px 0;font-size:13px;line-height:1.55;color:rgba(255,214,187,0.65);">
+        <tr><td style="padding:24px 36px 0 36px;font-size:13px;line-height:1.55;color:rgba(58,8,18,0.7);">
           Your card is attached. Save it, share it, or keep it close. If this read
           landed, we'd love to hear about it — just reply.
         </td></tr>
-        <tr><td style="border-top:1px solid rgba(255,214,187,0.18);padding:18px 0 0 0;font-size:11px;letter-spacing:0.24em;text-transform:uppercase;color:rgba(255,214,187,0.55);">
-          Von Peach · vonpeach.com
+        <tr><td style="padding:28px 36px 32px 36px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(153,17,47,0.15);">
+            <tr><td style="padding:18px 0 0 0;">
+              <img src="${LOGO_URL}" alt="Von Peach" width="120" style="display:block;width:120px;height:auto;border:0;outline:none;opacity:0.85;" />
+              <div style="margin-top:8px;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:rgba(58,8,18,0.55);">vonpeach.com</div>
+            </td></tr>
+          </table>
         </td></tr>
       </table>
     </td></tr>
   </table>
-</body></html>`;
+</body>
+</html>`;
 }
 
 function emailText(name, note) {
