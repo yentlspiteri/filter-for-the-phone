@@ -98,37 +98,103 @@ const FLATTERING =
   "depth of field, beautiful soft bokeh. No text, no logos, no " +
   "watermark, no overly-stylised illustration look, no colour cast.";
 
-// Archetype prompts now diverge ONLY on expression + wardrobe + prop.
+// Archetype prompts diverge ONLY on expression + wardrobe + prop.
 // Lighting, backdrop, lens, crop and tonal treatment all live in the
 // shared FLATTERING block above.
-const PROMPTS = {
-  charmer:
-    "Editorial B&W studio headshot. Expression: a warm relaxed open " +
-    "expression, hint of a natural half-smile, eyes engaging the camera " +
-    "with quiet warmth. Wardrobe: contemporary open-collar shirt or fine " +
-    "knit, no jacket. Prop: holds a vintage crystal champagne coupe " +
-    "casually at chest height, slightly tilted, the glass surface " +
-    "catching the side-light in a single bright highlight along the " +
-    "rim — old-money charm, mid-toast, not raised in cheers. Hand " +
-    "relaxed around the stem." + FLATTERING,
-  magician:
-    "Editorial B&W studio headshot. Expression: a knowing slight smirk, " +
-    "sharp intelligent eyes that read the viewer. Wardrobe: sleek dark " +
-    "turtleneck or a structured dark jacket. Prop: holds a fanned spread " +
-    "of three tarot cards between thumb and forefinger, raised near the " +
-    "chest, the backs of the cards facing the camera with an ornate " +
-    "geometric pattern visible. Hand poised, fingers elegant. A faint " +
-    "wisp of smoke catches the side-light just behind the shoulder for " +
-    "atmosphere." + FLATTERING,
-  alchemist:
-    "Editorial B&W studio headshot. Expression: a calm steady " +
-    "contemplative expression, a quiet inner authority at the corners " +
-    "of the eyes. Wardrobe: refined intellectual attire — a fine knit, " +
-    "a tweed jacket, or considered tailoring. Prop: wears a classic " +
-    "monocle fixed in one eye by a fine chain, with a hint of " +
-    "leather-bound books or a vintage brass instrument just visible in " +
-    "the soft-focus background." + FLATTERING,
+//
+// Each archetype carries a POOL of 5 props that the Worker randomly
+// picks from at request time, so two people landing on the same
+// archetype get visually distinct portraits.
+const PROMPT_TEMPLATES = {
+  charmer: {
+    base:
+      "Editorial B&W studio headshot. Expression: a warm relaxed open " +
+      "expression, hint of a natural half-smile, eyes engaging the " +
+      "camera with quiet warmth. Wardrobe: contemporary open-collar " +
+      "shirt or fine knit, no jacket. ",
+    props: [
+      "Prop: holds a vintage crystal champagne coupe casually at chest " +
+        "height, slightly tilted, the glass surface catching the " +
+        "side-light in a single bright highlight along the rim — " +
+        "old-money charm, mid-toast, not raised in cheers. Hand relaxed " +
+        "around the stem.",
+      "Prop: a single fresh white camellia bloom tucked at the lapel " +
+        "or held loosely near the collarbone, petals catching a soft " +
+        "highlight against the dark wardrobe.",
+      "Prop: holds a folded handwritten letter or a wax-sealed envelope " +
+        "casually between the fingers near the chest, paper texture " +
+        "visible in the side-light — the gesture of someone about to " +
+        "share a secret.",
+      "Prop: a vintage silk scarf draped casually over one shoulder, " +
+        "the fabric catching soft highlights and folds — elegant, lived-in, " +
+        "considered styling without being theatrical.",
+      "Prop: wears a single pearl earring catching the side-light in a " +
+        "small bright highlight, a quiet Vermeer-style detail. No other " +
+        "visible jewellery.",
+    ],
+  },
+  magician: {
+    base:
+      "Editorial B&W studio headshot. Expression: a knowing slight " +
+      "smirk, sharp intelligent eyes that read the viewer. Wardrobe: " +
+      "sleek dark turtleneck or a structured dark jacket. ",
+    props: [
+      "Prop: holds a fanned spread of three tarot cards between thumb " +
+        "and forefinger, raised near the chest, the backs of the cards " +
+        "facing the camera with an ornate geometric pattern visible. " +
+        "Hand poised, fingers elegant. A faint wisp of smoke catches " +
+        "the side-light just behind the shoulder for atmosphere.",
+      "Prop: a vintage pocket watch on a fine chain dangling from the " +
+        "breast pocket, the brass casing catching a single bright " +
+        "side-light highlight, the chain looping elegantly across the " +
+        "front of the jacket.",
+      "Prop: holds a single antique coin pinched between thumb and " +
+        "forefinger, raised near the cheekbone at chest height — the " +
+        "edge of the coin catching the side-light in a sharp metallic " +
+        "highlight, a sleight-of-hand pose.",
+      "Prop: wears an antique brass key on a fine chain at the throat, " +
+        "the key resting flat against the dark wardrobe, catching a " +
+        "single bright highlight in the side-light.",
+      "Prop: holds a single ornate playing card pinched edge-on between " +
+        "two fingers at chest height, the card's back pattern catching " +
+        "the side-light. A faint wisp of smoke drifts past the shoulder " +
+        "for atmosphere.",
+    ],
+  },
+  alchemist: {
+    base:
+      "Editorial B&W studio headshot. Expression: a calm steady " +
+      "contemplative expression, a quiet inner authority at the corners " +
+      "of the eyes. Wardrobe: refined intellectual attire — a fine " +
+      "knit, a tweed jacket, or considered tailoring. ",
+    props: [
+      "Prop: wears a classic monocle fixed in one eye by a fine chain, " +
+        "with a hint of leather-bound books or a vintage brass instrument " +
+        "just visible in the soft-focus background.",
+      "Prop: holds a vintage fountain pen poised mid-thought between " +
+        "thumb and forefinger near the chin, the polished nib catching " +
+        "a small highlight — the gesture of someone about to write " +
+        "down a thought.",
+      "Prop: holds a small antique brass compass or astrolabe at chest " +
+        "height, the engraved metal catching the side-light, hand " +
+        "cradling it carefully like an instrument worth studying.",
+      "Prop: holds a vintage magnifying glass near the chest, the round " +
+        "glass catching a soft highlight, a scholar mid-investigation. " +
+        "Faint suggestion of an old notebook or papers in the soft-focus " +
+        "background.",
+      "Prop: an open leather-bound notebook held at the chest with fine " +
+        "ink sketches and handwriting just visible on the page, a " +
+        "fountain pen tucked into the binding.",
+    ],
+  },
 };
+
+function getPromptFor(archetype) {
+  const t = PROMPT_TEMPLATES[archetype];
+  if (!t) return null;
+  const prop = t.props[Math.floor(Math.random() * t.props.length)];
+  return t.base + prop + FLATTERING;
+}
 
 // Short, archetype-specific notes sent in the email body alongside the card.
 const READS = {
@@ -221,7 +287,7 @@ async function handlePortraitEmail(request, env, ctx, cors) {
     const { image, archetype, archetypeName, email } = body;
     if (!image || !archetype || !email)  return jsonResp({ error: "missing_fields" }, 400, cors);
     if (!isValidEmail(email))            return jsonResp({ error: "invalid_email" }, 400, cors);
-    if (!PROMPTS[archetype])             return jsonResp({ error: "unknown_archetype" }, 400, cors);
+    if (!PROMPT_TEMPLATES[archetype])    return jsonResp({ error: "unknown_archetype" }, 400, cors);
 
     ctx.waitUntil((async () => {
       const bgT0 = Date.now();
@@ -251,7 +317,7 @@ async function handlePortraitEmail(request, env, ctx, cors) {
 
 // ---------- pipeline: runs all four AI stages, returns a data URL ----------
 async function runPortraitPipeline(env, image, archetype) {
-  const prompt = PROMPTS[archetype];
+  const prompt = getPromptFor(archetype);
   if (!prompt) throw new Error("unknown_archetype");
   if (!env.FAL_KEY) throw new Error("no_fal_key");
 
