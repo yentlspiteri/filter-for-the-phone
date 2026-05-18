@@ -31,24 +31,33 @@
 const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// With PuLID handling face identity natively (via reference_image_url +
-// id_weight), the prompts can focus purely on the editorial scene —
-// wardrobe, lighting, lens, mood. No more "preserve the face" preamble.
+// Universal flattering layer — appended to every archetype prompt. The
+// brief is "obviously the same person, on their best day". Magazine-grade
+// retouching, glowing skin, bright eyes, softly flattering light.
+const FLATTERING =
+  " The subject looks their absolute best — clear glowing skin, bright " +
+  "well-rested eyes, sharp jawline, a subtle natural glow, confident and " +
+  "magnetic. Professional magazine-quality retouching that softens any " +
+  "blemishes, dark circles or shadows under the eyes while keeping skin " +
+  "texture natural and real. The pose, angle and lighting are deliberately " +
+  "chosen to flatter — slight three-quarter angle, soft front fill light " +
+  "that lifts the eyes, no harsh under-lighting, no double-chin angle. The " +
+  "kind of photograph where a friend says 'wow, you look great here'. " +
+  "Photorealistic, real-camera image, shallow depth of field, 85mm portrait " +
+  "lens look. No text, no logos, no watermark.";
+
 const PROMPTS = {
   charmer:
-    "Editorial magazine-cover portrait photograph, polished and flattering, " +
-    "the kind of headshot one would be proud to upload to LinkedIn. " +
-    "Head-and-shoulders, looking straight to camera, warm natural " +
-    "half-smile, eyes connecting with the viewer with quiet confidence. " +
-    "Soft warm studio lighting with a hint of golden-hour glow on the " +
-    "cheekbones, large soft key light from front-left, subtle rim light. " +
-    "Stylish contemporary professional wardrobe — earth-tone tailored " +
-    "blazer over a crisp shirt, optional simple jewellery. Soft warm " +
-    "bokeh background in muted creams and warm ambers, suggestion of a " +
-    "sunlit room. Shallow depth of field, 85mm portrait lens, sharp focus " +
-    "on the face, natural skin texture, photorealistic. In the style of " +
-    "a Condé Nast or Vogue executive portrait. No text, no logos, no " +
-    "watermark.",
+    "Editorial magazine-cover portrait photograph, the kind of polished " +
+    "headshot one would be proud to upload to LinkedIn. Head-and-shoulders, " +
+    "looking straight to camera, warm natural half-smile, eyes connecting " +
+    "with the viewer with quiet confidence. Soft warm studio lighting with " +
+    "a hint of golden-hour glow on the cheekbones, large soft key light " +
+    "from front-left, subtle rim light. Stylish contemporary professional " +
+    "wardrobe — earth-tone tailored blazer over a crisp shirt, optional " +
+    "simple jewellery. Soft warm bokeh background in muted creams and warm " +
+    "ambers, suggestion of a sunlit room. In the style of a Condé Nast or " +
+    "Vogue executive portrait." + FLATTERING,
   magician:
     "High-contrast editorial portrait photograph, striking and cinematic, " +
     "the kind of headshot one would be proud to upload to LinkedIn. " +
@@ -58,10 +67,8 @@ const PROMPTS = {
     "shoulder, deep but luminous shadows that still keep the face sharp " +
     "and readable. Sleek modern professional wardrobe — black turtleneck " +
     "or a structured dark blazer. Moody dark background with subtle " +
-    "architectural or fabric depth, faint smoke or texture. Shallow depth " +
-    "of field, 85mm portrait lens, sharp focus on the face, natural skin " +
-    "texture, photorealistic. In the style of Platon's editorial " +
-    "portraits. No text, no logos, no watermark.",
+    "architectural or fabric depth, faint smoke or texture. In the style " +
+    "of Platon's editorial portraits." + FLATTERING,
   alchemist:
     "Considered editorial profile-photograph portrait, thoughtful and " +
     "premium, the kind of headshot one would be proud to upload to " +
@@ -72,10 +79,8 @@ const PROMPTS = {
     "wardrobe — fine tweed jacket or quality knit, considered details, " +
     "optionally subtle glasses. Softly defocused background of a " +
     "warm-toned study or wood-panelled library, books or artisan tools " +
-    "just visible in the bokeh. Shallow depth of field, 85mm portrait " +
-    "lens, sharp focus on the face, natural skin texture, photorealistic. " +
-    "In the style of a New Yorker or Sunday Times Magazine profile " +
-    "portrait. No text, no logos, no watermark.",
+    "just visible in the bokeh. In the style of a New Yorker or Sunday " +
+    "Times Magazine profile portrait." + FLATTERING,
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
@@ -148,13 +153,18 @@ async function handlePortrait(request, env, cors) {
         num_inference_steps: 24,
         guidance_scale: 4,
         true_cfg: 1,
-        id_weight: 1.0,               // 1.0 = strong face match; raise for stricter
+        id_weight: 0.9,               // 0.9 = strong likeness + just enough latitude to flatter
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
         negative_prompt:
           "blurry, out of focus, low quality, distorted face, wrong identity, " +
-          "different person, cartoon, painting, illustration, anime, watermark, text",
+          "different person, cartoon, painting, illustration, anime, watermark, " +
+          "text, tired, exhausted, bags under eyes, dark circles, harsh shadows " +
+          "on face, harsh under-lighting, double chin, unflattering angle, " +
+          "low angle from below, oily skin, blemishes, acne, red skin, " +
+          "wrinkled, aged, dull skin, washed out, flat lighting, ugly, " +
+          "asymmetric face, deformed, bad anatomy",
       }),
     });
 
