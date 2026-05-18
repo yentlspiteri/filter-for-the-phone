@@ -382,9 +382,9 @@ async function runPortraitPipeline(env, image, archetype) {
             "oversized forehead, exaggerated head proportions",
           creativity:  0.3,        // low — don't reinvent, just add detail
           resemblance: 0.7,        // high — preserve the input structure
-          upscale_factor: 2,       // 2x — sharper micro-detail, manageable size
-          num_inference_steps: 18,
-          guidance_scale: 4,
+          upscale_factor: 1,       // keep 1× — 2× was pushing the pipeline past Cloudflare's waitUntil window
+          num_inference_steps: 10, // halved from 18 — fastest setting that still adds visible grain
+          guidance_scale: 3,
         }),
       });
       if (realismRes.ok) {
