@@ -360,12 +360,54 @@
     color: var(--peach);
   }
 
-  /* Result screen: card preview as hero, compact buttons, centered */
+  /* Result screen: card preview as hero, compact buttons, centered.
+     Ambient smoke wisps drift past behind the card. */
   #screenResult {
     padding: 14px 16px 16px;
     justify-content: center;
     gap: 14px;
     overflow-y: auto;
+    isolation: isolate; /* keep smoke z-index local to this screen */
+  }
+  .result-atmosphere {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 0;
+  }
+  .smoke {
+    position: absolute;
+    bottom: -240px;
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+                  rgba(253,136,57,0.22) 0%,
+                  rgba(253,136,57,0.06) 45%,
+                  transparent 75%);
+    filter: blur(40px);
+    will-change: transform, opacity;
+    animation: smoke-rise 13s linear infinite;
+  }
+  .smoke-1 { left: 10%;  width: 280px; height: 280px; animation-duration: 14s; animation-delay:  0s; }
+  .smoke-2 { left: 55%;  width: 220px; height: 220px; animation-duration: 11s; animation-delay: -3s;
+             background: radial-gradient(circle, rgba(204,28,14,0.18) 0%, rgba(204,28,14,0.05) 45%, transparent 75%); }
+  .smoke-3 { left: 35%;  width: 320px; height: 320px; animation-duration: 16s; animation-delay: -7s;
+             background: radial-gradient(circle, rgba(255,214,187,0.16) 0%, rgba(255,214,187,0.04) 45%, transparent 75%); }
+  .smoke-4 { left: 75%;  width: 200px; height: 200px; animation-duration: 12s; animation-delay: -10s; }
+  @keyframes smoke-rise {
+    0%   { transform: translate3d(0, 0, 0)        scale(0.6); opacity: 0;   }
+    15%  { opacity: 0.9; }
+    50%  { transform: translate3d(-6%, -60vh, 0)  scale(1);   opacity: 0.65; }
+    85%  { opacity: 0.4; }
+    100% { transform: translate3d(8%, -120vh, 0)  scale(1.4); opacity: 0;   }
+  }
+  /* Card sits above the smoke */
+  #screenResult > #resultPreviewWrap,
+  #screenResult > .btnrow { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .smoke { animation: none; opacity: 0.35; }
   }
   /* Size the wrap from available HEIGHT so aspect-ratio derives a true 9:16
      width — prevents the flex column from crushing it. max-width caps the
@@ -731,6 +773,12 @@
 
   <!-- result -->
   <div class="screen" id="screenResult">
+    <div class="result-atmosphere" aria-hidden="true">
+      <span class="smoke smoke-1"></span>
+      <span class="smoke smoke-2"></span>
+      <span class="smoke smoke-3"></span>
+      <span class="smoke smoke-4"></span>
+    </div>
     <div id="resultPreviewWrap">
       <img id="resultPreview" alt="Your archetype card" />
     </div>
