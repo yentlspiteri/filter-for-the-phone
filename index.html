@@ -544,23 +544,35 @@
     transition: opacity 500ms ease, transform 500ms ease, visibility 0s linear 0s;
   }
   .painting-skip-trigger {
-    background: transparent;
-    border: 1.5px solid rgba(255,214,187,0.4);
-    color: var(--peach);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
+    color: #fff;
+    border: 0;
     font-family: "Aileron", "General Sans", sans-serif;
-    font-weight: 700;
-    font-size: 12px;
+    font-weight: 800;
+    font-size: 13px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    padding: 11px 18px;
+    padding: 14px 24px;
     border-radius: 999px;
     cursor: pointer;
-    transition: background 140ms, border-color 140ms;
+    box-shadow: 0 10px 26px rgba(204,28,14,0.32);
+    transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+  }
+  .painting-skip-trigger svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
   .painting-skip-trigger:hover {
-    background: rgba(255,214,187,0.08);
-    border-color: var(--peach);
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+    box-shadow: 0 14px 30px rgba(204,28,14,0.40);
   }
+  .painting-skip-trigger:active { transform: translateY(0); filter: brightness(0.96); }
   .painting-skip-form {
     display: flex;
     flex-direction: column;
@@ -827,7 +839,11 @@
         <!-- Skip-the-wait: drop your email, we send the portrait when ready. -->
         <div class="painting-skip">
           <button type="button" class="painting-skip-trigger" id="paintingSkipBtn">
-            Don't want to wait? Email it to me
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2"/>
+              <polyline points="3 7 12 13 21 7"/>
+            </svg>
+            <span>Email me my photo</span>
           </button>
           <form class="painting-skip-form" id="paintingSkipForm" style="display:none;">
             <input type="email" id="paintingSkipInput" required
