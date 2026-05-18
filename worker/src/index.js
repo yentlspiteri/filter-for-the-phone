@@ -29,46 +29,61 @@
 const FAL_URL = "https://fal.run/fal-ai/flux-pro/kontext/max";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// Identity-first prompts: keep the EXACT same person, just paint the
-// costume and setting around them. Identity preservation goes first; the
-// archetype-specific costume + scene comes second.
+// Identity-first prompts framed as editorial PHOTOGRAPHY (not painting).
+// The bar: the user wants to upload this to LinkedIn. Photorealistic skin,
+// real-camera optics, sharp focus, magazine-cover production value.
 const IDENTITY_LOCK =
   "Keep the EXACT same person from the input image. Same face, same hair, " +
-  "same skin tone, same age, same gender, same ethnicity, same overall " +
-  "likeness — do NOT invent a new person. The face must remain perfectly " +
-  "recognizable as the input subject. ";
+  "same skin tone, same age, same gender, same ethnicity, same facial " +
+  "features, same identity. Do NOT invent a new person, do NOT alter their " +
+  "appearance beyond wardrobe, expression and setting. The face must remain " +
+  "perfectly recognisable as the input subject — a friend should say " +
+  '"that is definitely them". Photorealistic skin texture with natural ' +
+  "pores and detail, real-camera image quality, sharp eyes, no painterly " +
+  "or illustrated style, no overly smooth retouched look. ";
 
 const PROMPTS = {
   charmer:
     IDENTITY_LOCK +
-    "Paint this same person as a charismatic Baroque courtier in an oil-painted royal " +
-    "portrait. Head-and-shoulders, looking towards camera. Their natural expression " +
-    "softened into a warm welcoming half-smile. Ornate gilded lace collar with pearl " +
-    "trim, embroidered velvet robes in deep wine red with shimmering gold thread, an " +
-    "elegant pearl earring. Honey-amber golden-hour chamber light, soft warm bokeh of a " +
-    "candlelit gilded hall behind. Painterly brushstrokes, in the tradition of Velázquez " +
-    "and Boucher. Museum quality. No text, no logos, no watermark.",
+    "Editorial magazine-cover portrait photograph of this same person — the " +
+    "kind of polished, flattering headshot they would be proud to upload " +
+    "to LinkedIn. Head-and-shoulders, looking straight to camera, a warm " +
+    "natural half-smile, eyes connecting with the viewer with quiet " +
+    "confidence. Soft warm studio lighting with a hint of golden-hour " +
+    "glow on the cheekbones, large soft key light from front-left, subtle " +
+    "rim light. Stylish contemporary professional wardrobe — earth-tone " +
+    "tailored blazer over a crisp shirt, optional simple jewellery. Soft " +
+    "warm bokeh background in muted creams and warm ambers, suggestion of " +
+    "a sunlit room. Shallow depth of field, 85mm portrait lens look. In " +
+    "the style of a Condé Nast or Vogue executive portrait. No text, no " +
+    "logos, no watermark.",
   magician:
     IDENTITY_LOCK +
-    "Paint this same person as a theatrical Baroque illusionist in a dramatic oil-painted " +
-    "royal portrait. Head-and-shoulders, looking towards camera. Their natural expression " +
-    "reshaped into a knowing slight smirk and a sharp piercing gaze. Heavy black velvet " +
-    "cape with intricate silver-thread brocade and an ornate ruff collar, a single deep " +
-    "jewel pendant at the throat. Strong chiaroscuro lighting with one warm key light " +
-    "from the side, rest in deep velvet shadow, faint trails of candle smoke and the " +
-    "ghosts of arcane symbols in the dark background. In the tradition of Caravaggio and " +
-    "Rembrandt. Museum quality. No text, no logos, no watermark.",
+    "High-contrast editorial portrait photograph of this same person — the " +
+    "kind of striking, cinematic headshot they would be proud to upload " +
+    "to LinkedIn. Head-and-shoulders, looking straight to camera, a slight " +
+    "knowing half-smile and sharp intelligent eyes. Dramatic side-lighting " +
+    "with a single warm key light from the side and a defined rim light " +
+    "on the shoulder, deep but luminous shadows that still keep the face " +
+    "sharp and readable. Sleek modern professional wardrobe — black " +
+    "turtleneck or a structured dark blazer. Moody dark background with " +
+    "subtle architectural or fabric depth, faint smoke or texture. Shallow " +
+    "depth of field, 85mm portrait lens look. In the style of Platon's " +
+    "editorial portraits. No text, no logos, no watermark.",
   alchemist:
     IDENTITY_LOCK +
-    "Paint this same person as a wise Renaissance alchemist-scholar in an oil-painted " +
-    "study portrait. Head-and-shoulders, looking towards camera. Their natural expression " +
-    "settled into a contemplative steady gaze, a quiet inner authority. Heavy scholar's " +
-    "robes in burnished gold and deep crimson with a fur-trimmed collar, an alchemical " +
-    "pendant on a chain. Candlelit warm amber lighting, background a softly defocused " +
-    "laboratory — copper distillation apparatus, brass instruments, stacks of old " +
-    "leather-bound books, a glass alembic catching the firelight. In the tradition of " +
-    "Joseph Wright of Derby and Vermeer's Astronomer. Museum quality. No text, no logos, " +
-    "no watermark.",
+    "Considered editorial profile-photograph portrait of this same person — " +
+    "the kind of thoughtful, premium headshot they would be proud to " +
+    "upload to LinkedIn. Head-and-shoulders, looking straight to camera, " +
+    "a calm steady gaze that suggests deep expertise, a faint hint of a " +
+    "smile at the eyes. Warm soft lighting with a gentle golden tone, " +
+    "large soft key light from front-right. Refined intellectual " +
+    "professional wardrobe — fine tweed jacket or quality knit, considered " +
+    "details, optionally subtle glasses. Softly defocused background of " +
+    "a warm-toned study or wood-panelled library, books or artisan tools " +
+    "just visible in the bokeh. Shallow depth of field, 85mm portrait " +
+    "lens look. In the style of a New Yorker or Sunday Times Magazine " +
+    "profile portrait. No text, no logos, no watermark.",
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
