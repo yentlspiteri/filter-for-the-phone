@@ -26,10 +26,16 @@ The Worker exists so neither API key ever leaves the server.
    wrangler secret put RESEND_KEY
    wrangler secret put MAILCHIMP_API_KEY
    wrangler secret put MAILCHIMP_LIST_ID
+   wrangler secret put GALLERY_KEY
    ```
    Paste the value when prompted. Mailchimp secrets are optional — if
    either is missing the Worker just skips the audience-add (Resend still
-   delivers, no errors).
+   delivers, no errors). `GALLERY_KEY` is any passcode you choose — it
+   gates access to the portrait gallery (see below).
+5. Create the R2 bucket for the gallery (one-time):
+   ```
+   npx wrangler r2 bucket create vonpeach-portraits
+   ```
 5. (Recommended) Verify `vonpeach.com` in Resend
    (<https://resend.com/domains>), then edit `FROM_EMAIL` in `wrangler.toml`
    to something like `"Von Peach <hello@vonpeach.com>"`. Without a verified
@@ -76,12 +82,28 @@ to your actual deployed origin, e.g.:
 
 …and redeploy.
 
+## Admin gallery
+
+Every successful generation is mirrored to the R2 bucket. View them at:
+
+```
+https://vonpeach-portrait.<your-sub>.workers.dev/gallery?key=<GALLERY_KEY>
+```
+
+- Grid view of all portraits, newest first
+- Filter chips: All / Charmer / Magician / Alchemist (with counts)
+- Tap a card to open the original JPEG
+- Private — bucket isn't publicly accessible, the Worker streams the
+  images through `/portrait-image/<key>` gated by the same passcode
+
 ## Costs
 
 - fal.ai `flux-pro/kontext`: ~$0.04 per portrait. Free credits at signup
   usually cover hundreds of tries.
 - Resend: free tier 3k emails/month, 100/day. Plenty for an event filter.
 - Cloudflare Workers: free tier 100k requests/day.
+- Cloudflare R2: 10GB storage + 1M Class A ops free per month. At ~100KB
+  per portrait you'd fit ~100k portraits in the free tier.
 
 ## Rotating keys
 

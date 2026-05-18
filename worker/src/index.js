@@ -173,10 +173,19 @@ export default {
     // Some mobile Safari builds are pickier about preflight responses —
     // 204 + Max-Age is the most-compatible answer.
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-    if (request.method !== "POST") return jsonResp({ error: "method_not_allowed" }, 405, cors);
 
     const url = new URL(request.url);
-    if (url.pathname === "/portrait")        return handlePortrait(request, env, cors);
+
+    // GET routes for the admin gallery
+    if (request.method === "GET") {
+      if (url.pathname === "/gallery")               return handleGallery(request, env, url);
+      if (url.pathname.startsWith("/portrait-image/")) return handlePortraitImage(request, env, url);
+      return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
+    }
+
+    if (request.method !== "POST") return jsonResp({ error: "method_not_allowed" }, 405, cors);
+
+    if (url.pathname === "/portrait")        return handlePortrait(request, env, ctx, cors);
     if (url.pathname === "/send-card")       return handleSendCard(request, env, cors);
     if (url.pathname === "/portrait-email")  return handlePortraitEmail(request, env, ctx, cors);
     return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
@@ -184,11 +193,13 @@ export default {
 };
 
 // ---------- /portrait — synchronous, returns the image inline ----------
-async function handlePortrait(request, env, cors) {
+async function handlePortrait(request, env, ctx, cors) {
   try {
     const { image, archetype } = (await request.json()) || {};
     if (!image || !archetype) return jsonResp({ error: "missing_fields" }, 400, cors);
     const dataUrl = await runPortraitPipeline(env, image, archetype);
+    // Detached save to R2 — don't block the client response.
+    ctx.waitUntil(saveToGallery(env, archetype, dataUrl));
     return jsonResp({ image: dataUrl }, 200, cors);
   } catch (err) {
     const msg = err?.message || "server";
@@ -217,6 +228,8 @@ async function handlePortraitEmail(request, env, ctx, cors) {
       console.log(`[portrait-email] background start email=${email} archetype=${archetype}`);
       try {
         const portraitDataUrl = await runPortraitPipeline(env, image, archetype);
+        // Best-effort gallery save before sending the email.
+        await saveToGallery(env, archetype, portraitDataUrl);
         console.log(`[portrait-email] pipeline done t+${Date.now()-bgT0}ms, sending via Resend`);
         await sendCardEmail(env, {
           email,
@@ -596,6 +609,208 @@ function jsonResp(data, status, extraHeaders) {
     status,
     headers: { ...extraHeaders, "Content-Type": "application/json" },
   });
+}
+
+// ---------- ADMIN PORTRAIT GALLERY ----------
+// Every successful generation is mirrored to a private R2 bucket. The
+// /gallery route renders an HTML grid (passcode-gated via ?key=…) so the
+// team can curate / pick favourites without exposing the bucket publicly.
+
+// Writes a single portrait to R2 with archetype + timestamp metadata.
+// Best-effort: returns silently if PORTRAITS binding isn't configured or
+// the put fails — the user's portrait still gets returned/emailed.
+async function saveToGallery(env, archetype, imageDataUrl) {
+  if (!env.PORTRAITS) return;
+  try {
+    const b64 = String(imageDataUrl).split(",").pop();
+    const bytes = base64ToUint8Array(b64);
+    const now = new Date();
+    const yyyy = now.getUTCFullYear();
+    const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(now.getUTCDate()).padStart(2, "0");
+    const id = `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`;
+    const key = `${yyyy}/${mm}/${dd}/${archetype}-${id}.jpg`;
+    await env.PORTRAITS.put(key, bytes, {
+      httpMetadata: { contentType: "image/jpeg" },
+      customMetadata: {
+        archetype,
+        ts: String(now.getTime()),
+        iso: now.toISOString(),
+      },
+    });
+  } catch (err) {
+    console.warn("gallery save failed:", err?.message);
+  }
+}
+
+// GET /gallery?key=<GALLERY_KEY>
+//   Lists the most recent portraits as an HTML grid. Passcode-gated.
+async function handleGallery(_request, env, url) {
+  if (!env.GALLERY_KEY) return new Response("Gallery key not configured.", { status: 500 });
+  const key = url.searchParams.get("key") || "";
+  if (key !== env.GALLERY_KEY) return new Response("Forbidden.", { status: 403 });
+  if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
+
+  // Optional archetype filter
+  const archetypeFilter = url.searchParams.get("archetype");
+
+  const list = await env.PORTRAITS.list({ limit: 200 });
+  let items = list.objects || [];
+  items.sort((a, b) => (b.uploaded?.getTime?.() || 0) - (a.uploaded?.getTime?.() || 0));
+
+  // Enrich with custom metadata
+  const enriched = await Promise.all(items.map(async (obj) => {
+    const head = await env.PORTRAITS.head(obj.key);
+    const meta = head?.customMetadata || {};
+    return {
+      key: obj.key,
+      archetype: meta.archetype || "—",
+      ts: meta.ts ? Number(meta.ts) : (obj.uploaded?.getTime?.() || 0),
+      iso: meta.iso || obj.uploaded?.toISOString?.() || "",
+      size: obj.size,
+    };
+  }));
+
+  const filtered = archetypeFilter
+    ? enriched.filter((x) => x.archetype === archetypeFilter)
+    : enriched;
+
+  const html = renderGalleryHtml(filtered, key, archetypeFilter, enriched.length);
+  return new Response(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+// GET /portrait-image/<key>?key=<GALLERY_KEY>
+//   Streams the underlying JPEG from R2. Passcode-gated.
+async function handlePortraitImage(_request, env, url) {
+  if (!env.GALLERY_KEY) return new Response("Gallery key not configured.", { status: 500 });
+  const auth = url.searchParams.get("key") || "";
+  if (auth !== env.GALLERY_KEY) return new Response("Forbidden.", { status: 403 });
+  if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
+
+  // pathname is /portrait-image/<key>
+  const objectKey = decodeURIComponent(url.pathname.slice("/portrait-image/".length));
+  if (!objectKey) return new Response("Bad request.", { status: 400 });
+
+  const obj = await env.PORTRAITS.get(objectKey);
+  if (!obj) return new Response("Not found.", { status: 404 });
+
+  return new Response(obj.body, {
+    status: 200,
+    headers: {
+      "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
+      "Cache-Control": "private, max-age=300",
+    },
+  });
+}
+
+function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
+  const safeKey = encodeURIComponent(authKey);
+  const counts = items.reduce((acc, x) => {
+    acc[x.archetype] = (acc[x.archetype] || 0) + 1;
+    return acc;
+  }, {});
+  const filterLink = (name, label) => {
+    const params = new URLSearchParams({ key: authKey });
+    if (name) params.set("archetype", name);
+    const active = currentFilter === name || (!name && !currentFilter);
+    return `<a href="/gallery?${params.toString()}" class="filter${active ? " active" : ""}">${label}${name ? ` <span class="filter-count">${counts[name] || 0}</span>` : ` <span class="filter-count">${totalCount}</span>`}</a>`;
+  };
+  const cards = items.map((x) => {
+    const src = `/portrait-image/${encodeURIComponent(x.key)}?key=${safeKey}`;
+    const date = x.iso ? new Date(x.iso).toLocaleString() : "";
+    return `<a class="card" href="${src}" target="_blank" rel="noopener">
+      <img loading="lazy" src="${src}" alt="${x.archetype}" />
+      <div class="meta">
+        <span class="archetype">${x.archetype}</span>
+        <span class="ts">${date}</span>
+      </div>
+    </a>`;
+  }).join("");
+
+  return `<!doctype html>
+<html><head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Von Peach — Portrait Gallery</title>
+  <style>
+    :root {
+      --wine:#99112F; --red:#CC1C0E; --orange:#FD8839; --peach:#FFD6BB;
+      --bg:#0d0308; --card-bg:#1a0610;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; padding:0; background:var(--bg); color:var(--peach);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      min-height:100vh;
+    }
+    header {
+      padding:32px 24px 16px; display:flex; align-items:center; gap:14px;
+      border-bottom:1px solid rgba(255,214,187,0.10);
+    }
+    header h1 {
+      margin:0; font-size:22px; font-weight:800; letter-spacing:0.04em;
+      text-transform:uppercase;
+    }
+    header .total { color:rgba(255,214,187,0.55); font-size:14px; }
+    .filters {
+      padding:14px 24px; display:flex; flex-wrap:wrap; gap:8px;
+      border-bottom:1px solid rgba(255,214,187,0.10);
+    }
+    .filter {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 14px; border-radius:999px;
+      background:rgba(255,214,187,0.06); color:var(--peach);
+      text-decoration:none; font-size:12px; font-weight:700;
+      letter-spacing:0.14em; text-transform:uppercase;
+      border:1px solid rgba(255,214,187,0.14); transition:background 120ms;
+    }
+    .filter:hover { background:rgba(255,214,187,0.10); }
+    .filter.active { background:linear-gradient(135deg,var(--orange),var(--red) 60%,var(--wine)); border-color:transparent; color:#fff; }
+    .filter-count { background:rgba(0,0,0,0.18); padding:2px 8px; border-radius:999px; font-size:11px; }
+    .grid {
+      display:grid; gap:16px; padding:20px 24px 60px;
+      grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+    }
+    .card {
+      background:var(--card-bg); border-radius:14px; overflow:hidden;
+      text-decoration:none; color:var(--peach);
+      box-shadow:0 8px 22px rgba(0,0,0,0.4);
+      transition:transform 140ms ease, box-shadow 140ms ease;
+      display:flex; flex-direction:column;
+    }
+    .card:hover { transform:translateY(-2px); box-shadow:0 12px 30px rgba(204,28,14,0.30); }
+    .card img { display:block; width:100%; aspect-ratio:3/4; object-fit:cover; background:#1a0610; }
+    .meta { padding:10px 14px; display:flex; justify-content:space-between; align-items:center; font-size:12px; gap:8px; }
+    .archetype { font-weight:700; text-transform:capitalize; letter-spacing:0.04em; color:var(--orange); }
+    .ts { color:rgba(255,214,187,0.55); font-size:11px; }
+    .empty { padding:60px 24px; text-align:center; color:rgba(255,214,187,0.55); }
+  </style>
+</head><body>
+  <header>
+    <h1>Portrait Gallery</h1>
+    <span class="total">${totalCount} total</span>
+  </header>
+  <div class="filters">
+    ${filterLink("", "All")}
+    ${filterLink("charmer", "Charmer")}
+    ${filterLink("magician", "Magician")}
+    ${filterLink("alchemist", "Alchemist")}
+  </div>
+  ${items.length === 0
+    ? `<div class="empty">No portraits yet.${currentFilter ? " Try removing the filter." : ""}</div>`
+    : `<div class="grid">${cards}</div>`}
+</body></html>`;
+}
+
+function base64ToUint8Array(b64) {
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 // Where the email pulls the logo from. Must be publicly fetchable.
