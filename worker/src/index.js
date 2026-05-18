@@ -603,79 +603,78 @@ const LINKEDIN_SHARE_URL =
   "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftarot.vonpeach.com";
 
 function emailHtml(name, note, imageDataUrl) {
-  const safe = (note || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // Brand-forward email: warm peach outer, white card, orange→red→wine
-  // accent stripes top + bottom, archetype title with an orange underline,
-  // gradient Share-on-LinkedIn CTA. The brand logo PNG is black, so the
-  // card stays light for legibility.
+  // Stripped-down email: just the tarot card on a dark backdrop. No white
+  // wrapper, no archetype title, no body text — the card already carries
+  // its own composition (archetype name, brand styling, portrait). Logo
+  // above, share CTA + socials + URL below. A gentle wiggle animation is
+  // declared in <style>; Apple Mail / iOS Mail honour it, Gmail strips
+  // <style> blocks and the card sits static there — graceful degradation.
   return `<!doctype html>
 <html>
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
-<body style="margin:0;padding:0;background:#0d0308;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3a0812;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0d0308;padding:32px 16px;">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    @keyframes vp-wiggle {
+      0%, 100% { transform: rotate(-1.2deg) translateY(-2px); }
+      50%      { transform: rotate(1.2deg)  translateY(2px); }
+    }
+    .vp-card { animation: vp-wiggle 5s ease-in-out infinite; transform-origin: center; }
+    @media (prefers-reduced-motion: reduce) { .vp-card { animation: none; } }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#0d0308;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#FFD6BB;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0d0308;padding:36px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" style="max-width:520px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 14px 38px rgba(153,17,47,0.18);" cellpadding="0" cellspacing="0">
+      <table role="presentation" width="100%" style="max-width:520px;" cellpadding="0" cellspacing="0">
 
         <!-- Top brand stripe — orange → red → wine -->
-        <tr><td style="height:6px;line-height:0;font-size:0;background:linear-gradient(90deg,#FD8839 0%,#CC1C0E 50%,#99112F 100%);">&nbsp;</td></tr>
+        <tr><td style="height:5px;line-height:0;font-size:0;background:linear-gradient(90deg,#FD8839 0%,#CC1C0E 50%,#99112F 100%);border-radius:3px;">&nbsp;</td></tr>
 
-        <!-- Logo -->
-        <tr><td style="padding:30px 36px 8px 36px;">
-          <img src="${LOGO_URL}" alt="Von Peach" width="180" style="display:block;width:180px;height:auto;border:0;outline:none;" />
+        <!-- Logo, tinted via mask isn't possible in email — use the black PNG against the dark bg won't read.
+             Workaround: hosted peach-tinted logo via brand colour text mark, or fall back to the brand
+             wordmark in Aileron-ish bold. Simplest: use the black PNG on a small light pill so it reads. -->
+        <tr><td align="center" style="padding:36px 0 28px 0;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#FFD6BB;border-radius:999px;padding:10px 22px;">
+            <img src="${LOGO_URL}" alt="Von Peach" width="140" style="display:block;width:140px;height:auto;border:0;outline:none;" />
+          </td></tr></table>
         </td></tr>
 
-        <!-- Portrait -->
-        <tr><td style="padding:20px 36px 0 36px;">
-          <img src="${imageDataUrl}" alt="${name}" style="display:block;width:100%;max-width:448px;height:auto;border-radius:10px;border:0;outline:none;" />
-        </td></tr>
-
-        <!-- Archetype title with orange accent underline -->
-        <tr><td style="padding:24px 36px 0 36px;">
-          <h1 style="margin:0;font-size:28px;font-weight:800;color:#99112F;letter-spacing:-0.01em;line-height:1.2;">${name}</h1>
-          <div style="height:3px;width:56px;background:#FD8839;margin-top:8px;border-radius:2px;line-height:0;font-size:0;">&nbsp;</div>
-        </td></tr>
-
-        <!-- Body / archetype reading -->
-        <tr><td style="padding:18px 36px 0 36px;font-size:15px;line-height:1.6;color:#3a0812;">
-          ${safe}
-        </td></tr>
-
-        <!-- Attachment note -->
-        <tr><td style="padding:22px 36px 0 36px;font-size:13px;line-height:1.55;color:rgba(58,8,18,0.7);">
-          Your portrait is attached — share it on LinkedIn, keep it for the next bio update, or just hang on to it.
+        <!-- THE TAROT CARD — the hero -->
+        <tr><td align="center" style="padding:0 8px;">
+          <img src="${imageDataUrl}" alt="${name}" class="vp-card"
+               style="display:block;width:100%;max-width:440px;height:auto;border:0;outline:none;border-radius:14px;box-shadow:0 24px 48px rgba(0,0,0,0.5);" />
         </td></tr>
 
         <!-- Share-on-LinkedIn CTA -->
-        <tr><td align="center" style="padding:22px 36px 0 36px;">
+        <tr><td align="center" style="padding:32px 16px 0 16px;">
           <a href="${LINKEDIN_SHARE_URL}"
-             style="display:inline-block;background:linear-gradient(135deg,#FD8839 0%,#CC1C0E 60%,#99112F 100%);color:#FFFFFF;text-decoration:none;padding:14px 28px;border-radius:999px;font-family:inherit;font-weight:800;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;box-shadow:0 8px 18px rgba(204,28,14,0.30);">
+             style="display:inline-block;background:linear-gradient(135deg,#FD8839 0%,#CC1C0E 60%,#99112F 100%);color:#FFFFFF;text-decoration:none;padding:14px 28px;border-radius:999px;font-family:inherit;font-weight:800;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;box-shadow:0 8px 18px rgba(204,28,14,0.40);">
             Share on LinkedIn
           </a>
         </td></tr>
 
-        <!-- Footer divider + socials + URL -->
-        <tr><td align="center" style="padding:32px 36px 28px 36px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(253,136,57,0.35);width:100%;">
-            <tr><td align="center" style="padding:20px 0 0 0;">
-              <a href="https://www.instagram.com/vonpeachonline/" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;color:#99112F;margin:0 12px;line-height:0;">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;">
-                  <path d="M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2m-.2 2A3.6 3.6 0 0 0 4 7.6v8.8C4 18.39 5.61 20 7.6 20h8.8a3.6 3.6 0 0 0 3.6-3.6V7.6C20 5.61 18.39 4 16.4 4H7.6m9.65 1.5a1.25 1.25 0 0 1 1.25 1.25A1.25 1.25 0 0 1 17.25 8 1.25 1.25 0 0 1 16 6.75a1.25 1.25 0 0 1 1.25-1.25M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/>
-                </svg>
-              </a>
-              <a href="https://www.linkedin.com/company/65850001/" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;color:#99112F;margin:0 12px;line-height:0;">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;">
-                  <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
-                </svg>
-              </a>
-            </td></tr>
-            <tr><td align="center" style="padding:14px 0 0 0;">
-              <a href="https://vonpeach.com" style="font-size:12px;letter-spacing:0.28em;text-transform:uppercase;color:#99112F;text-decoration:none;font-weight:700;">vonpeach.com</a>
-            </td></tr>
-          </table>
+        <!-- Socials -->
+        <tr><td align="center" style="padding:28px 0 0 0;">
+          <a href="https://www.instagram.com/vonpeachonline/" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;color:#FFD6BB;margin:0 12px;line-height:0;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;">
+              <path d="M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2m-.2 2A3.6 3.6 0 0 0 4 7.6v8.8C4 18.39 5.61 20 7.6 20h8.8a3.6 3.6 0 0 0 3.6-3.6V7.6C20 5.61 18.39 4 16.4 4H7.6m9.65 1.5a1.25 1.25 0 0 1 1.25 1.25A1.25 1.25 0 0 1 17.25 8 1.25 1.25 0 0 1 16 6.75a1.25 1.25 0 0 1 1.25-1.25M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/>
+            </svg>
+          </a>
+          <a href="https://www.linkedin.com/company/65850001/" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;color:#FFD6BB;margin:0 12px;line-height:0;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;">
+              <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
+            </svg>
+          </a>
+        </td></tr>
+
+        <!-- vonpeach.com -->
+        <tr><td align="center" style="padding:16px 0 28px 0;">
+          <a href="https://vonpeach.com" style="font-size:12px;letter-spacing:0.28em;text-transform:uppercase;color:rgba(255,214,187,0.75);text-decoration:none;font-weight:700;">vonpeach.com</a>
         </td></tr>
 
         <!-- Bottom brand stripe — wine → red → orange -->
-        <tr><td style="height:6px;line-height:0;font-size:0;background:linear-gradient(90deg,#99112F 0%,#CC1C0E 50%,#FD8839 100%);">&nbsp;</td></tr>
+        <tr><td style="height:5px;line-height:0;font-size:0;background:linear-gradient(90deg,#99112F 0%,#CC1C0E 50%,#FD8839 100%);border-radius:3px;">&nbsp;</td></tr>
       </table>
     </td></tr>
   </table>

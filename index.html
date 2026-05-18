@@ -1302,12 +1302,11 @@ function canvasToUploadDataURL(srcCanvas, maxDim = 640, quality = 0.82) {
   return c.toDataURL("image/jpeg", quality);
 }
 
-// Build a smaller-resolution data URL of the framed share canvas, suitable
-// for inlining in an email body. The full canvas is 1080×1920 which encodes
-// to ~600KB-1MB base64 — overkill for an email and slow to upload. 540×960
-// at JPEG 0.88 is ~150-220KB and the inline display in the email is capped
-// at 448px CSS wide anyway, so the visible quality is identical.
-function shareCanvasForEmail(maxDim = 540, quality = 0.88) {
+// Build a data URL of the framed share canvas, suitable for inlining in
+// an email body. Bigger than the typical email-thumb (900px long edge,
+// quality 0.88, ~300-400KB base64) so the card stays crisp on retina
+// phone displays — the previous 540px was rendering pixelated on iOS Mail.
+function shareCanvasForEmail(maxDim = 900, quality = 0.88) {
   const src = document.getElementById("shareCanvas");
   if (!src || !src.width || !src.height) return null;
   const scale = Math.min(1, maxDim / Math.max(src.width, src.height));
