@@ -194,9 +194,12 @@ async function handlePortrait(request, env, cors) {
 // Returns 200 OK immediately so the user can close the tab. The pipeline +
 // Resend send happen inside ctx.waitUntil(), so Cloudflare keeps the worker
 // alive until both finish (within the 30s wall-clock limit).
+//
+// Accepts either application/json (legacy) OR multipart/form-data (preferred,
+// no CORS preflight required) so mobile Safari uploads land reliably.
 async function handlePortraitEmail(request, env, ctx, cors) {
   try {
-    const body = (await request.json()) || {};
+    const body = await readMixedBody(request);
     const { image, archetype, archetypeName, email } = body;
     if (!image || !archetype || !email)  return jsonResp({ error: "missing_fields" }, 400, cors);
     if (!isValidEmail(email))            return jsonResp({ error: "invalid_email" }, 400, cors);
@@ -534,6 +537,33 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image }) {
 // ---------- helpers ----------
 function isValidEmail(s) {
   return typeof s === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+// Read JSON or multipart/form-data into a uniform { email, archetype,
+// archetypeName, image } object. multipart is the preferred form for the
+// /portrait-email upload because it skips the CORS preflight that some
+// mobile Safari builds were silently failing after.
+async function readMixedBody(request) {
+  const contentType = request.headers.get("content-type") || "";
+  if (contentType.includes("multipart/form-data")) {
+    const fd = await request.formData();
+    let image = null;
+    const imageField = fd.get("image");
+    if (imageField && typeof imageField !== "string") {
+      const buf = await imageField.arrayBuffer();
+      const mime = imageField.type || "image/jpeg";
+      image = `data:${mime};base64,${arrayBufferToBase64(buf)}`;
+    } else if (typeof imageField === "string") {
+      image = imageField;
+    }
+    return {
+      email:         fd.get("email") || null,
+      archetype:     fd.get("archetype") || null,
+      archetypeName: fd.get("archetypeName") || null,
+      image,
+    };
+  }
+  return (await request.json()) || {};
 }
 
 function arrayBufferToBase64(buffer) {
