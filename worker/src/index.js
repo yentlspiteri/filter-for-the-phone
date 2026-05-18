@@ -82,8 +82,10 @@ const FLATTERING =
   "hairline sits where it normally would on the subject's head. The " +
   "forehead is naturally proportioned — NOT exaggerated, NOT enlarged. " +
   "The subject looks their absolute best — clear healthy skin, bright " +
-  "well-rested eyes, sharp jawline, a subtle natural glow, confident and " +
-  "magnetic. Tasteful editorial retouching that softens dark circles and " +
+  "well-rested eyes, a subtle natural glow, confident and magnetic. " +
+  "Natural balanced facial proportions, soft jawline, gentle chin line — " +
+  "do NOT enlarge or exaggerate the chin. Tasteful editorial retouching " +
+  "that softens dark circles and " +
   "blemishes while KEEPING natural skin texture, fine pores, faint " +
   "imperfections, subtle fine lines and the real grain of the face — " +
   "not plastic, not over-smoothed. Slight three-quarter angle if at all, " +
@@ -269,6 +271,9 @@ async function runPortraitPipeline(env, image, archetype) {
           "low angle from below, high angle from above, tilted camera, " +
           "oversized forehead, exaggerated forehead, enlarged forehead, " +
           "tall forehead, exposed forehead, high hairline, receding hairline, " +
+          "big chin, oversized chin, prominent chin, exaggerated chin, " +
+          "jutting chin, lantern jaw, heavy jaw, masculine square jaw, " +
+          "wide jaw, bulky jawline, " +
           "tight ponytail, slicked-back hair, hair pulled back, wet hair, " +
           "wide-angle distortion, fisheye, head proportions wrong, " +
           "oily skin, blemishes, acne, red skin, wrinkled, aged, dull skin, " +
