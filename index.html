@@ -525,12 +525,23 @@
     max-width: 320px;
     letter-spacing: 0.02em;
   }
-  /* Skip-the-wait — drop email mid-loader, we send when done */
+  /* Skip-the-wait — drop email mid-loader, we send when done. Hidden for
+     the first 30s so most users just wait; revealed for the impatient. */
   .painting-skip {
     margin-top: 36px;
     width: 100%;
     max-width: 360px;
     text-align: center;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(6px);
+    transition: opacity 500ms ease, transform 500ms ease, visibility 0s linear 500ms;
+  }
+  .painting-skip.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    transition: opacity 500ms ease, transform 500ms ease, visibility 0s linear 0s;
   }
   .painting-skip-trigger {
     background: transparent;
@@ -927,6 +938,8 @@ let usingAIPortrait = false;  // true once an AI-painted portrait has replaced f
 let aiPortraitDataUrl = null; // the clean AI portrait as a data URL, for the email (LinkedIn-ready, no card framing)
 let portraitAbortController = null; // aborts the in-flight /portrait fetch when the user picks "skip the wait"
 let portraitSkipped = false;        // true once the user has handed off to /portrait-email
+let skipRevealTimer = null;         // delayed reveal of the skip-the-wait affordance
+const SKIP_REVEAL_DELAY_MS = 30000; // wait 30s before offering the email opt-out
 
 // Pre-load brand logo so the share canvas can render it
 const brandLogo = new Image();
@@ -1228,6 +1241,14 @@ async function paintPortrait() {
   } catch (_) { /* tainted canvas — leave the loader bg empty */ }
   paintingScreen.classList.add("show");
 
+  // Defer the "skip the wait" affordance — only the impatient need to see it.
+  const skipEl = document.querySelector(".painting-skip");
+  if (skipEl) skipEl.classList.remove("visible");
+  if (skipRevealTimer) clearTimeout(skipRevealTimer);
+  skipRevealTimer = setTimeout(() => {
+    if (skipEl) skipEl.classList.add("visible");
+  }, SKIP_REVEAL_DELAY_MS);
+
   if (!AI_PORTRAIT_ENDPOINT) return; // AI step intentionally skipped
 
   try {
@@ -1251,6 +1272,10 @@ async function paintPortrait() {
     }
     console.warn("AI portrait failed; falling back to the original frame.", err);
     // usingAIPortrait stays false — renderTarotCard will apply duotone.
+  } finally {
+    // Pipeline finished (success or fail) — no need to keep teasing the
+    // skip-the-wait option, they're about to see the result.
+    if (skipRevealTimer) { clearTimeout(skipRevealTimer); skipRevealTimer = null; }
   }
 }
 
@@ -1371,6 +1396,9 @@ function resetPaintingScreen() {
   paintingSkipSubmit.textContent = "Send when ready";
   paintingSkipState.textContent = "";
   paintingSkipState.className = "painting-skip-state";
+  const skipEl = document.querySelector(".painting-skip");
+  if (skipEl) skipEl.classList.remove("visible");
+  if (skipRevealTimer) { clearTimeout(skipRevealTimer); skipRevealTimer = null; }
 }
 
 function renderQuestion() {
