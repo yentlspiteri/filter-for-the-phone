@@ -96,24 +96,33 @@ const PROMPTS = {
     "contemporary professional attire — an open-collar shirt or fine " +
     "knit, no jacket needed. A warm relaxed open expression, a hint of " +
     "a natural half-smile, eyes engaging the camera with quiet warmth. " +
-    "Plain softly-lit studio backdrop, mid-grey tone. In the manner of " +
-    "an Annie Leibovitz B&W editorial portrait." + FLATTERING,
+    "Holds a single fresh rose loosely between the fingers near the " +
+    "chest, the rose slightly out of focus in the foreground — a small " +
+    "charming romantic touch, not theatrical. Plain softly-lit studio " +
+    "backdrop, mid-grey tone. In the manner of an Annie Leibovitz B&W " +
+    "editorial portrait." + FLATTERING,
   magician:
     "Black and white studio editorial headshot. Hard side-light from a " +
     "single key, deep velvety shadows on the other side of the face " +
     "while the lit side stays sharply detailed — high-contrast " +
     "chiaroscuro. The subject wears a sleek dark turtleneck or a " +
     "structured dark jacket. A knowing slight smirk, sharp intelligent " +
-    "eyes that read the viewer. Plain dark studio backdrop, near-black. " +
-    "In the manner of Platon's stark editorial portraits." + FLATTERING,
+    "eyes that read the viewer. Faint wisps of smoke or steam catch the " +
+    "side-light around the shoulders and just behind the face — magical " +
+    "atmosphere, subtle, suggestive, not theatrical. Plain dark studio " +
+    "backdrop, near-black. In the manner of Platon's stark editorial " +
+    "portraits." + FLATTERING,
   alchemist:
     "Black and white studio editorial headshot. Gentle even diffused " +
     "lighting from a large soft source, slight directional shaping. The " +
     "subject wears refined intellectual attire — a fine knit, a tweed " +
-    "jacket, or considered tailoring; optionally subtle glasses. A calm " +
-    "steady contemplative expression, a quiet inner authority at the " +
-    "corners of the eyes. Plain softly-lit studio backdrop, mid-to-dark " +
-    "grey. In the manner of a New Yorker profile B&W portrait." + FLATTERING,
+    "jacket, or considered tailoring. Wears a classic monocle fixed in " +
+    "one eye by a fine chain — a touch of old-world scholarship. A hint " +
+    "of leather-bound books or a vintage brass instrument just visible " +
+    "in the soft-focus background. A calm steady contemplative " +
+    "expression, a quiet inner authority at the corners of the eyes. " +
+    "Plain softly-lit studio backdrop, mid-to-dark grey. In the manner " +
+    "of a New Yorker profile B&W portrait." + FLATTERING,
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
