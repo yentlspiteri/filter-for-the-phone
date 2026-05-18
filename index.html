@@ -1467,6 +1467,14 @@ async function renderTarotCard() {
   ctx.fill();
   ctx.restore();
 
+  // Aged paper grain — random low-opacity wine-tinted speckle, clipped to
+  // the card shape. Reads as a Rider-Waite reprint texture.
+  ctx.save();
+  roundRect(ctx, cardX, cardY, cardW, cardH, cardR);
+  ctx.clip();
+  drawAgedPaperTexture(ctx, cardX, cardY, cardW, cardH);
+  ctx.restore();
+
   // Card border — brand wine #99112F
   ctx.strokeStyle = "#99112F";
   ctx.lineWidth = 8;
@@ -1479,20 +1487,21 @@ async function renderTarotCard() {
   roundRect(ctx, cardX + 24, cardY + 24, cardW - 48, cardH - 48, cardR - 18);
   ctx.stroke();
 
-  // Card corner ornaments (XIII top-left only, like the inspiration)
+  // Top row glyphs — celestial trio: sun, star, moon
+  // (Symbols fall back to system unicode font; that's fine, they're
+  //  meant to read as iconic shapes, not letterforms.)
   ctx.fillStyle = "#99112F";
-  ctx.font = "700 28px 'Aileron', sans-serif";
-  ctx.textAlign = "left";
+  ctx.font = "400 52px 'Apple Symbols', 'Segoe UI Symbol', 'Aileron', serif";
   ctx.textBaseline = "top";
-  ctx.fillText("XIII", cardX + 56, cardY + 54);
 
-  // Top center infinity
-  ctx.font = "700 48px 'Aileron', sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("☉", cardX + 56, cardY + 46);          // sun TL
+
   ctx.textAlign = "center";
-  ctx.fillText("∞", cardX + cardW / 2, cardY + 46);
+  ctx.fillText("✦", cardX + cardW / 2, cardY + 46);   // star TC
 
-  // Top right heart
-  drawHeart(ctx, cardX + cardW - 64, cardY + 72, 16, "#99112F");
+  ctx.textAlign = "right";
+  ctx.fillText("☾", cardX + cardW - 56, cardY + 46);  // moon TR
 
   // Ornate corner flourishes inside the inner border — small curls in
   // each of the four corners. Adds Rider-Waite-ish ornamental weight.
@@ -1670,6 +1679,41 @@ function drawFlowerDoodle(ctx, cx, cy, r, color) {
   ctx.restore();
 }
 
+// Aged-paper grain — generates random wine-tinted speckle in an offscreen
+// buffer, then composites it onto the card with multiply blend. The
+// outer clip path (the card shape) is the caller's responsibility.
+function drawAgedPaperTexture(ctx, x, y, w, h) {
+  const off = document.createElement("canvas");
+  off.width = w;
+  off.height = h;
+  const octx = off.getContext("2d");
+  const id = octx.createImageData(w, h);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = Math.random();
+    if (r < 0.10) {
+      // Dark wine-tinted speckle (most of the grain)
+      d[i]   = 120;
+      d[i+1] = 60;
+      d[i+2] = 50;
+      d[i+3] = 18 + Math.random() * 28;
+    } else if (r < 0.16) {
+      // Occasional warmer mid-tone speckle
+      d[i]   = 180;
+      d[i+1] = 130;
+      d[i+2] = 100;
+      d[i+3] = 14 + Math.random() * 22;
+    }
+  }
+  octx.putImageData(id, 0, 0);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  ctx.globalAlpha = 0.55;
+  ctx.drawImage(off, x, y);
+  ctx.restore();
+}
+
 // 16 thin rays fanning out from a point — the classic Rider-Waite
 // sunburst behind the figure. Drawn at low opacity so it reads as an
 // ambient mystical halo rather than a literal sun.
@@ -1709,21 +1753,31 @@ function drawStar(ctx, cx, cy, r, color) {
   ctx.restore();
 }
 
-// Small scattering of stars inside the inner border, in the margins
-// around the photo (not crowding it).
+// Constellation of stars inside the inner border, in the margins around
+// the photo. 14 positions at varied sizes — sprinkled densely enough to
+// read as celestial atmosphere without crowding the figure.
 function drawCardStars(ctx, cardX, cardY, cardW, cardH) {
   const positions = [
-    // Top margin (above the photo, beside the XIII/∞/♥ row)
-    { x: cardX + cardW * 0.18, y: cardY + 95, r: 6 },
-    { x: cardX + cardW * 0.82, y: cardY + 95, r: 6 },
-    // Mid-side margins
-    { x: cardX + 45, y: cardY + cardH * 0.40, r: 5 },
-    { x: cardX + cardW - 45, y: cardY + cardH * 0.40, r: 5 },
-    { x: cardX + 45, y: cardY + cardH * 0.62, r: 4 },
-    { x: cardX + cardW - 45, y: cardY + cardH * 0.62, r: 4 },
-    // Bottom margin (around archetype name handled separately)
-    { x: cardX + cardW * 0.22, y: cardY + cardH - 50, r: 5 },
-    { x: cardX + cardW * 0.78, y: cardY + cardH - 50, r: 5 },
+    // Top margin row (between the celestial trio glyphs)
+    { x: cardX + cardW * 0.20, y: cardY + 96, r: 6 },
+    { x: cardX + cardW * 0.36, y: cardY + 88, r: 4 },
+    { x: cardX + cardW * 0.64, y: cardY + 88, r: 4 },
+    { x: cardX + cardW * 0.80, y: cardY + 96, r: 6 },
+    // Upper side margins
+    { x: cardX + 44, y: cardY + cardH * 0.32, r: 5 },
+    { x: cardX + cardW - 44, y: cardY + cardH * 0.32, r: 5 },
+    // Mid side margins
+    { x: cardX + 42, y: cardY + cardH * 0.46, r: 4 },
+    { x: cardX + cardW - 42, y: cardY + cardH * 0.46, r: 4 },
+    // Lower side margins
+    { x: cardX + 44, y: cardY + cardH * 0.62, r: 5 },
+    { x: cardX + cardW - 44, y: cardY + cardH * 0.62, r: 5 },
+    // Bottom margin row (above the archetype name)
+    { x: cardX + cardW * 0.20, y: cardY + cardH - 168, r: 5 },
+    { x: cardX + cardW * 0.80, y: cardY + cardH - 168, r: 5 },
+    // Below the archetype name
+    { x: cardX + cardW * 0.30, y: cardY + cardH - 50, r: 4 },
+    { x: cardX + cardW * 0.70, y: cardY + cardH - 50, r: 4 },
   ];
   for (const p of positions) drawStar(ctx, p.x, p.y, p.r, "rgba(153,17,47,0.85)");
 }
