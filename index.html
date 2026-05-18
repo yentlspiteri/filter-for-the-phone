@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#1a0a0a" />
+<title>Von Peach — Filter for the Phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,500;1,600;1,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Von Peach palette */
+    --peach: #ff7a4a;
+    --peach-bright: #ff9466;
+    --peach-deep: #d44a2a;
+    --wine: #4a1414;
+    --bg-dark: #1a0a0a;
+    --bg-darker: #0a0404;
+    --cream: #f7ecdf;
+    --accent: #ff7a4a;
+    --left-glow: #ffb18a;
+    --right-glow: #ff5f3d;
+    --text: #ffffff;
+    --card-border: #6b1a14;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    height: 100%;
+    background: var(--bg-dark);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #cam {
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #stage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  /* Von Peach gradient wash that sits over the camera */
+  .vp-wash {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(60% 50% at 15% 10%, rgba(255,122,74,0.35) 0%, transparent 60%),
+      radial-gradient(70% 60% at 95% 100%, rgba(212,74,42,0.35) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(26,10,10,0.35) 0%, rgba(26,10,10,0.05) 30%, rgba(26,10,10,0.55) 100%);
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+  }
+  .overlay > * { pointer-events: auto; }
+
+  /* VON PEACH wordmark */
+  .wordmark {
+    font-style: italic;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    font-size: 14px;
+    text-transform: uppercase;
+    color: var(--cream);
+    text-shadow: 0 1px 6px rgba(0,0,0,0.6);
+  }
+
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.85);
+  }
+  .progress {
+    display: flex; gap: 6px;
+  }
+  .progress span {
+    width: 26px; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,0.22);
+  }
+  .progress span.on { background: var(--peach); }
+  .center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 16px;
+    text-align: center;
+  }
+  .question {
+    font-size: clamp(22px, 6vw, 34px);
+    font-weight: 600;
+    line-height: 1.2;
+    max-width: 720px;
+    letter-spacing: -0.01em;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.75);
+    padding: 16px 20px;
+    background: rgba(26,10,10,0.42);
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .choices {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    padding: 14px 14px 24px 14px;
+    gap: 12px;
+  }
+  .choice {
+    flex: 1;
+    position: relative;
+    padding: 16px 14px;
+    border-radius: 16px;
+    background: rgba(26,10,10,0.40);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(255,255,255,0.15);
+    overflow: hidden;
+    transition: border-color 120ms, transform 120ms;
+  }
+  .choice .arrow {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.85;
+    margin-bottom: 8px;
+    color: var(--peach-bright);
+  }
+  .choice .label {
+    font-size: 17px; font-weight: 600; line-height: 1.25;
+  }
+  .choice .fill {
+    position: absolute;
+    left: 0; bottom: 0; right: 0;
+    height: 0%;
+    background: linear-gradient(180deg, transparent 0%, rgba(255,122,74,0.45) 100%);
+    transition: height 80ms linear;
+    pointer-events: none;
+  }
+  .choice.active { border-color: var(--peach); transform: translateY(-2px); }
+  .tiltbar {
+    height: 4px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 2px;
+    margin: 0 18px 8px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .tiltbar .needle {
+    position: absolute;
+    top: -3px; bottom: -3px;
+    width: 10px;
+    margin-left: -5px;
+    left: 50%;
+    background: var(--peach);
+    border-radius: 5px;
+    transition: left 60ms linear;
+    box-shadow: 0 0 10px var(--peach);
+  }
+  .tiltbar .zone {
+    position: absolute; top: 0; bottom: 0;
+    width: 22%;
+    background: rgba(255,255,255,0.05);
+  }
+  .tiltbar .zone.l { left: 0; }
+  .tiltbar .zone.r { right: 0; }
+
+  /* screens */
+  .screen {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    text-align: center;
+    background:
+      radial-gradient(60% 50% at 15% 10%, rgba(255,122,74,0.45) 0%, transparent 60%),
+      radial-gradient(70% 60% at 95% 100%, rgba(212,74,42,0.45) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(10,4,4,0.85) 0%, rgba(26,10,10,0.92) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .screen.show { display: flex; }
+  .screen .eyebrow {
+    font-style: italic;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--peach);
+    margin-bottom: 16px;
+  }
+  .screen h1 {
+    font-size: clamp(32px, 9vw, 56px);
+    margin: 0 0 14px 0;
+    letter-spacing: -0.015em;
+    font-weight: 700;
+    line-height: 1.05;
+  }
+  .screen p {
+    font-size: 16px;
+    max-width: 520px;
+    line-height: 1.55;
+    color: rgba(247,236,223,0.85);
+    margin: 0 0 24px 0;
+  }
+  .btn {
+    appearance: none;
+    border: 0;
+    background: linear-gradient(135deg, var(--peach) 0%, var(--peach-deep) 100%);
+    color: white;
+    font-weight: 700;
+    font-size: 16px;
+    padding: 15px 26px;
+    border-radius: 999px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    box-shadow: 0 10px 30px rgba(255,122,74,0.35);
+    font-family: inherit;
+  }
+  .btn.ghost {
+    background: transparent;
+    color: var(--cream);
+    border: 1.5px solid rgba(247,236,223,0.4);
+    box-shadow: none;
+  }
+  .btnrow { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .hint {
+    font-size: 13px;
+    color: rgba(247,236,223,0.6);
+    margin-top: 10px;
+    max-width: 360px;
+  }
+  .footer-mark {
+    position: absolute;
+    bottom: 18px;
+    left: 0; right: 0;
+    text-align: center;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(247,236,223,0.5);
+  }
+  .err {
+    background: rgba(255,70,70,0.18);
+    border: 1px solid rgba(255,70,70,0.5);
+    border-radius: 12px;
+    padding: 12px 14px;
+    max-width: 480px;
+    font-size: 14px;
+    color: var(--cream);
+  }
+
+  /* Result screen: tarot card preview */
+  #screenResult { padding: 16px; }
+  #resultPreviewWrap {
+    width: 100%;
+    max-width: 380px;
+    aspect-ratio: 9 / 16;
+    border-radius: 22px;
+    overflow: hidden;
+    margin: 8px 0 18px 0;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+  }
+  #resultPreview {
+    width: 100%; height: 100%;
+    display: block;
+  }
+  #shareCanvas { display: none; }
+
+  .topbar-vp {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="cam" playsinline autoplay muted></video>
+  <canvas id="stage"></canvas>
+  <div class="vp-wash" id="wash" style="display:none;"></div>
+
+  <!-- intro -->
+  <div class="screen show" id="screenIntro">
+    <div class="eyebrow">Von Peach · Filter for the Phone</div>
+    <h1>Which one are you?</h1>
+    <p>Three questions. Tilt your head <b>left</b> or <b>right</b> to answer. We'll reveal your card: <i>The Charmer</i>, <i>The Magician</i>, or <i>The Alchemist</i>.</p>
+    <div class="btnrow">
+      <button class="btn" id="startBtn">Start camera</button>
+      <div class="hint">Camera stays on your device. Nothing is uploaded.</div>
+    </div>
+    <div id="introErr" style="margin-top:14px; display:none;" class="err"></div>
+    <div class="footer-mark">Von Peach</div>
+  </div>
+
+  <!-- gameplay overlay -->
+  <div class="overlay" id="play" style="display:none;">
+    <div class="topbar">
+      <div class="wordmark">Von Peach</div>
+      <div class="progress" id="progress">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+    <div class="center">
+      <div class="question" id="qText">Loading…</div>
+    </div>
+    <div class="tiltbar">
+      <div class="zone l"></div>
+      <div class="zone r"></div>
+      <div class="needle" id="needle"></div>
+    </div>
+    <div class="choices">
+      <div class="choice left" id="choiceLeft">
+        <div class="arrow">◀ tilt left</div>
+        <div class="label" id="leftLabel">—</div>
+        <div class="fill" id="leftFill"></div>
+      </div>
+      <div class="choice right" id="choiceRight">
+        <div class="arrow">tilt right ▶</div>
+        <div class="label" id="rightLabel">—</div>
+        <div class="fill" id="rightFill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- result -->
+  <div class="screen" id="screenResult">
+    <div class="eyebrow">Your card</div>
+    <div id="resultPreviewWrap">
+      <img id="resultPreview" alt="Your archetype card" />
+    </div>
+    <div class="btnrow">
+      <button class="btn" id="shareBtn">Share to Instagram</button>
+      <button class="btn ghost" id="downloadBtn">Save image</button>
+      <button class="btn ghost" id="againBtn">Try again</button>
+      <div class="hint" id="shareHint"></div>
+    </div>
+    <div class="footer-mark">Von Peach · vonpeach.com</div>
+  </div>
+</div>
+
+<!-- offscreen render target for the share image -->
+<canvas id="shareCanvas" width="1080" height="1920"></canvas>
+
+<script type="module">
+import { FaceLandmarker, FilesetResolver }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+// ---------- CONTENT (swap copy here) ----------
+const ARCHETYPES = {
+  charmer: {
+    name: "The Charmer",
+    blurb: "You move through rooms like warm light. People say yes before they know why.",
+    // duotone shadow + highlight (deep wine → warm peach)
+    duotone: { dark: [60, 14, 14],  light: [255, 198, 156] },
+    accents: ["#e5a45c", "#c64a3b", "#f0bfa2"]
+  },
+  magician: {
+    name: "The Magician",
+    blurb: "You bend the obvious. Where others see a wall, you see a curtain.",
+    duotone: { dark: [40, 8, 20],   light: [255, 158, 120] },
+    accents: ["#d68044", "#8a2e2e", "#f7d6b8"]
+  },
+  alchemist: {
+    name: "The Alchemist",
+    blurb: "You take the raw and the broken and turn it to gold. Slow fire, true gold.",
+    duotone: { dark: [50, 18, 8],   light: [255, 214, 154] },
+    accents: ["#c8852d", "#a23b1f", "#ead7b3"]
+  }
+};
+
+const QUESTIONS = [
+  {
+    q: "At a party, you would rather…",
+    left:  { label: "Charm the host",         score: { charmer: 2, magician: 0, alchemist: 0 } },
+    right: { label: "Dazzle the whole room",  score: { charmer: 0, magician: 2, alchemist: 0 } }
+  },
+  {
+    q: "When you make something, you…",
+    left:  { label: "Polish until it sings",  score: { charmer: 0, magician: 0, alchemist: 2 } },
+    right: { label: "Surprise even yourself", score: { charmer: 0, magician: 2, alchemist: 0 } }
+  },
+  {
+    q: "Your real superpower is…",
+    left:  { label: "Reading people",         score: { charmer: 2, magician: 0, alchemist: 1 } },
+    right: { label: "Turning lead to gold",   score: { charmer: 0, magician: 1, alchemist: 2 } }
+  }
+];
+
+const TILT_THRESHOLD_DEG = 10;
+const HOLD_MS = 700;
+const COOLDOWN_MS = 900;
+
+// ---------- STATE ----------
+let faceLandmarker = null;
+let video, stage, stageCtx, stream;
+let qIndex = 0;
+let scores = { charmer: 0, magician: 0, alchemist: 0 };
+let activeSide = null;
+let sideEnteredAt = 0;
+let lastCommitAt = 0;
+let acceptingInput = false;
+let rafId = null;
+let frozenFrame = null;       // canvas snapshot of camera at moment of result
+let frozenArchetype = null;   // key into ARCHETYPES
+
+// ---------- DOM ----------
+const $ = id => document.getElementById(id);
+const startBtn = $("startBtn");
+const introScreen = $("screenIntro");
+const playOverlay = $("play");
+const resultScreen = $("screenResult");
+const qText = $("qText");
+const progressDots = $("progress").children;
+const leftLabel = $("leftLabel"), rightLabel = $("rightLabel");
+const leftFill = $("leftFill"), rightFill = $("rightFill");
+const choiceLeft = $("choiceLeft"), choiceRight = $("choiceRight");
+const needle = $("needle");
+const introErr = $("introErr");
+const shareBtn = $("shareBtn"), downloadBtn = $("downloadBtn"), againBtn = $("againBtn");
+const shareHint = $("shareHint");
+const resultPreview = $("resultPreview");
+const wash = $("wash");
+
+startBtn.addEventListener("click", begin);
+againBtn.addEventListener("click", reset);
+shareBtn.addEventListener("click", () => shareSnapshot(false));
+downloadBtn.addEventListener("click", () => shareSnapshot(true));
+
+// ---------- START ----------
+async function begin() {
+  introErr.style.display = "none";
+  startBtn.disabled = true;
+  startBtn.textContent = "Loading…";
+  try {
+    video = $("cam");
+    stage = $("stage");
+    stageCtx = stage.getContext("2d");
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    sizeStage();
+    window.addEventListener("resize", sizeStage);
+
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1,
+      outputFaceBlendshapes: false,
+      outputFacialTransformationMatrixes: false
+    });
+
+    introScreen.classList.remove("show");
+    playOverlay.style.display = "flex";
+    wash.style.display = "block";
+    qIndex = 0;
+    scores = { charmer: 0, magician: 0, alchemist: 0 };
+    renderQuestion();
+    acceptingInput = true;
+    loop();
+  } catch (e) {
+    console.error(e);
+    introErr.textContent = "Couldn't start the camera: " + (e?.message || e) +
+      ".  On phones, you'll need to open this via HTTPS.";
+    introErr.style.display = "block";
+    startBtn.disabled = false;
+    startBtn.textContent = "Try again";
+  }
+}
+
+function sizeStage() {
+  if (!stage) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  const dpr = window.devicePixelRatio || 1;
+  stage.style.width = w + "px";
+  stage.style.height = h + "px";
+  stage.width = Math.round(w * dpr);
+  stage.height = Math.round(h * dpr);
+}
+
+// ---------- LOOP ----------
+function loop() {
+  rafId = requestAnimationFrame(loop);
+  drawVideo();
+  if (!faceLandmarker || !video || video.readyState < 2) return;
+  const res = faceLandmarker.detectForVideo(video, performance.now());
+  if (res?.faceLandmarks?.length > 0) {
+    const lm = res.faceLandmarks[0];
+    const a = lm[33], b = lm[263];
+    let roll = Math.atan2(b.y - a.y, b.x - a.x) * (180 / Math.PI);
+    roll = -roll;
+    updateTiltUI(roll);
+    handleTilt(roll);
+  } else {
+    updateTiltUI(0);
+    setActiveSide(null);
+  }
+}
+
+function drawVideo() {
+  if (!video || !stage || !stageCtx || video.readyState < 2) return;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+  const cw = stage.width, ch = stage.height;
+  const scale = Math.max(cw / vw, ch / vh);
+  const drawW = vw * scale, drawH = vh * scale;
+  const dx = (cw - drawW) / 2, dy = (ch - drawH) / 2;
+  stageCtx.save();
+  stageCtx.translate(cw, 0);
+  stageCtx.scale(-1, 1);
+  stageCtx.drawImage(video, cw - dx - drawW, dy, drawW, drawH);
+  stageCtx.restore();
+}
+
+// ---------- TILT ----------
+function updateTiltUI(rollDeg) {
+  const clamped = Math.max(-25, Math.min(25, rollDeg));
+  const pct = ((clamped + 25) / 50) * 100;
+  needle.style.left = pct + "%";
+}
+
+function handleTilt(rollDeg) {
+  if (!acceptingInput) return;
+  const now = performance.now();
+  if (now - lastCommitAt < COOLDOWN_MS) return;
+
+  let side = null;
+  if (rollDeg <= -TILT_THRESHOLD_DEG) side = "left";
+  else if (rollDeg >= TILT_THRESHOLD_DEG) side = "right";
+
+  if (side !== activeSide) {
+    setActiveSide(side);
+    sideEnteredAt = side ? now : 0;
+    if (side === "left")  leftFill.style.height  = "0%";
+    if (side === "right") rightFill.style.height = "0%";
+    return;
+  }
+
+  if (side) {
+    const held = now - sideEnteredAt;
+    const pct = Math.min(100, (held / HOLD_MS) * 100);
+    if (side === "left")  leftFill.style.height  = pct + "%";
+    if (side === "right") rightFill.style.height = pct + "%";
+    if (held >= HOLD_MS) commit(side);
+  }
+}
+
+function setActiveSide(side) {
+  activeSide = side;
+  choiceLeft.classList.toggle("active", side === "left");
+  choiceRight.classList.toggle("active", side === "right");
+  if (side !== "left")  leftFill.style.height  = "0%";
+  if (side !== "right") rightFill.style.height = "0%";
+}
+
+function commit(side) {
+  if (!acceptingInput) return;
+  acceptingInput = false;
+  lastCommitAt = performance.now();
+  const q = QUESTIONS[qIndex];
+  const pick = side === "left" ? q.left : q.right;
+  for (const k of Object.keys(pick.score)) scores[k] += pick.score[k];
+
+  setActiveSide(null);
+  leftFill.style.height = "0%";
+  rightFill.style.height = "0%";
+
+  qIndex++;
+  if (qIndex >= QUESTIONS.length) {
+    finish();
+  } else {
+    renderQuestion();
+    setTimeout(() => { acceptingInput = true; }, 400);
+  }
+}
+
+function renderQuestion() {
+  const q = QUESTIONS[qIndex];
+  qText.textContent = q.q;
+  leftLabel.textContent = q.left.label;
+  rightLabel.textContent = q.right.label;
+  for (let i = 0; i < progressDots.length; i++) {
+    progressDots[i].classList.toggle("on", i <= qIndex);
+  }
+}
+
+// ---------- FINISH ----------
+async function finish() {
+  acceptingInput = false;
+  const order = ["charmer", "magician", "alchemist"];
+  let bestKey = order[0], bestScore = -1;
+  for (const k of order) if (scores[k] > bestScore) { bestScore = scores[k]; bestKey = k; }
+  frozenArchetype = bestKey;
+
+  // Capture the current video frame at full resolution (un-mirrored canvas)
+  frozenFrame = document.createElement("canvas");
+  const vw = video.videoWidth, vh = video.videoHeight;
+  frozenFrame.width = vw; frozenFrame.height = vh;
+  const fctx = frozenFrame.getContext("2d");
+  // Mirror so it matches what they see on screen
+  fctx.translate(vw, 0);
+  fctx.scale(-1, 1);
+  fctx.drawImage(video, 0, 0, vw, vh);
+
+  // Build the tarot card composition into shareCanvas + preview
+  await renderTarotCard();
+
+  playOverlay.style.display = "none";
+  wash.style.display = "none";
+  resultScreen.classList.add("show");
+}
+
+function reset() {
+  resultScreen.classList.remove("show");
+  shareHint.textContent = "";
+  qIndex = 0;
+  scores = { charmer: 0, magician: 0, alchemist: 0 };
+  if (faceLandmarker && stream) {
+    playOverlay.style.display = "flex";
+    wash.style.display = "block";
+    renderQuestion();
+    acceptingInput = true;
+  } else {
+    introScreen.classList.add("show");
+  }
+}
+
+// ---------- TAROT CARD RENDER ----------
+async function renderTarotCard() {
+  const c = $("shareCanvas");
+  const ctx = c.getContext("2d");
+  const W = c.width, H = c.height; // 1080 x 1920
+
+  const arche = ARCHETYPES[frozenArchetype];
+
+  // ----- Background: Von Peach moody peach gradient -----
+  // Base
+  ctx.fillStyle = "#1a0a0a";
+  ctx.fillRect(0, 0, W, H);
+  // Big radial peach gradient top-left
+  let g = ctx.createRadialGradient(W*0.2, H*0.15, 0, W*0.2, H*0.15, W*1.1);
+  g.addColorStop(0, "rgba(255,140,90,0.85)");
+  g.addColorStop(0.4, "rgba(180,60,40,0.55)");
+  g.addColorStop(1, "rgba(20,5,5,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+  // Deeper wine glow bottom-right
+  g = ctx.createRadialGradient(W*0.85, H*0.95, 0, W*0.85, H*0.95, W*0.9);
+  g.addColorStop(0, "rgba(120,30,30,0.9)");
+  g.addColorStop(1, "rgba(20,5,5,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+  // Soft vignette
+  g = ctx.createRadialGradient(W/2, H/2, W*0.3, W/2, H/2, W*0.9);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H);
+
+  // ----- Decorative organic shapes behind card -----
+  drawDecor(ctx, W, H, arche.accents);
+
+  // ----- Card geometry -----
+  const cardW = W * 0.78;
+  const cardH = H * 0.74;
+  const cardX = (W - cardW) / 2;
+  const cardY = (H - cardH) / 2 - 30;
+  const cardR = 36;
+
+  // Card shadow
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 60;
+  ctx.shadowOffsetY = 30;
+  ctx.fillStyle = "#f7ecdf";
+  roundRect(ctx, cardX, cardY, cardW, cardH, cardR);
+  ctx.fill();
+  ctx.restore();
+
+  // Card border (Von Peach deep peach)
+  ctx.strokeStyle = "#6b1a14";
+  ctx.lineWidth = 8;
+  roundRect(ctx, cardX + 14, cardY + 14, cardW - 28, cardH - 28, cardR - 10);
+  ctx.stroke();
+
+  // Inner thin line
+  ctx.strokeStyle = "rgba(107,26,20,0.35)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, cardX + 24, cardY + 24, cardW - 48, cardH - 48, cardR - 18);
+  ctx.stroke();
+
+  // Card corner ornaments (XIII top-left only, like the inspiration)
+  ctx.fillStyle = "#6b1a14";
+  ctx.font = "italic 700 28px 'Playfair Display', Georgia, serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("XIII", cardX + 56, cardY + 54);
+
+  // Top center infinity
+  ctx.font = "700 48px 'Playfair Display', Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.fillText("∞", cardX + cardW / 2, cardY + 46);
+
+  // Top right heart
+  drawHeart(ctx, cardX + cardW - 64, cardY + 72, 16, "#6b1a14");
+
+  // ----- Photo window inside card -----
+  const photoMargin = 60;
+  const photoX = cardX + photoMargin;
+  const photoY = cardY + 130;
+  const photoW = cardW - photoMargin * 2;
+  const photoH = cardH - photoMargin - 130 - 180; // leave room for name band
+
+  // Clip photo to rounded rect
+  ctx.save();
+  roundRect(ctx, photoX, photoY, photoW, photoH, 16);
+  ctx.clip();
+
+  // Draw frozen frame (cover fit) then apply duotone
+  if (frozenFrame) {
+    const vw = frozenFrame.width, vh = frozenFrame.height;
+    const s = Math.max(photoW / vw, photoH / vh);
+    const dW = vw * s, dH = vh * s;
+    const dx = photoX + (photoW - dW) / 2;
+    const dy = photoY + (photoH - dH) / 2;
+    ctx.drawImage(frozenFrame, dx, dy, dW, dH);
+
+    // Duotone treatment of just the photo area
+    const id = ctx.getImageData(photoX, photoY, photoW, photoH);
+    const data = id.data;
+    const [dr, dg, db] = arche.duotone.dark;
+    const [lr, lg, lb] = arche.duotone.light;
+    for (let i = 0; i < data.length; i += 4) {
+      const lum = (0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2]) / 255;
+      data[i]   = dr + (lr - dr) * lum;
+      data[i+1] = dg + (lg - dg) * lum;
+      data[i+2] = db + (lb - db) * lum;
+    }
+    ctx.putImageData(id, photoX, photoY);
+  } else {
+    ctx.fillStyle = "#3a1414";
+    ctx.fillRect(photoX, photoY, photoW, photoH);
+  }
+  ctx.restore();
+
+  // Subtle gold flourish behind photo bottom (peeking past photo edge)
+  drawLeaf(ctx, cardX + cardW * 0.18, photoY + photoH - 30, 110, 70, arche.accents[0], -0.35);
+  drawLeaf(ctx, cardX + cardW * 0.82, photoY + photoH - 50, 130, 80, arche.accents[1],  0.45);
+
+  // ----- Archetype name band -----
+  const nameY = cardY + cardH - 110;
+  ctx.fillStyle = "#6b1a14";
+  ctx.font = "italic 700 84px 'Playfair Display', Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(arche.name, cardX + cardW / 2, nameY);
+
+  // Tiny tagline under the card, in cream
+  ctx.fillStyle = "rgba(247,236,223,0.9)";
+  ctx.font = "italic 500 32px 'Playfair Display', Georgia, serif";
+  ctx.textAlign = "center";
+  wrapText(ctx, arche.blurb, W / 2, cardY + cardH + 70, W - 200, 42);
+
+  // ----- Von Peach wordmark + URL -----
+  ctx.fillStyle = "rgba(247,236,223,0.85)";
+  ctx.font = "italic 800 30px 'Inter', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("VON PEACH", W / 2, H - 90);
+  ctx.font = "500 22px 'Inter', sans-serif";
+  ctx.fillStyle = "rgba(247,236,223,0.55)";
+  ctx.fillText("filter for the phone", W / 2, H - 55);
+
+  // Push into preview <img>
+  const dataUrl = c.toDataURL("image/jpeg", 0.92);
+  resultPreview.src = dataUrl;
+}
+
+// ---------- DECOR HELPERS ----------
+function drawDecor(ctx, W, H, accents) {
+  // Scatter a few stylized leaf shapes around the card area
+  const presets = [
+    { x: W*0.10, y: H*0.18, w: 220, h: 140, c: accents[0], rot: -0.6 },
+    { x: W*0.90, y: H*0.22, w: 260, h: 160, c: accents[2], rot:  0.5 },
+    { x: W*0.08, y: H*0.78, w: 240, h: 150, c: accents[1], rot:  0.7 },
+    { x: W*0.92, y: H*0.82, w: 220, h: 140, c: accents[0], rot: -0.7 },
+    { x: W*0.50, y: H*0.08, w: 180, h: 110, c: accents[2], rot:  0.0 },
+  ];
+  for (const p of presets) drawLeaf(ctx, p.x, p.y, p.w, p.h, p.c, p.rot, 0.7);
+
+  // Hand-drawn squiggle/scribble in deep peach
+  ctx.save();
+  ctx.strokeStyle = "rgba(212,74,42,0.55)";
+  ctx.lineWidth = 16;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  let sx = W*0.18, sy = H*0.93;
+  ctx.moveTo(sx, sy);
+  for (let i = 1; i <= 6; i++) {
+    sx += 30 + Math.random()*8;
+    sy += (i % 2 === 0 ? -28 : 28);
+    ctx.lineTo(sx, sy);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // Bottom-left floral doodle in peach
+  drawFlowerDoodle(ctx, W*0.16, H*0.96, 70, "rgba(255,140,90,0.85)");
+}
+
+function drawLeaf(ctx, cx, cy, w, h, color, rot=0, alpha=1) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  // Almond leaf: two bezier curves meeting at tips
+  ctx.moveTo(-w/2, 0);
+  ctx.bezierCurveTo(-w/4, -h/2, w/4, -h/2, w/2, 0);
+  ctx.bezierCurveTo(w/4, h/2, -w/4, h/2, -w/2, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFlowerDoodle(ctx, cx, cy, r, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.ellipse(cx + Math.cos(a)*r*0.5, cy + Math.sin(a)*r*0.5, r*0.5, r*0.25, a, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, r*0.18, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHeart(ctx, cx, cy, size, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + size * 0.3);
+  ctx.bezierCurveTo(cx, cy, cx - size, cy, cx - size, cy - size * 0.4);
+  ctx.bezierCurveTo(cx - size, cy - size * 0.9, cx, cy - size * 0.9, cx, cy - size * 0.4);
+  ctx.bezierCurveTo(cx, cy - size * 0.9, cx + size, cy - size * 0.9, cx + size, cy - size * 0.4);
+  ctx.bezierCurveTo(cx + size, cy, cx, cy, cx, cy + size * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = (text || "").split(/\s+/);
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line); line = w;
+    } else { line = test; }
+  }
+  if (line) lines.push(line);
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], x, y + i * lineHeight);
+}
+
+// ---------- SHARE ----------
+async function shareSnapshot(forceDownload) {
+  shareHint.textContent = "";
+  const c = $("shareCanvas");
+  const blob = await new Promise(res => c.toBlob(b => res(b), "image/jpeg", 0.92));
+  const fileName = "von-peach-card.jpg";
+  const file = new File([blob], fileName, { type: "image/jpeg" });
+
+  if (!forceDownload && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: "Von Peach — your card",
+        text: "I'm " + ARCHETYPES[frozenArchetype].name + ". Find yours."
+      });
+      shareHint.textContent = "Pick Instagram in the share sheet → Stories or DM.";
+      return;
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  shareHint.textContent = "Image saved. Open Instagram → Story → pick this image.";
+}
+
+window.addEventListener("pagehide", () => {
+  if (rafId) cancelAnimationFrame(rafId);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+});
+
+// Warm the serif font so the canvas renders with it
+document.fonts && document.fonts.load("italic 700 84px 'Playfair Display'");
+</script>
+</body>
+</html>
