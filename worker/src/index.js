@@ -26,24 +26,39 @@
 const FAL_URL = "https://fal.run/fal-ai/flux-pro/kontext";
 const RESEND_URL = "https://api.resend.com/emails";
 
+// Each archetype is a distinct character with its own setting, lighting,
+// wardrobe, expression and Old Master reference — the differences are large
+// enough that a viewer can tell them apart at a glance.
 const PROMPTS = {
   charmer:
-    "Regal Baroque oil-painting portrait, head and shoulders, warm golden chamber light, " +
-    "ornate gilded collar, embroidered velvet robes in deep wine red, soft confident smile, " +
-    "painterly brushstrokes, museum-quality, preserve the exact face, hair and likeness from " +
-    "the input image, centered formal composition, no text, no logos, no watermark",
+    "Transform this person into a charismatic Baroque courtier in an oil-painted royal " +
+    "portrait. Head-and-shoulders composition. A soft warm welcoming smile, relaxed " +
+    "confident eyes. Ornate gilded lace collar with pearl trim, embroidered velvet robes " +
+    "in deep wine red with shimmering gold thread, an elegant pearl earring. Honey-amber " +
+    "golden-hour chamber light, soft warm bokeh of a candlelit gilded hall behind. " +
+    "Painterly brushstrokes, in the tradition of Velázquez and Boucher. Museum quality. " +
+    "Preserve the exact face, hair and likeness of the person in the input image. " +
+    "No text, no logos, no watermark.",
   magician:
-    "Dark Baroque oil-painting portrait, head and shoulders, dramatic chiaroscuro lighting, " +
-    "deep shadows, intricate brocade collar with silver thread, jewel-toned cape, sharp " +
-    "intelligent gaze with a slight knowing smile, painterly brushstrokes, museum-quality, " +
-    "preserve the exact face, hair and likeness from the input image, centered formal " +
-    "composition, no text, no logos, no watermark",
+    "Transform this person into a theatrical Baroque illusionist in a dramatic oil-painted " +
+    "royal portrait. Head-and-shoulders composition. A knowing slight smirk, sharp " +
+    "piercing intelligent eyes that seem to see through the viewer. Heavy black velvet " +
+    "cape with intricate silver-thread brocade and an ornate ruff collar, a single deep " +
+    "jewel pendant at the throat. Strong chiaroscuro lighting with one warm key light " +
+    "from the side, the rest in deep velvet shadow, faint trails of candle smoke and the " +
+    "ghosts of arcane symbols in the dark background. In the tradition of Caravaggio and " +
+    "Rembrandt. Museum quality. Preserve the exact face, hair and likeness of the person " +
+    "in the input image. No text, no logos, no watermark.",
   alchemist:
-    "Renaissance alchemist oil-painting portrait, head and shoulders, candlelit warm tones, " +
-    "scholar's robes in deep red and burnished gold, faint glints of copper and brass " +
-    "instruments behind, contemplative wise expression, painterly brushstrokes, museum-quality, " +
-    "preserve the exact face, hair and likeness from the input image, centered formal " +
-    "composition, no text, no logos, no watermark",
+    "Transform this person into a wise Renaissance alchemist-scholar in an oil-painted " +
+    "study portrait. Head-and-shoulders composition. A contemplative steady expression, " +
+    "deep thoughtful eyes, a quiet inner authority. Heavy scholar's robes in burnished " +
+    "gold and deep crimson with a fur-trimmed collar, an alchemical pendant on a chain. " +
+    "Candlelit warm amber lighting, the background a softly defocused laboratory — copper " +
+    "distillation apparatus, brass instruments, stacks of old leather-bound books, a glass " +
+    "alembic catching the firelight. In the tradition of Joseph Wright of Derby and " +
+    "Vermeer's Astronomer. Museum quality. Preserve the exact face, hair and likeness of " +
+    "the person in the input image. No text, no logos, no watermark.",
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
