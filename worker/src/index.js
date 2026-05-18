@@ -23,7 +23,8 @@
 // Vars (set in wrangler.toml or via dashboard):
 //   FROM_EMAIL   — verified Resend sender, e.g. "Von Peach <hello@vonpeach.com>"
 
-// Three-stage portrait pipeline — the Higgsfield/Aragon approach:
+// Four-stage portrait pipeline — the Higgsfield/Aragon approach plus a
+// realism finisher:
 //
 //   1) flux-pulid generates the editorial scene with identity anchored
 //      from the user's face (text-prompted, identity-locked).
@@ -36,16 +37,22 @@
 //        docs: https://fal.ai/models/fal-ai/easel-ai/advanced-face-swap
 //
 //   3) CodeFormer polishes the face-swapped result — restores skin
-//      detail, lifts the eyes, magazine-grade finish. Operates on the
-//      *swapped* face so the polish applies to the right identity.
+//      detail, lifts the eyes. Light fidelity (0.85) so natural skin
+//      texture survives.
 //        docs: https://fal.ai/models/fal-ai/codeformer
 //
-// Stages 2 and 3 are best-effort: if either errors, we fall through
-// with the most recent successful image so the user always sees a
-// portrait.
+//   4) Clarity Upscaler layers photographic detail throughout — film
+//      grain, sharper micro-texture, natural shadow gradients. This is
+//      what kills the "AI generated" look. Low creativity + high
+//      resemblance so the face/structure is preserved.
+//        docs: https://fal.ai/models/fal-ai/clarity-upscaler
+//
+// Stages 2–4 are best-effort: if any errors, we fall through with the
+// most recent successful image so the user always sees a portrait.
 const FAL_URL       = "https://fal.run/fal-ai/flux-pulid";
 const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/advanced-face-swap";
 const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
+const REALISM_URL   = "https://fal.run/fal-ai/clarity-upscaler";
 const RESEND_URL = "https://api.resend.com/emails";
 
 // Universal flattering + realism layer — appended to every archetype
@@ -253,7 +260,7 @@ async function handlePortrait(request, env, cors) {
         body: JSON.stringify({
           image_url: workingUrl,
           fidelity: 0.85,          // 0..1 — higher = stays closer to swapped face / more natural texture; lower = more over-polished
-          upscaling: 2,            // 1x or 2x; 2x adds detail without much cost
+          upscaling: 1,            // leave the upscale to step 4 so we don't compound
           face_upsample: true,
           background_enhance: false,
         }),
@@ -270,6 +277,47 @@ async function handlePortrait(request, env, cors) {
       }
     } catch (polishErr) {
       console.warn("CodeFormer polish threw:", polishErr?.message);
+    }
+
+    // Step 4: Clarity Upscaler realism pass (best-effort). Low creativity
+    // so the face/structure doesn't shift; high resemblance so the
+    // upscaler treats the input as authoritative. Result: photographic
+    // texture and grain layered onto an otherwise AI-flat image.
+    try {
+      const realismRes = await fetch(REALISM_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Key ${env.FAL_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image_url: workingUrl,
+          prompt:
+            "Candid DSLR photograph, real-camera photographic detail, " +
+            "natural skin texture with subtle fine pores, fine film grain, " +
+            "shot on 85mm prime lens, photorealistic, editorial portrait",
+          negative_prompt:
+            "AI generated, plastic skin, over-smoothed, fake, synthetic, " +
+            "CGI, render, doll-like, uncanny, airbrushed, glossy",
+          creativity:  0.3,        // low — don't reinvent, just add detail
+          resemblance: 0.7,        // high — preserve the input structure
+          upscale_factor: 2,       // 2x — sharper micro-detail, manageable size
+          num_inference_steps: 18,
+          guidance_scale: 4,
+        }),
+      });
+      if (realismRes.ok) {
+        const realismData = await realismRes.json();
+        const realismOut =
+          realismData?.image?.url ||
+          realismData?.images?.[0]?.url ||
+          realismData?.output_url;
+        if (realismOut) workingUrl = realismOut;
+      } else {
+        console.warn("Clarity realism pass failed:", realismRes.status, await realismRes.text());
+      }
+    } catch (realismErr) {
+      console.warn("Clarity realism pass threw:", realismErr?.message);
     }
 
     // Proxy the final image as inline base64 — avoids cross-origin canvas
