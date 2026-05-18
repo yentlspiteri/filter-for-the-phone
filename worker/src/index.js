@@ -55,66 +55,65 @@ const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
 const REALISM_URL   = "https://fal.run/fal-ai/clarity-upscaler";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// Universal flattering + realism layer — appended to every archetype
-// prompt. The brief is "obviously the same person, on their best day,
-// shot by an actual photographer". Identity from PuLID, hair preserved
-// via prompt, and most importantly a real-DSLR photographic feel rather
-// than the flat plastic look of generic AI image output.
+// Universal studio-B&W headshot layer — appended to every archetype
+// prompt. Locked aesthetic across all three archetypes (consistency
+// hides face-swap colour-tone shifts) and shifts the differentiation
+// to expression, lighting hardness, and wardrobe. Crop + framing
+// instructions are explicit to prevent the forehead-heavy
+// disproportion we've seen ("hair frames the face, mid-chest crop,
+// eye-level camera, hairline natural").
 const FLATTERING =
-  " The subject's hair is preserved exactly as in the reference image — " +
-  "same hairstyle, same length, same colour, same texture, same parting, " +
-  "same volume. Do NOT restyle, recolour, lengthen, shorten, smooth, " +
-  "curl or straighten the hair. " +
+  " Black and white studio portrait photograph, fine-art monochrome — " +
+  "no colour, rich tonal range, deep blacks, luminous mid-tones. " +
+  "Professional editorial HEADSHOT crop: framed from mid-chest to just " +
+  "above the top of the head, the eyes positioned on the upper third of " +
+  "the frame, the face fills the central area generously. Camera at " +
+  "eye-level — NOT from above, NOT from below, NOT tilted. " +
+  "The subject's hair is preserved exactly as in the reference image — " +
+  "same hairstyle, same length, same texture, same parting, same volume. " +
+  "Hair frames the face naturally, falling around the temples; the " +
+  "hairline sits where it normally would on the subject's head. The " +
+  "forehead is naturally proportioned — NOT exaggerated, NOT enlarged. " +
   "The subject looks their absolute best — clear healthy skin, bright " +
   "well-rested eyes, sharp jawline, a subtle natural glow, confident and " +
   "magnetic. Tasteful editorial retouching that softens dark circles and " +
-  "blemishes while KEEPING natural skin texture, fine pores, faint imperfections, " +
-  "subtle fine lines and the real grain of the face — not plastic, not over-smoothed. " +
-  "The pose, angle and lighting are deliberately chosen to flatter — slight " +
-  "three-quarter angle, soft front fill light that lifts the eyes, no harsh " +
-  "under-lighting, no double-chin angle. " +
-  "Style: candid DSLR photography by a professional editorial photographer. " +
-  "Real-camera image, shot on a Canon R5 or Sony A7 with an 85mm f/1.4 prime " +
-  "lens, natural film-like fall-off, subtle chromatic depth in shadows, " +
-  "imperceptible micro-imperfections like a real photograph rather than the " +
-  "uncanny perfection of AI image generation. Shallow depth of field, beautiful " +
-  "bokeh. No text, no logos, no watermark, no overly-stylised illustration look.";
+  "blemishes while KEEPING natural skin texture, fine pores, faint " +
+  "imperfections, subtle fine lines and the real grain of the face — " +
+  "not plastic, not over-smoothed. Slight three-quarter angle if at all, " +
+  "but mostly face-forward. " +
+  "Style: candid editorial B&W photography by a professional studio " +
+  "photographer. Shot on a medium-format camera with an 85mm portrait " +
+  "prime lens, natural film-like fall-off, fine silver-gelatin grain, " +
+  "the texture of fine art black-and-white photography. Shallow depth of " +
+  "field, beautiful soft bokeh. No text, no logos, no watermark, no " +
+  "overly-stylised illustration look, no colour cast.";
 
 const PROMPTS = {
   charmer:
-    "Editorial magazine-cover portrait photograph, the kind of polished " +
-    "headshot one would be proud to upload to LinkedIn. Head-and-shoulders, " +
-    "looking straight to camera, warm natural half-smile, eyes connecting " +
-    "with the viewer with quiet confidence. Soft warm studio lighting with " +
-    "a hint of golden-hour glow on the cheekbones, large soft key light " +
-    "from front-left, subtle rim light. Stylish contemporary professional " +
-    "wardrobe — earth-tone tailored blazer over a crisp shirt, optional " +
-    "simple jewellery. Soft warm bokeh background in muted creams and warm " +
-    "ambers, suggestion of a sunlit room. In the style of a Condé Nast or " +
-    "Vogue executive portrait." + FLATTERING,
+    "Black and white studio editorial headshot. Warm soft Rembrandt-style " +
+    "lighting from one side with gentle fill on the other, the kind of " +
+    "soft sidelight that flatters the cheekbones. The subject wears " +
+    "contemporary professional attire — an open-collar shirt or fine " +
+    "knit, no jacket needed. A warm relaxed open expression, a hint of " +
+    "a natural half-smile, eyes engaging the camera with quiet warmth. " +
+    "Plain softly-lit studio backdrop, mid-grey tone. In the manner of " +
+    "an Annie Leibovitz B&W editorial portrait." + FLATTERING,
   magician:
-    "High-contrast editorial portrait photograph, striking and cinematic, " +
-    "the kind of headshot one would be proud to upload to LinkedIn. " +
-    "Head-and-shoulders, looking straight to camera, slight knowing " +
-    "half-smile, sharp intelligent eyes. Dramatic side-lighting with a " +
-    "single warm key light from the side and a defined rim light on the " +
-    "shoulder, deep but luminous shadows that still keep the face sharp " +
-    "and readable. Sleek modern professional wardrobe — black turtleneck " +
-    "or a structured dark blazer. Moody dark background with subtle " +
-    "architectural or fabric depth, faint smoke or texture. In the style " +
-    "of Platon's editorial portraits." + FLATTERING,
+    "Black and white studio editorial headshot. Hard side-light from a " +
+    "single key, deep velvety shadows on the other side of the face " +
+    "while the lit side stays sharply detailed — high-contrast " +
+    "chiaroscuro. The subject wears a sleek dark turtleneck or a " +
+    "structured dark jacket. A knowing slight smirk, sharp intelligent " +
+    "eyes that read the viewer. Plain dark studio backdrop, near-black. " +
+    "In the manner of Platon's stark editorial portraits." + FLATTERING,
   alchemist:
-    "Considered editorial profile-photograph portrait, thoughtful and " +
-    "premium, the kind of headshot one would be proud to upload to " +
-    "LinkedIn. Head-and-shoulders, looking straight to camera, a calm " +
-    "steady gaze that suggests deep expertise, a faint hint of a smile at " +
-    "the eyes. Warm soft lighting with a gentle golden tone, large soft " +
-    "key light from front-right. Refined intellectual professional " +
-    "wardrobe — fine tweed jacket or quality knit, considered details, " +
-    "optionally subtle glasses. Softly defocused background of a " +
-    "warm-toned study or wood-panelled library, books or artisan tools " +
-    "just visible in the bokeh. In the style of a New Yorker or Sunday " +
-    "Times Magazine profile portrait." + FLATTERING,
+    "Black and white studio editorial headshot. Gentle even diffused " +
+    "lighting from a large soft source, slight directional shaping. The " +
+    "subject wears refined intellectual attire — a fine knit, a tweed " +
+    "jacket, or considered tailoring; optionally subtle glasses. A calm " +
+    "steady contemplative expression, a quiet inner authority at the " +
+    "corners of the eyes. Plain softly-lit studio backdrop, mid-to-dark " +
+    "grey. In the manner of a New Yorker profile B&W portrait." + FLATTERING,
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
@@ -192,13 +191,18 @@ async function handlePortrait(request, env, cors) {
         output_format: "jpeg",
         enable_safety_checker: true,
         negative_prompt:
+          "colour, color photograph, colour cast, warm tones, sepia, " +
           "blurry, out of focus, low quality, distorted face, wrong identity, " +
           "different person, cartoon, painting, illustration, anime, watermark, " +
           "text, tired, exhausted, bags under eyes, dark circles, harsh shadows " +
           "on face, harsh under-lighting, double chin, unflattering angle, " +
-          "low angle from below, oily skin, blemishes, acne, red skin, " +
-          "wrinkled, aged, dull skin, washed out, flat lighting, ugly, " +
-          "asymmetric face, deformed, bad anatomy, " +
+          "low angle from below, high angle from above, tilted camera, " +
+          "oversized forehead, exaggerated forehead, enlarged forehead, " +
+          "tall forehead, exposed forehead, high hairline, receding hairline, " +
+          "tight ponytail, slicked-back hair, hair pulled back, wet hair, " +
+          "wide-angle distortion, fisheye, head proportions wrong, " +
+          "oily skin, blemishes, acne, red skin, wrinkled, aged, dull skin, " +
+          "washed out, flat lighting, ugly, asymmetric face, deformed, bad anatomy, " +
           "different hairstyle, restyled hair, recoloured hair, dyed hair, " +
           "longer hair, shorter hair, changed haircut, wig, hat, headwear, " +
           "head covering, hair extensions, " +
@@ -293,12 +297,15 @@ async function handlePortrait(request, env, cors) {
         body: JSON.stringify({
           image_url: workingUrl,
           prompt:
-            "Candid DSLR photograph, real-camera photographic detail, " +
-            "natural skin texture with subtle fine pores, fine film grain, " +
-            "shot on 85mm prime lens, photorealistic, editorial portrait",
+            "Black and white studio portrait photograph, fine silver-gelatin " +
+            "grain, real-camera photographic detail, natural skin texture with " +
+            "subtle fine pores, shot on 85mm prime lens, photorealistic, " +
+            "monochrome editorial portrait",
           negative_prompt:
+            "colour, color photograph, colour cast, sepia, " +
             "AI generated, plastic skin, over-smoothed, fake, synthetic, " +
-            "CGI, render, doll-like, uncanny, airbrushed, glossy",
+            "CGI, render, doll-like, uncanny, airbrushed, glossy, " +
+            "oversized forehead, exaggerated head proportions",
           creativity:  0.3,        // low — don't reinvent, just add detail
           resemblance: 0.7,        // high — preserve the input structure
           upscale_factor: 2,       // 2x — sharper micro-detail, manageable size
