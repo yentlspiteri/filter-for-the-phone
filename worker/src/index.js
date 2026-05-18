@@ -253,7 +253,7 @@ async function runPortraitPipeline(env, image, archetype) {
         prompt,
         reference_image_url: image,   // user's face — PuLID anchors on this
         image_size: "portrait_4_3",   // editorial portrait crop
-        num_inference_steps: 16,      // dropped from 24 — main throughput win, ~4s saved per portrait
+        num_inference_steps: 12,      // dropped from 16 → 12 — floor before quality drops, saves another ~2-3s
         guidance_scale: 4,
         true_cfg: 1,
         id_weight: 0.9,               // 0.9 = strong likeness + just enough latitude to flatter
@@ -489,7 +489,11 @@ async function addToMailchimp(env, email, archetype) {
 }
 
 // ---------- email send: posts to Resend, throws on failure ----------
-async function sendCardEmail(env, { email, archetype, archetypeName, image }) {
+// `image` is shown inline in the email body (small framed card preview);
+// `imageAttachment` is what gets attached for download (clean AI portrait
+// without tarot framing — uploadable to LinkedIn). If imageAttachment isn't
+// provided we fall back to attaching the inline image.
+async function sendCardEmail(env, { email, archetype, archetypeName, image, imageAttachment }) {
   if (!env.RESEND_KEY) throw new Error("no_resend_key");
 
   const read = READS[archetype];
@@ -498,7 +502,8 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image }) {
   const from = env.FROM_EMAIL || "Von Peach <onboarding@resend.dev>";
 
   // Strip "data:image/jpeg;base64," prefix — Resend wants raw base64.
-  const b64 = String(image).split(",").pop();
+  const attachmentSrc = imageAttachment || image;
+  const attachmentB64 = String(attachmentSrc).split(",").pop();
 
   const payload = {
     from,
@@ -507,7 +512,7 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image }) {
     html: emailHtml(name, note, image),
     text: emailText(name, note),
     attachments: [
-      { filename: `von-peach-${archetype}.jpg`, content: b64 },
+      { filename: `von-peach-${archetype}.jpg`, content: attachmentB64 },
     ],
     tags: [
       { name: "campaign", value: "filter-for-the-phone" },

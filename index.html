@@ -1765,13 +1765,12 @@ async function submitEmail(e) {
   emailState.className = "modal-state";
 
   try {
-    // Send the framed share card (portrait + border + archetype name +
-    // brand styling) so the email body shows the full tarot composition,
-    // not just a bare photo. Resized to ~540px wide so the inline base64
-    // is email-client friendly (~200KB). Falls back to the bare AI
-    // portrait if the share canvas isn't populated yet.
-    const dataUrl = shareCanvasForEmail() || aiPortraitDataUrl
-      || $("shareCanvas").toDataURL("image/jpeg", 0.88);
+    // Email body shows the framed card preview (visual continuity with
+    // what the user saw on screen). The attachment is the *clean* AI
+    // portrait — full resolution, no tarot framing — so the recipient
+    // can upload it straight to LinkedIn without cropping.
+    const inlineImage     = shareCanvasForEmail() || $("shareCanvas").toDataURL("image/jpeg", 0.88);
+    const attachmentImage = aiPortraitDataUrl || $("shareCanvas").toDataURL("image/jpeg", 0.92);
     const res = await fetch(EMAIL_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1779,7 +1778,8 @@ async function submitEmail(e) {
         email,
         archetype: frozenArchetype,
         archetypeName: ARCHETYPES[frozenArchetype].name,
-        image: dataUrl
+        image: inlineImage,
+        imageAttachment: attachmentImage,
       })
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
