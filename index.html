@@ -762,6 +762,7 @@ let rafId = null;
 let frozenFrame = null;       // canvas snapshot of camera at moment of result
 let frozenArchetype = null;   // key into ARCHETYPES
 let usingAIPortrait = false;  // true once an AI-painted portrait has replaced frozenFrame
+let aiPortraitDataUrl = null; // the clean AI portrait as a data URL, for the email (LinkedIn-ready, no card framing)
 
 // Pre-load brand logo so the share canvas can render it
 const brandLogo = new Image();
@@ -1058,6 +1059,10 @@ async function paintPortrait() {
       c.getContext("2d").drawImage(img, 0, 0);
       frozenFrame = c;
       usingAIPortrait = true;
+      // Keep a clean copy for the email — the framed tarot card stays on
+      // the result screen, but email recipients want a LinkedIn-uploadable
+      // portrait with no border, glyphs, or archetype overlay.
+      aiPortraitDataUrl = c.toDataURL("image/jpeg", 0.92);
     }
   } catch (err) {
     console.warn("AI portrait failed; falling back to the original frame.", err);
@@ -1100,6 +1105,7 @@ function reset() {
   qIndex = 0;
   scores = { charmer: 0, magician: 0, alchemist: 0 };
   usingAIPortrait = false;
+  aiPortraitDataUrl = null;
   frozenFrame = null;
   frozenArchetype = null;
   if (faceLandmarker && stream) {
@@ -1460,7 +1466,10 @@ async function submitEmail(e) {
   emailState.className = "modal-state";
 
   try {
-    const dataUrl = $("shareCanvas").toDataURL("image/jpeg", 0.92);
+    // Prefer the clean AI portrait (no card framing) so the recipient gets
+    // a LinkedIn-uploadable image. Falls back to the framed share canvas
+    // if the AI step was skipped or failed.
+    const dataUrl = aiPortraitDataUrl || $("shareCanvas").toDataURL("image/jpeg", 0.92);
     const res = await fetch(EMAIL_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

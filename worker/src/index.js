@@ -48,26 +48,30 @@ const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/advanced-face-swap";
 const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// Universal flattering layer — appended to every archetype prompt. The
-// brief is "obviously the same person, on their best day". Magazine-grade
-// retouching, glowing skin, bright eyes, softly flattering light, AND the
-// subject's exact hair from the reference image (PuLID anchors the face
-// but not the hair — without this the model invents a new hairstyle).
+// Universal flattering + realism layer — appended to every archetype
+// prompt. The brief is "obviously the same person, on their best day,
+// shot by an actual photographer". Identity from PuLID, hair preserved
+// via prompt, and most importantly a real-DSLR photographic feel rather
+// than the flat plastic look of generic AI image output.
 const FLATTERING =
   " The subject's hair is preserved exactly as in the reference image — " +
   "same hairstyle, same length, same colour, same texture, same parting, " +
   "same volume. Do NOT restyle, recolour, lengthen, shorten, smooth, " +
   "curl or straighten the hair. " +
-  "The subject looks their absolute best — clear glowing skin, bright " +
+  "The subject looks their absolute best — clear healthy skin, bright " +
   "well-rested eyes, sharp jawline, a subtle natural glow, confident and " +
-  "magnetic. Professional magazine-quality retouching that softens any " +
-  "blemishes, dark circles or shadows under the eyes while keeping skin " +
-  "texture natural and real. The pose, angle and lighting are deliberately " +
-  "chosen to flatter — slight three-quarter angle, soft front fill light " +
-  "that lifts the eyes, no harsh under-lighting, no double-chin angle. The " +
-  "kind of photograph where a friend says 'wow, you look great here'. " +
-  "Photorealistic, real-camera image, shallow depth of field, 85mm portrait " +
-  "lens look. No text, no logos, no watermark.";
+  "magnetic. Tasteful editorial retouching that softens dark circles and " +
+  "blemishes while KEEPING natural skin texture, fine pores, faint imperfections, " +
+  "subtle fine lines and the real grain of the face — not plastic, not over-smoothed. " +
+  "The pose, angle and lighting are deliberately chosen to flatter — slight " +
+  "three-quarter angle, soft front fill light that lifts the eyes, no harsh " +
+  "under-lighting, no double-chin angle. " +
+  "Style: candid DSLR photography by a professional editorial photographer. " +
+  "Real-camera image, shot on a Canon R5 or Sony A7 with an 85mm f/1.4 prime " +
+  "lens, natural film-like fall-off, subtle chromatic depth in shadows, " +
+  "imperceptible micro-imperfections like a real photograph rather than the " +
+  "uncanny perfection of AI image generation. Shallow depth of field, beautiful " +
+  "bokeh. No text, no logos, no watermark, no overly-stylised illustration look.";
 
 const PROMPTS = {
   charmer:
@@ -190,7 +194,10 @@ async function handlePortrait(request, env, cors) {
           "asymmetric face, deformed, bad anatomy, " +
           "different hairstyle, restyled hair, recoloured hair, dyed hair, " +
           "longer hair, shorter hair, changed haircut, wig, hat, headwear, " +
-          "head covering, hair extensions",
+          "head covering, hair extensions, " +
+          "AI generated look, plastic skin, over-smoothed, waxy skin, " +
+          "fake, synthetic, CGI, 3D render, doll-like, uncanny, airbrushed, " +
+          "perfect symmetry, glossy, polished plastic, smooth perfection",
       }),
     });
 
@@ -245,7 +252,7 @@ async function handlePortrait(request, env, cors) {
         },
         body: JSON.stringify({
           image_url: workingUrl,
-          fidelity: 0.7,           // 0..1 — higher = stays closer to swapped face
+          fidelity: 0.85,          // 0..1 — higher = stays closer to swapped face / more natural texture; lower = more over-polished
           upscaling: 2,            // 1x or 2x; 2x adds detail without much cost
           face_upsample: true,
           background_enhance: false,
@@ -297,8 +304,8 @@ async function handleSendCard(request, env, cors) {
     const payload = {
       from,
       to: [email],
-      subject: `Your Von Peach card — ${name}`,
-      html: emailHtml(name, note),
+      subject: `Your Von Peach photo — ${name}`,
+      html: emailHtml(name, note, image),
       text: emailText(name, note),
       attachments: [
         { filename: `von-peach-${archetype}.jpg`, content: b64 },
@@ -355,10 +362,13 @@ function jsonResp(data, status, extraHeaders) {
 // Where the email pulls the logo from. Must be publicly fetchable.
 const LOGO_URL = "https://tarot.vonpeach.com/vonpeach-logo.png";
 
-function emailHtml(name, note) {
+function emailHtml(name, note, imageDataUrl) {
   const safe = (note || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   // Light cream theme — the brand logo PNG is black, so a light background
   // is the only reliable way for it to render across email clients.
+  // Order: logo → portrait → archetype title → body → centered linked
+  // vonpeach.com. The portrait is embedded inline as a data URL so the
+  // recipient sees the result without having to open the attachment first.
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
@@ -366,24 +376,25 @@ function emailHtml(name, note) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFF6EE;padding:40px 16px;">
     <tr><td align="center">
       <table role="presentation" width="100%" style="max-width:520px;background:#FFFFFF;border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(58,8,18,0.08);" cellpadding="0" cellspacing="0">
-        <tr><td style="padding:36px 36px 4px 36px;">
+        <tr><td style="padding:36px 36px 8px 36px;">
           <img src="${LOGO_URL}" alt="Von Peach" width="180" style="display:block;width:180px;height:auto;border:0;outline:none;" />
         </td></tr>
-        <tr><td style="padding:28px 36px 0 36px;">
+        <tr><td style="padding:20px 36px 0 36px;">
+          <img src="${imageDataUrl}" alt="${name}" style="display:block;width:100%;max-width:448px;height:auto;border-radius:10px;border:0;outline:none;" />
+        </td></tr>
+        <tr><td style="padding:24px 36px 0 36px;">
           <h1 style="margin:0;font-size:28px;font-weight:800;color:#99112F;letter-spacing:-0.01em;line-height:1.2;">${name}</h1>
         </td></tr>
         <tr><td style="padding:16px 36px 0 36px;font-size:15px;line-height:1.6;color:#3a0812;">
           ${safe}
         </td></tr>
         <tr><td style="padding:24px 36px 0 36px;font-size:13px;line-height:1.55;color:rgba(58,8,18,0.7);">
-          Your card is attached. Save it, share it, or keep it close. If this read
-          landed, we'd love to hear about it — just reply.
+          Your portrait is attached — feel free to upload it to LinkedIn or just keep it close. If this read landed, we'd love to hear about it — just reply.
         </td></tr>
-        <tr><td style="padding:28px 36px 32px 36px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(153,17,47,0.15);">
-            <tr><td style="padding:18px 0 0 0;">
-              <img src="${LOGO_URL}" alt="Von Peach" width="120" style="display:block;width:120px;height:auto;border:0;outline:none;opacity:0.85;" />
-              <div style="margin-top:8px;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:rgba(58,8,18,0.55);">vonpeach.com</div>
+        <tr><td align="center" style="padding:32px 36px 36px 36px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(153,17,47,0.15);width:100%;">
+            <tr><td align="center" style="padding:18px 0 0 0;">
+              <a href="https://vonpeach.com" style="font-size:12px;letter-spacing:0.28em;text-transform:uppercase;color:#99112F;text-decoration:none;font-weight:600;">vonpeach.com</a>
             </td></tr>
           </table>
         </td></tr>
