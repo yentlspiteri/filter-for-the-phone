@@ -1313,6 +1313,24 @@ function canvasToUploadDataURL(srcCanvas, maxDim = 1024, quality = 0.86) {
   return c.toDataURL("image/jpeg", quality);
 }
 
+// Build a smaller-resolution data URL of the framed share canvas, suitable
+// for inlining in an email body. The full canvas is 1080×1920 which encodes
+// to ~600KB-1MB base64 — overkill for an email and slow to upload. 540×960
+// at JPEG 0.88 is ~150-220KB and the inline display in the email is capped
+// at 448px CSS wide anyway, so the visible quality is identical.
+function shareCanvasForEmail(maxDim = 540, quality = 0.88) {
+  const src = document.getElementById("shareCanvas");
+  if (!src || !src.width || !src.height) return null;
+  const scale = Math.min(1, maxDim / Math.max(src.width, src.height));
+  const c = document.createElement("canvas");
+  c.width  = Math.round(src.width  * scale);
+  c.height = Math.round(src.height * scale);
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", quality);
+}
+
 // Resize + JPEG-encode a canvas to a Blob (used for FormData uploads). Same
 // resize logic as canvasToUploadDataURL but emits a Blob, so the request body
 // goes out as binary instead of a base64 string — smaller, faster.
@@ -1817,10 +1835,13 @@ async function submitEmail(e) {
   emailState.className = "modal-state";
 
   try {
-    // Prefer the clean AI portrait (no card framing) so the recipient gets
-    // a LinkedIn-uploadable image. Falls back to the framed share canvas
-    // if the AI step was skipped or failed.
-    const dataUrl = aiPortraitDataUrl || $("shareCanvas").toDataURL("image/jpeg", 0.92);
+    // Send the framed share card (portrait + border + archetype name +
+    // brand styling) so the email body shows the full tarot composition,
+    // not just a bare photo. Resized to ~540px wide so the inline base64
+    // is email-client friendly (~200KB). Falls back to the bare AI
+    // portrait if the share canvas isn't populated yet.
+    const dataUrl = shareCanvasForEmail() || aiPortraitDataUrl
+      || $("shareCanvas").toDataURL("image/jpeg", 0.88);
     const res = await fetch(EMAIL_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
