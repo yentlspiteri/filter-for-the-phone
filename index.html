@@ -414,6 +414,107 @@
   #play.posing .tiltbar,
   #play.posing .choices { display: none; }
 
+  /* Email-capture button arrangement: primary full-width, secondaries split */
+  #screenResult .btnrow {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  #screenResult #emailMeBtn { flex-basis: 100%; }
+  #screenResult .ghost { flex: 1; min-width: 0; }
+
+  /* Email-capture modal (slides up from the bottom) */
+  .modal {
+    position: fixed; inset: 0;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 10;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .modal.show { display: flex; }
+  .modal-card {
+    width: 100%;
+    max-width: 460px;
+    background: linear-gradient(180deg, #2a0a14 0%, #1a0610 100%);
+    border-top: 1px solid rgba(255,214,187,0.18);
+    border-radius: 24px 24px 0 0;
+    padding: 22px 22px 26px;
+    position: relative;
+    transform: translateY(100%);
+    animation: slideUp 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes slideUp { to { transform: translateY(0); } }
+  .modal-close {
+    position: absolute; top: 10px; right: 14px;
+    background: transparent; border: 0;
+    color: var(--peach); font-size: 28px; line-height: 1;
+    cursor: pointer; padding: 6px 10px; opacity: 0.7;
+    font-family: "General Sans", sans-serif;
+  }
+  .modal-close:hover { opacity: 1; }
+  .modal-eyebrow {
+    font-family: "Aileron", sans-serif;
+    font-weight: 800;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--orange);
+    margin: 0 0 8px;
+  }
+  .modal-title {
+    font-family: "Aileron", sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.2;
+    color: var(--peach);
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .modal-body {
+    font-family: "General Sans", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: rgba(255,214,187,0.85);
+    margin: 0 0 16px;
+  }
+  .modal-form { display: flex; flex-direction: column; gap: 10px; }
+  .modal-form input[type="email"] {
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255,214,187,0.25);
+    background: rgba(255,214,187,0.06);
+    color: var(--peach);
+    font-family: "General Sans", sans-serif;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 140ms, background 140ms;
+  }
+  .modal-form input[type="email"]:focus {
+    border-color: var(--orange);
+    background: rgba(255,214,187,0.10);
+  }
+  .modal-form input[type="email"]::placeholder { color: rgba(255,214,187,0.45); }
+  .modal-state {
+    margin-top: 12px;
+    font-family: "General Sans", sans-serif;
+    font-size: 13px;
+    min-height: 1.2em;
+  }
+  .modal-state.error   { color: #ff8a7e; }
+  .modal-state.success { color: var(--orange); }
+  .modal-fine {
+    margin-top: 14px;
+    font-size: 11px;
+    color: rgba(255,214,187,0.55);
+    font-family: "General Sans", sans-serif;
+    line-height: 1.45;
+  }
+
   .topbar-vp {
     position: absolute;
     top: 0; left: 0; right: 0;
@@ -479,10 +580,26 @@
       <img id="resultPreview" alt="Your archetype card" />
     </div>
     <div class="btnrow">
-      <button class="btn" id="shareBtn">Share</button>
-      <button class="btn ghost" id="downloadBtn">Save image</button>
+      <button class="btn" id="emailMeBtn">Email me my card</button>
+      <button class="btn ghost" id="shareBtn">Share</button>
       <button class="btn ghost" id="againBtn">Try again</button>
       <div class="hint" id="shareHint"></div>
+    </div>
+  </div>
+
+  <!-- email-capture modal -->
+  <div class="modal" id="emailModal" aria-hidden="true" role="dialog" aria-labelledby="emailTitle">
+    <div class="modal-card">
+      <button class="modal-close" id="emailClose" type="button" aria-label="Close">×</button>
+      <div class="modal-eyebrow">A deeper read on</div>
+      <h2 class="modal-title" id="emailTitle">Your archetype</h2>
+      <p class="modal-body" id="emailBody">We'll send the high-res card to your inbox, plus a short read on what this archetype means and how to lean into it.</p>
+      <form class="modal-form" id="emailForm" novalidate>
+        <input type="email" id="emailInput" required placeholder="you@example.com" autocomplete="email" inputmode="email" />
+        <button type="submit" class="btn" id="emailSubmit">Send it</button>
+      </form>
+      <div class="modal-state" id="emailState" aria-live="polite"></div>
+      <div class="modal-fine">No spam. One email — then we'll only reach out if there's something genuinely good.</div>
     </div>
   </div>
 
@@ -550,6 +667,14 @@ const TILT_THRESHOLD_DEG = 9;
 const HOLD_MS = 280;
 const COOLDOWN_MS = 550;
 
+// Email capture: POST { email, archetype, archetypeName, image } as JSON.
+// `image` is a `data:image/jpeg;base64,...` URL of the 1080×1920 share card.
+// The endpoint should: 1) decode the image, 2) attach or upload it, 3) send
+// the email via your ESP (Resend / Mailchimp / Loops / Brevo) with an
+// archetype-specific note. Until that endpoint exists this will fail
+// gracefully and the user sees a friendly retry message.
+const EMAIL_ENDPOINT = "/api/send-card";
+
 // ---------- STATE ----------
 let faceLandmarker = null;
 let video, stage, stageCtx, stream;
@@ -585,17 +710,32 @@ const leftFill = $("leftFill"), rightFill = $("rightFill");
 const choiceLeft = $("choiceLeft"), choiceRight = $("choiceRight");
 const needle = $("needle");
 const introErr = $("introErr");
-const shareBtn = $("shareBtn"), downloadBtn = $("downloadBtn"), againBtn = $("againBtn");
+const shareBtn = $("shareBtn"), againBtn = $("againBtn");
 const shareHint = $("shareHint");
 const resultPreview = $("resultPreview");
 const wash = $("wash");
 const posePanel = $("posePanel");
 const poseCount = $("poseCount");
+const emailMeBtn = $("emailMeBtn");
+const emailModal = $("emailModal");
+const emailClose = $("emailClose");
+const emailTitle = $("emailTitle");
+const emailBody = $("emailBody");
+const emailForm = $("emailForm");
+const emailInput = $("emailInput");
+const emailSubmit = $("emailSubmit");
+const emailState = $("emailState");
 
 startBtn.addEventListener("click", begin);
 againBtn.addEventListener("click", reset);
 shareBtn.addEventListener("click", () => shareSnapshot(false));
-downloadBtn.addEventListener("click", () => shareSnapshot(true));
+emailMeBtn.addEventListener("click", openEmailModal);
+emailClose.addEventListener("click", closeEmailModal);
+emailModal.addEventListener("click", (e) => { if (e.target === emailModal) closeEmailModal(); });
+emailForm.addEventListener("submit", submitEmail);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && emailModal.classList.contains("show")) closeEmailModal();
+});
 
 // ---------- START ----------
 async function begin() {
@@ -1126,6 +1266,69 @@ async function shareSnapshot(forceDownload) {
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
   shareHint.textContent = "Image saved. Open Instagram → Story → pick this image.";
+}
+
+// ---------- EMAIL CAPTURE ----------
+function openEmailModal() {
+  if (!frozenArchetype) return;
+  const arche = ARCHETYPES[frozenArchetype];
+  emailTitle.textContent = arche.name;
+  emailBody.textContent =
+    `We'll send your high-res card to your inbox, plus a short read on what ` +
+    `${arche.name} means and how to lean into it.`;
+  emailState.textContent = "";
+  emailState.className = "modal-state";
+  emailInput.value = "";
+  emailSubmit.disabled = false;
+  emailSubmit.textContent = "Send it";
+  emailModal.classList.add("show");
+  emailModal.setAttribute("aria-hidden", "false");
+  // Focus after the slide-up animation so iOS doesn't fight the keyboard
+  setTimeout(() => emailInput.focus({ preventScroll: true }), 360);
+}
+
+function closeEmailModal() {
+  emailModal.classList.remove("show");
+  emailModal.setAttribute("aria-hidden", "true");
+}
+
+async function submitEmail(e) {
+  e.preventDefault();
+  const email = emailInput.value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    emailState.textContent = "That email doesn't look right — try again.";
+    emailState.className = "modal-state error";
+    return;
+  }
+  emailSubmit.disabled = true;
+  emailSubmit.textContent = "Sending…";
+  emailState.textContent = "";
+  emailState.className = "modal-state";
+
+  try {
+    const dataUrl = $("shareCanvas").toDataURL("image/jpeg", 0.92);
+    const res = await fetch(EMAIL_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        archetype: frozenArchetype,
+        archetypeName: ARCHETYPES[frozenArchetype].name,
+        image: dataUrl
+      })
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    emailState.textContent = "Sent — check your inbox.";
+    emailState.className = "modal-state success";
+    emailSubmit.textContent = "Sent ✓";
+    setTimeout(closeEmailModal, 2200);
+  } catch (err) {
+    console.error("Email send failed:", err);
+    emailState.textContent = "Couldn't send right now. Try again in a moment.";
+    emailState.className = "modal-state error";
+    emailSubmit.disabled = false;
+    emailSubmit.textContent = "Send it";
+  }
 }
 
 window.addEventListener("pagehide", () => {
