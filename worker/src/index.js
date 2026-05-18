@@ -50,7 +50,7 @@
 // Stages 2–4 are best-effort: if any errors, we fall through with the
 // most recent successful image so the user always sees a portrait.
 const FAL_URL       = "https://fal.run/fal-ai/flux-pulid";
-const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/advanced-face-swap";
+const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/face-swap";
 const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
 const REALISM_URL   = "https://fal.run/fal-ai/clarity-upscaler";
 const RESEND_URL = "https://api.resend.com/emails";

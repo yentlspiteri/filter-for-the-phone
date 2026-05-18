@@ -1254,8 +1254,26 @@ async function paintPortrait() {
   }
 }
 
+// Resize a canvas so the upload payload is sane on mobile networks. Phone
+// cameras can produce 1920×1080 frames which encode to ~800KB-1MB as
+// base64 — large enough to silently fail mid-upload on flaky LTE. Cap the
+// long edge at maxDim and use a slightly lower JPEG quality.
+function canvasToUploadDataURL(srcCanvas, maxDim = 1024, quality = 0.86) {
+  const w = srcCanvas.width, h = srcCanvas.height;
+  if (!w || !h) return srcCanvas.toDataURL("image/jpeg", quality);
+  const scale = Math.min(1, maxDim / Math.max(w, h));
+  if (scale >= 1) return srcCanvas.toDataURL("image/jpeg", quality);
+  const c = document.createElement("canvas");
+  c.width  = Math.round(w * scale);
+  c.height = Math.round(h * scale);
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(srcCanvas, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", quality);
+}
+
 async function requestAIPortrait(canvas, archetype) {
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  const dataUrl = canvasToUploadDataURL(canvas);
   portraitAbortController = new AbortController();
   const res = await fetch(AI_PORTRAIT_ENDPOINT, {
     method: "POST",
@@ -1304,7 +1322,8 @@ paintingSkipForm.addEventListener("submit", async (e) => {
   paintingSkipState.className = "painting-skip-state";
 
   try {
-    const sourceDataUrl = frozenFrame.toDataURL("image/jpeg", 0.92);
+    // Use the same resize helper as /portrait so the upload body is mobile-safe.
+    const sourceDataUrl = canvasToUploadDataURL(frozenFrame);
     const res = await fetch(EMAIL_PORTRAIT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
