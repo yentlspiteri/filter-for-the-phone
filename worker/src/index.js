@@ -56,15 +56,20 @@ const REALISM_URL   = "https://fal.run/fal-ai/clarity-upscaler";
 const RESEND_URL = "https://api.resend.com/emails";
 
 // Universal studio-B&W headshot layer — appended to every archetype
-// prompt. Locked aesthetic across all three archetypes (consistency
-// hides face-swap colour-tone shifts) and shifts the differentiation
-// to expression, lighting hardness, and wardrobe. Crop + framing
-// instructions are explicit to prevent the forehead-heavy
-// disproportion we've seen ("hair frames the face, mid-chest crop,
-// eye-level camera, hairline natural").
+// prompt. Locks the photography style across all three archetypes: same
+// studio, same lighting, same lens, same backdrop, same photographer
+// vocabulary. The three portraits should read as three shots from one
+// session — only expression, wardrobe, and prop change.
 const FLATTERING =
   " Black and white studio portrait photograph, fine-art monochrome — " +
   "no colour, rich tonal range, deep blacks, luminous mid-tones. " +
+  "STUDIO SETUP (identical across all portraits): a single large " +
+  "soft-box key light at 45 degrees from the camera, a subtle reflector " +
+  "fill on the opposite side approximately 1.5 stops below the key, " +
+  "plain mid-grey seamless studio backdrop softly graduated darker at " +
+  "the edges. Same studio, same lighting, same backdrop, same lens for " +
+  "every portrait — only the subject's expression, wardrobe and " +
+  "accessories change. " +
   "Professional editorial HEADSHOT crop: framed from mid-chest to just " +
   "above the top of the head, the eyes positioned on the upper third of " +
   "the frame, the face fills the central area generously. Camera at " +
@@ -81,48 +86,41 @@ const FLATTERING =
   "imperfections, subtle fine lines and the real grain of the face — " +
   "not plastic, not over-smoothed. Slight three-quarter angle if at all, " +
   "but mostly face-forward. " +
-  "Style: candid editorial B&W photography by a professional studio " +
-  "photographer. Shot on a medium-format camera with an 85mm portrait " +
-  "prime lens, natural film-like fall-off, fine silver-gelatin grain, " +
-  "the texture of fine art black-and-white photography. Shallow depth of " +
-  "field, beautiful soft bokeh. No text, no logos, no watermark, no " +
-  "overly-stylised illustration look, no colour cast.";
+  "Style: candid editorial B&W photography by a master studio " +
+  "photographer in the manner of Yousuf Karsh — confident, dignified, " +
+  "slightly cinematic. Shot on a medium-format camera with an 85mm " +
+  "portrait prime lens, natural film-like fall-off, fine silver-gelatin " +
+  "grain, the texture of fine art black-and-white photography. Shallow " +
+  "depth of field, beautiful soft bokeh. No text, no logos, no " +
+  "watermark, no overly-stylised illustration look, no colour cast.";
 
+// Archetype prompts now diverge ONLY on expression + wardrobe + prop.
+// Lighting, backdrop, lens, crop and tonal treatment all live in the
+// shared FLATTERING block above.
 const PROMPTS = {
   charmer:
-    "Black and white studio editorial headshot. Warm soft Rembrandt-style " +
-    "lighting from one side with gentle fill on the other, the kind of " +
-    "soft sidelight that flatters the cheekbones. The subject wears " +
-    "contemporary professional attire — an open-collar shirt or fine " +
-    "knit, no jacket needed. A warm relaxed open expression, a hint of " +
-    "a natural half-smile, eyes engaging the camera with quiet warmth. " +
-    "Holds a single fresh rose loosely between the fingers near the " +
-    "chest, the rose slightly out of focus in the foreground — a small " +
-    "charming romantic touch, not theatrical. Plain softly-lit studio " +
-    "backdrop, mid-grey tone. In the manner of an Annie Leibovitz B&W " +
-    "editorial portrait." + FLATTERING,
+    "Editorial B&W studio headshot. Expression: a warm relaxed open " +
+    "expression, hint of a natural half-smile, eyes engaging the camera " +
+    "with quiet warmth. Wardrobe: contemporary open-collar shirt or fine " +
+    "knit, no jacket. Prop: holds a single fresh rose loosely between " +
+    "the fingers near the chest, the rose slightly out of focus in the " +
+    "foreground — a small charming romantic touch, not theatrical." +
+    FLATTERING,
   magician:
-    "Black and white studio editorial headshot. Hard side-light from a " +
-    "single key, deep velvety shadows on the other side of the face " +
-    "while the lit side stays sharply detailed — high-contrast " +
-    "chiaroscuro. The subject wears a sleek dark turtleneck or a " +
-    "structured dark jacket. A knowing slight smirk, sharp intelligent " +
-    "eyes that read the viewer. Faint wisps of smoke or steam catch the " +
-    "side-light around the shoulders and just behind the face — magical " +
-    "atmosphere, subtle, suggestive, not theatrical. Plain dark studio " +
-    "backdrop, near-black. In the manner of Platon's stark editorial " +
-    "portraits." + FLATTERING,
+    "Editorial B&W studio headshot. Expression: a knowing slight smirk, " +
+    "sharp intelligent eyes that read the viewer. Wardrobe: sleek dark " +
+    "turtleneck or a structured dark jacket. Prop: faint wisps of smoke " +
+    "or steam catching the side-light around the shoulders and just " +
+    "behind the face — subtle magical atmosphere, suggestive not " +
+    "theatrical." + FLATTERING,
   alchemist:
-    "Black and white studio editorial headshot. Gentle even diffused " +
-    "lighting from a large soft source, slight directional shaping. The " +
-    "subject wears refined intellectual attire — a fine knit, a tweed " +
-    "jacket, or considered tailoring. Wears a classic monocle fixed in " +
-    "one eye by a fine chain — a touch of old-world scholarship. A hint " +
-    "of leather-bound books or a vintage brass instrument just visible " +
-    "in the soft-focus background. A calm steady contemplative " +
-    "expression, a quiet inner authority at the corners of the eyes. " +
-    "Plain softly-lit studio backdrop, mid-to-dark grey. In the manner " +
-    "of a New Yorker profile B&W portrait." + FLATTERING,
+    "Editorial B&W studio headshot. Expression: a calm steady " +
+    "contemplative expression, a quiet inner authority at the corners " +
+    "of the eyes. Wardrobe: refined intellectual attire — a fine knit, " +
+    "a tweed jacket, or considered tailoring. Prop: wears a classic " +
+    "monocle fixed in one eye by a fine chain, with a hint of " +
+    "leather-bound books or a vintage brass instrument just visible in " +
+    "the soft-focus background." + FLATTERING,
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
