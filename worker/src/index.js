@@ -591,42 +591,74 @@ function jsonResp(data, status, extraHeaders) {
 // Where the email pulls the logo from. Must be publicly fetchable.
 const LOGO_URL = "https://tarot.vonpeach.com/vonpeach-logo.png";
 
+// LinkedIn share dialog pre-filled with the campaign URL. LinkedIn scrapes
+// the page's OG tags for the preview thumbnail; recipients can attach their
+// portrait from the email manually in the compose step.
+const LINKEDIN_SHARE_URL =
+  "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftarot.vonpeach.com";
+
 function emailHtml(name, note, imageDataUrl) {
   const safe = (note || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // Light cream theme — the brand logo PNG is black, so a light background
-  // is the only reliable way for it to render across email clients.
-  // Order: logo → portrait → archetype title → body → centered linked
-  // vonpeach.com. The portrait is embedded inline as a data URL so the
-  // recipient sees the result without having to open the attachment first.
+  // Brand-forward email: warm peach outer, white card, orange→red→wine
+  // accent stripes top + bottom, archetype title with an orange underline,
+  // gradient Share-on-LinkedIn CTA. The brand logo PNG is black, so the
+  // card stays light for legibility.
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
-<body style="margin:0;padding:0;background:#FFF6EE;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3a0812;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFF6EE;padding:40px 16px;">
+<body style="margin:0;padding:0;background:#FFD6BB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3a0812;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFD6BB;padding:32px 16px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" style="max-width:520px;background:#FFFFFF;border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(58,8,18,0.08);" cellpadding="0" cellspacing="0">
-        <tr><td style="padding:36px 36px 8px 36px;">
+      <table role="presentation" width="100%" style="max-width:520px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 14px 38px rgba(153,17,47,0.18);" cellpadding="0" cellspacing="0">
+
+        <!-- Top brand stripe — orange → red → wine -->
+        <tr><td style="height:6px;line-height:0;font-size:0;background:linear-gradient(90deg,#FD8839 0%,#CC1C0E 50%,#99112F 100%);">&nbsp;</td></tr>
+
+        <!-- Logo -->
+        <tr><td style="padding:30px 36px 8px 36px;">
           <img src="${LOGO_URL}" alt="Von Peach" width="180" style="display:block;width:180px;height:auto;border:0;outline:none;" />
         </td></tr>
+
+        <!-- Portrait -->
         <tr><td style="padding:20px 36px 0 36px;">
           <img src="${imageDataUrl}" alt="${name}" style="display:block;width:100%;max-width:448px;height:auto;border-radius:10px;border:0;outline:none;" />
         </td></tr>
+
+        <!-- Archetype title with orange accent underline -->
         <tr><td style="padding:24px 36px 0 36px;">
           <h1 style="margin:0;font-size:28px;font-weight:800;color:#99112F;letter-spacing:-0.01em;line-height:1.2;">${name}</h1>
+          <div style="height:3px;width:56px;background:#FD8839;margin-top:8px;border-radius:2px;line-height:0;font-size:0;">&nbsp;</div>
         </td></tr>
-        <tr><td style="padding:16px 36px 0 36px;font-size:15px;line-height:1.6;color:#3a0812;">
+
+        <!-- Body / archetype reading -->
+        <tr><td style="padding:18px 36px 0 36px;font-size:15px;line-height:1.6;color:#3a0812;">
           ${safe}
         </td></tr>
-        <tr><td style="padding:24px 36px 0 36px;font-size:13px;line-height:1.55;color:rgba(58,8,18,0.7);">
-          Your portrait is attached — feel free to upload it to LinkedIn or just keep it close. If this read landed, we'd love to hear about it — just reply.
+
+        <!-- Attachment note -->
+        <tr><td style="padding:22px 36px 0 36px;font-size:13px;line-height:1.55;color:rgba(58,8,18,0.7);">
+          Your portrait is attached — share it on LinkedIn, keep it for the next bio update, or just hang on to it.
         </td></tr>
-        <tr><td align="center" style="padding:32px 36px 36px 36px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(153,17,47,0.15);width:100%;">
+
+        <!-- Share-on-LinkedIn CTA -->
+        <tr><td align="center" style="padding:22px 36px 0 36px;">
+          <a href="${LINKEDIN_SHARE_URL}"
+             style="display:inline-block;background:linear-gradient(135deg,#FD8839 0%,#CC1C0E 60%,#99112F 100%);color:#FFFFFF;text-decoration:none;padding:14px 28px;border-radius:999px;font-family:inherit;font-weight:800;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;box-shadow:0 8px 18px rgba(204,28,14,0.30);">
+            Share on LinkedIn
+          </a>
+        </td></tr>
+
+        <!-- Footer divider + URL -->
+        <tr><td align="center" style="padding:32px 36px 28px 36px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(253,136,57,0.35);width:100%;">
             <tr><td align="center" style="padding:18px 0 0 0;">
-              <a href="https://vonpeach.com" style="font-size:12px;letter-spacing:0.28em;text-transform:uppercase;color:#99112F;text-decoration:none;font-weight:600;">vonpeach.com</a>
+              <a href="https://vonpeach.com" style="font-size:12px;letter-spacing:0.28em;text-transform:uppercase;color:#99112F;text-decoration:none;font-weight:700;">vonpeach.com</a>
             </td></tr>
           </table>
         </td></tr>
+
+        <!-- Bottom brand stripe — wine → red → orange -->
+        <tr><td style="height:6px;line-height:0;font-size:0;background:linear-gradient(90deg,#99112F 0%,#CC1C0E 50%,#FD8839 100%);">&nbsp;</td></tr>
       </table>
     </td></tr>
   </table>
