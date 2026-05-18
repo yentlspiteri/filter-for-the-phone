@@ -16,12 +16,20 @@ The Worker exists so neither API key ever leaves the server.
 3. Get the keys:
    - fal.ai: <https://fal.ai/dashboard/keys>
    - Resend: <https://resend.com/api-keys>
+   - Mailchimp:
+     - API key — <https://us12.admin.mailchimp.com/account/api/> (the suffix
+       like `-us12` tells the Worker which datacenter to call)
+     - List/Audience ID — Audience → Settings → Audience name and defaults
 4. Plant the keys as Worker secrets (NOT in any file, NOT in git):
    ```
    wrangler secret put FAL_KEY
    wrangler secret put RESEND_KEY
+   wrangler secret put MAILCHIMP_API_KEY
+   wrangler secret put MAILCHIMP_LIST_ID
    ```
-   Paste the value when prompted.
+   Paste the value when prompted. Mailchimp secrets are optional — if
+   either is missing the Worker just skips the audience-add (Resend still
+   delivers, no errors).
 5. (Recommended) Verify `vonpeach.com` in Resend
    (<https://resend.com/domains>), then edit `FROM_EMAIL` in `wrangler.toml`
    to something like `"Von Peach <hello@vonpeach.com>"`. Without a verified

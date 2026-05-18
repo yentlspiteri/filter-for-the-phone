@@ -403,6 +403,61 @@ async function handleSendCard(request, env, cors) {
   }
 }
 
+// ---------- Mailchimp: add the email to the audience after every send ----------
+// Tags the contact with "filter-for-the-phone" + their archetype so the
+// downstream audience can be segmented. Best-effort: if MAILCHIMP_API_KEY
+// or MAILCHIMP_LIST_ID aren't set, or if Mailchimp errors, we log and
+// continue — the email send must not depend on Mailchimp being healthy.
+//
+// Set the two env vars with:
+//   wrangler secret put MAILCHIMP_API_KEY   (looks like xxxx-us12)
+//   wrangler secret put MAILCHIMP_LIST_ID   (the audience / list id)
+async function addToMailchimp(env, email, archetype) {
+  if (!env.MAILCHIMP_API_KEY || !env.MAILCHIMP_LIST_ID) return null;
+
+  // The datacenter is the suffix after the dash in the API key (e.g. "us12").
+  const parts = String(env.MAILCHIMP_API_KEY).split("-");
+  const dc = parts[parts.length - 1];
+  if (!dc) {
+    console.warn("Mailchimp: couldn't parse datacenter from API key");
+    return null;
+  }
+
+  const url = `https://${dc}.api.mailchimp.com/3.0/lists/${env.MAILCHIMP_LIST_ID}/members`;
+  const auth = btoa(`anystring:${env.MAILCHIMP_API_KEY}`);
+
+  const body = {
+    email_address: email,
+    status: "subscribed",
+    tags: ["filter-for-the-phone", archetype].filter(Boolean),
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return await res.json();
+
+    // 400 with "already a list member" or "exists" is success-equivalent:
+    // they're already subscribed, nothing more we need to do.
+    const detail = await res.text();
+    if (res.status === 400 && /already a list member|exists/i.test(detail)) {
+      return { existing: true };
+    }
+
+    console.warn("Mailchimp add failed:", res.status, detail);
+    return null;
+  } catch (err) {
+    console.warn("Mailchimp add threw:", err?.message);
+    return null;
+  }
+}
+
 // ---------- email send: posts to Resend, throws on failure ----------
 async function sendCardEmail(env, { email, archetype, archetypeName, image }) {
   if (!env.RESEND_KEY) throw new Error("no_resend_key");
@@ -444,7 +499,14 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image }) {
     throw new Error(`resend_upstream:${res.status}:${detail}`);
   }
 
-  return await res.json();
+  const data = await res.json();
+
+  // Pipe the contact into Mailchimp. Awaited so the work completes within
+  // ctx.waitUntil() bounds; the helper swallows its own errors so this
+  // can never throw past the email send that already succeeded.
+  await addToMailchimp(env, email, archetype);
+
+  return data;
 }
 
 // ---------- helpers ----------
