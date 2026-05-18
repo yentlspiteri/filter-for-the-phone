@@ -23,12 +23,21 @@
 // Vars (set in wrangler.toml or via dashboard):
 //   FROM_EMAIL   — verified Resend sender, e.g. "Von Peach <hello@vonpeach.com>"
 
-// flux-pulid: identity-preserving generation. PuLID takes the face from
-// reference_image_url as a hard anchor and generates the editorial scene
-// around it. This is what Higgsfield-style face preservation uses under
-// the hood — text-prompted scene, identity locked.
-//   docs: https://fal.ai/models/fal-ai/flux-pulid
-const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
+// Two-stage portrait pipeline:
+//
+//   1) flux-pulid generates the editorial scene with identity anchored
+//      from the user's face (text-prompted, identity-locked).
+//        docs: https://fal.ai/models/fal-ai/flux-pulid
+//
+//   2) CodeFormer polishes the resulting face — restores skin detail,
+//      lifts the eyes, magazine-grade finish. Fidelity tuned to 0.7 so
+//      the identity from step 1 doesn't shift.
+//        docs: https://fal.ai/models/fal-ai/codeformer
+//
+// CodeFormer is best-effort: if it errors, we return the PuLID result
+// unchanged so the user still sees their portrait.
+const FAL_URL    = "https://fal.run/fal-ai/flux-pulid";
+const POLISH_URL = "https://fal.run/fal-ai/codeformer";
 const RESEND_URL = "https://api.resend.com/emails";
 
 // Universal flattering layer — appended to every archetype prompt. The
@@ -174,12 +183,44 @@ async function handlePortrait(request, env, cors) {
     }
 
     const data = await falRes.json();
-    const outUrl = data?.images?.[0]?.url;
-    if (!outUrl) return jsonResp({ error: "no_image", data }, 502, cors);
+    const pulidUrl = data?.images?.[0]?.url;
+    if (!pulidUrl) return jsonResp({ error: "no_image", data }, 502, cors);
 
-    // Proxy the image as inline base64 — avoids cross-origin canvas taint
-    // and keeps fal.ai's transient URLs off the client.
-    const imgRes = await fetch(outUrl);
+    // Step 2: CodeFormer face-detail polish (best-effort). Restores skin
+    // detail, lifts the eyes, polishes the face without shifting identity.
+    let finalUrl = pulidUrl;
+    try {
+      const polishRes = await fetch(POLISH_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Key ${env.FAL_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image_url: pulidUrl,
+          fidelity: 0.7,           // 0..1 — higher = stays closer to PuLID identity
+          upscaling: 2,            // 1x or 2x; 2x adds detail without much cost
+          face_upsample: true,
+          background_enhance: false,
+        }),
+      });
+      if (polishRes.ok) {
+        const polishData = await polishRes.json();
+        const polishedUrl =
+          polishData?.image?.url ||
+          polishData?.images?.[0]?.url ||
+          polishData?.output_url;
+        if (polishedUrl) finalUrl = polishedUrl;
+      } else {
+        console.warn("CodeFormer polish failed:", polishRes.status, await polishRes.text());
+      }
+    } catch (polishErr) {
+      console.warn("CodeFormer polish threw:", polishErr?.message);
+    }
+
+    // Proxy the (polished) image as inline base64 — avoids cross-origin
+    // canvas taint and keeps fal.ai's transient URLs off the client.
+    const imgRes = await fetch(finalUrl);
     if (!imgRes.ok) return jsonResp({ error: "image_fetch_failed", status: imgRes.status }, 502, cors);
     const buf = await imgRes.arrayBuffer();
     const dataUrl = `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
