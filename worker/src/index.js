@@ -253,7 +253,7 @@ async function runPortraitPipeline(env, image, archetype) {
         prompt,
         reference_image_url: image,   // user's face — PuLID anchors on this
         image_size: "portrait_4_3",   // editorial portrait crop
-        num_inference_steps: 24,
+        num_inference_steps: 16,      // dropped from 24 — main throughput win, ~4s saved per portrait
         guidance_scale: 4,
         true_cfg: 1,
         id_weight: 0.9,               // 0.9 = strong likeness + just enough latitude to flatter

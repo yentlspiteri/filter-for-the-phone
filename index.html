@@ -1234,9 +1234,12 @@ async function paintPortrait() {
 
 // Resize a canvas so the upload payload is sane on mobile networks. Phone
 // cameras can produce 1920×1080 frames which encode to ~800KB-1MB as
-// base64 — large enough to silently fail mid-upload on flaky LTE. Cap the
-// long edge at maxDim and use a slightly lower JPEG quality.
-function canvasToUploadDataURL(srcCanvas, maxDim = 1024, quality = 0.86) {
+// base64 — large enough to take 60-90s to upload on weak LTE. PuLID and
+// face-swap only need a recognizable face as a reference (not a high-res
+// image), so 640px long edge + quality 0.82 is plenty — payload drops to
+// ~80-120KB JPEG / ~110-160KB base64 / ~200KB JSON. Much faster on slow
+// networks.
+function canvasToUploadDataURL(srcCanvas, maxDim = 640, quality = 0.82) {
   const w = srcCanvas.width, h = srcCanvas.height;
   if (!w || !h) return srcCanvas.toDataURL("image/jpeg", quality);
   const scale = Math.min(1, maxDim / Math.max(w, h));
