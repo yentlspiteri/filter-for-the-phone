@@ -23,67 +23,59 @@
 // Vars (set in wrangler.toml or via dashboard):
 //   FROM_EMAIL   — verified Resend sender, e.g. "Von Peach <hello@vonpeach.com>"
 
-// kontext-max preserves identity better than the standard kontext model.
-// Slightly more expensive (~$0.08 vs $0.04) but face-preservation is the
-// whole point of this filter, so worth it.
-const FAL_URL = "https://fal.run/fal-ai/flux-pro/kontext/max";
+// flux-pulid: identity-preserving generation. PuLID takes the face from
+// reference_image_url as a hard anchor and generates the editorial scene
+// around it. This is what Higgsfield-style face preservation uses under
+// the hood — text-prompted scene, identity locked.
+//   docs: https://fal.ai/models/fal-ai/flux-pulid
+const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// Identity-first prompts framed as editorial PHOTOGRAPHY (not painting).
-// The bar: the user wants to upload this to LinkedIn. Photorealistic skin,
-// real-camera optics, sharp focus, magazine-cover production value.
-const IDENTITY_LOCK =
-  "Keep the EXACT same person from the input image. Same face, same hair, " +
-  "same skin tone, same age, same gender, same ethnicity, same facial " +
-  "features, same identity. Do NOT invent a new person, do NOT alter their " +
-  "appearance beyond wardrobe, expression and setting. The face must remain " +
-  "perfectly recognisable as the input subject — a friend should say " +
-  '"that is definitely them". Photorealistic skin texture with natural ' +
-  "pores and detail, real-camera image quality, sharp eyes, no painterly " +
-  "or illustrated style, no overly smooth retouched look. ";
-
+// With PuLID handling face identity natively (via reference_image_url +
+// id_weight), the prompts can focus purely on the editorial scene —
+// wardrobe, lighting, lens, mood. No more "preserve the face" preamble.
 const PROMPTS = {
   charmer:
-    IDENTITY_LOCK +
-    "Editorial magazine-cover portrait photograph of this same person — the " +
-    "kind of polished, flattering headshot they would be proud to upload " +
-    "to LinkedIn. Head-and-shoulders, looking straight to camera, a warm " +
-    "natural half-smile, eyes connecting with the viewer with quiet " +
-    "confidence. Soft warm studio lighting with a hint of golden-hour " +
-    "glow on the cheekbones, large soft key light from front-left, subtle " +
-    "rim light. Stylish contemporary professional wardrobe — earth-tone " +
-    "tailored blazer over a crisp shirt, optional simple jewellery. Soft " +
-    "warm bokeh background in muted creams and warm ambers, suggestion of " +
-    "a sunlit room. Shallow depth of field, 85mm portrait lens look. In " +
-    "the style of a Condé Nast or Vogue executive portrait. No text, no " +
-    "logos, no watermark.",
+    "Editorial magazine-cover portrait photograph, polished and flattering, " +
+    "the kind of headshot one would be proud to upload to LinkedIn. " +
+    "Head-and-shoulders, looking straight to camera, warm natural " +
+    "half-smile, eyes connecting with the viewer with quiet confidence. " +
+    "Soft warm studio lighting with a hint of golden-hour glow on the " +
+    "cheekbones, large soft key light from front-left, subtle rim light. " +
+    "Stylish contemporary professional wardrobe — earth-tone tailored " +
+    "blazer over a crisp shirt, optional simple jewellery. Soft warm " +
+    "bokeh background in muted creams and warm ambers, suggestion of a " +
+    "sunlit room. Shallow depth of field, 85mm portrait lens, sharp focus " +
+    "on the face, natural skin texture, photorealistic. In the style of " +
+    "a Condé Nast or Vogue executive portrait. No text, no logos, no " +
+    "watermark.",
   magician:
-    IDENTITY_LOCK +
-    "High-contrast editorial portrait photograph of this same person — the " +
-    "kind of striking, cinematic headshot they would be proud to upload " +
-    "to LinkedIn. Head-and-shoulders, looking straight to camera, a slight " +
-    "knowing half-smile and sharp intelligent eyes. Dramatic side-lighting " +
-    "with a single warm key light from the side and a defined rim light " +
-    "on the shoulder, deep but luminous shadows that still keep the face " +
-    "sharp and readable. Sleek modern professional wardrobe — black " +
-    "turtleneck or a structured dark blazer. Moody dark background with " +
-    "subtle architectural or fabric depth, faint smoke or texture. Shallow " +
-    "depth of field, 85mm portrait lens look. In the style of Platon's " +
-    "editorial portraits. No text, no logos, no watermark.",
+    "High-contrast editorial portrait photograph, striking and cinematic, " +
+    "the kind of headshot one would be proud to upload to LinkedIn. " +
+    "Head-and-shoulders, looking straight to camera, slight knowing " +
+    "half-smile, sharp intelligent eyes. Dramatic side-lighting with a " +
+    "single warm key light from the side and a defined rim light on the " +
+    "shoulder, deep but luminous shadows that still keep the face sharp " +
+    "and readable. Sleek modern professional wardrobe — black turtleneck " +
+    "or a structured dark blazer. Moody dark background with subtle " +
+    "architectural or fabric depth, faint smoke or texture. Shallow depth " +
+    "of field, 85mm portrait lens, sharp focus on the face, natural skin " +
+    "texture, photorealistic. In the style of Platon's editorial " +
+    "portraits. No text, no logos, no watermark.",
   alchemist:
-    IDENTITY_LOCK +
-    "Considered editorial profile-photograph portrait of this same person — " +
-    "the kind of thoughtful, premium headshot they would be proud to " +
-    "upload to LinkedIn. Head-and-shoulders, looking straight to camera, " +
-    "a calm steady gaze that suggests deep expertise, a faint hint of a " +
-    "smile at the eyes. Warm soft lighting with a gentle golden tone, " +
-    "large soft key light from front-right. Refined intellectual " +
-    "professional wardrobe — fine tweed jacket or quality knit, considered " +
-    "details, optionally subtle glasses. Softly defocused background of " +
-    "a warm-toned study or wood-panelled library, books or artisan tools " +
+    "Considered editorial profile-photograph portrait, thoughtful and " +
+    "premium, the kind of headshot one would be proud to upload to " +
+    "LinkedIn. Head-and-shoulders, looking straight to camera, a calm " +
+    "steady gaze that suggests deep expertise, a faint hint of a smile at " +
+    "the eyes. Warm soft lighting with a gentle golden tone, large soft " +
+    "key light from front-right. Refined intellectual professional " +
+    "wardrobe — fine tweed jacket or quality knit, considered details, " +
+    "optionally subtle glasses. Softly defocused background of a " +
+    "warm-toned study or wood-panelled library, books or artisan tools " +
     "just visible in the bokeh. Shallow depth of field, 85mm portrait " +
-    "lens look. In the style of a New Yorker or Sunday Times Magazine " +
-    "profile portrait. No text, no logos, no watermark.",
+    "lens, sharp focus on the face, natural skin texture, photorealistic. " +
+    "In the style of a New Yorker or Sunday Times Magazine profile " +
+    "portrait. No text, no logos, no watermark.",
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
@@ -151,11 +143,18 @@ async function handlePortrait(request, env, cors) {
       },
       body: JSON.stringify({
         prompt,
-        image_url: image,           // flux-kontext accepts data URLs
-        guidance_scale: 2.5,        // lower = stays closer to input face
+        reference_image_url: image,   // user's face — PuLID anchors on this
+        image_size: "portrait_4_3",   // editorial portrait crop
+        num_inference_steps: 24,
+        guidance_scale: 4,
+        true_cfg: 1,
+        id_weight: 1.0,               // 1.0 = strong face match; raise for stricter
         num_images: 1,
         output_format: "jpeg",
-        safety_tolerance: "2",
+        enable_safety_checker: true,
+        negative_prompt:
+          "blurry, out of focus, low quality, distorted face, wrong identity, " +
+          "different person, cartoon, painting, illustration, anime, watermark, text",
       }),
     });
 

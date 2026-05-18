@@ -639,7 +639,7 @@
       <img id="resultPreview" alt="Your archetype card" />
     </div>
     <div class="btnrow">
-      <button class="btn" id="emailMeBtn">Email me my card</button>
+      <button class="btn" id="emailMeBtn">Email me my photo</button>
       <button class="btn ghost" id="shareBtn">Share</button>
       <button class="btn ghost" id="againBtn">Try again</button>
       <div class="hint" id="shareHint"></div>
@@ -1248,12 +1248,6 @@ async function renderTarotCard() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(arche.name.toUpperCase(), cardX + cardW / 2, nameY);
-
-  // Tagline under the card — General Sans, brand peach
-  ctx.fillStyle = "rgba(255,214,187,0.92)";
-  ctx.font = "500 30px 'General Sans', sans-serif";
-  ctx.textAlign = "center";
-  wrapText(ctx, arche.blurb, W / 2, cardY + cardH + 70, W - 200, 40);
 
   // ----- Von Peach logo (tinted peach), centered at the foot -----
   await brandLogoReady;
