@@ -23,42 +23,52 @@
 // Vars (set in wrangler.toml or via dashboard):
 //   FROM_EMAIL   — verified Resend sender, e.g. "Von Peach <hello@vonpeach.com>"
 
-const FAL_URL = "https://fal.run/fal-ai/flux-pro/kontext";
+// kontext-max preserves identity better than the standard kontext model.
+// Slightly more expensive (~$0.08 vs $0.04) but face-preservation is the
+// whole point of this filter, so worth it.
+const FAL_URL = "https://fal.run/fal-ai/flux-pro/kontext/max";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// Each archetype is a distinct character with its own setting, lighting,
-// wardrobe, expression and Old Master reference — the differences are large
-// enough that a viewer can tell them apart at a glance.
+// Identity-first prompts: keep the EXACT same person, just paint the
+// costume and setting around them. Identity preservation goes first; the
+// archetype-specific costume + scene comes second.
+const IDENTITY_LOCK =
+  "Keep the EXACT same person from the input image. Same face, same hair, " +
+  "same skin tone, same age, same gender, same ethnicity, same overall " +
+  "likeness — do NOT invent a new person. The face must remain perfectly " +
+  "recognizable as the input subject. ";
+
 const PROMPTS = {
   charmer:
-    "Transform this person into a charismatic Baroque courtier in an oil-painted royal " +
-    "portrait. Head-and-shoulders composition. A soft warm welcoming smile, relaxed " +
-    "confident eyes. Ornate gilded lace collar with pearl trim, embroidered velvet robes " +
-    "in deep wine red with shimmering gold thread, an elegant pearl earring. Honey-amber " +
-    "golden-hour chamber light, soft warm bokeh of a candlelit gilded hall behind. " +
-    "Painterly brushstrokes, in the tradition of Velázquez and Boucher. Museum quality. " +
-    "Preserve the exact face, hair and likeness of the person in the input image. " +
-    "No text, no logos, no watermark.",
+    IDENTITY_LOCK +
+    "Paint this same person as a charismatic Baroque courtier in an oil-painted royal " +
+    "portrait. Head-and-shoulders, looking towards camera. Their natural expression " +
+    "softened into a warm welcoming half-smile. Ornate gilded lace collar with pearl " +
+    "trim, embroidered velvet robes in deep wine red with shimmering gold thread, an " +
+    "elegant pearl earring. Honey-amber golden-hour chamber light, soft warm bokeh of a " +
+    "candlelit gilded hall behind. Painterly brushstrokes, in the tradition of Velázquez " +
+    "and Boucher. Museum quality. No text, no logos, no watermark.",
   magician:
-    "Transform this person into a theatrical Baroque illusionist in a dramatic oil-painted " +
-    "royal portrait. Head-and-shoulders composition. A knowing slight smirk, sharp " +
-    "piercing intelligent eyes that seem to see through the viewer. Heavy black velvet " +
+    IDENTITY_LOCK +
+    "Paint this same person as a theatrical Baroque illusionist in a dramatic oil-painted " +
+    "royal portrait. Head-and-shoulders, looking towards camera. Their natural expression " +
+    "reshaped into a knowing slight smirk and a sharp piercing gaze. Heavy black velvet " +
     "cape with intricate silver-thread brocade and an ornate ruff collar, a single deep " +
     "jewel pendant at the throat. Strong chiaroscuro lighting with one warm key light " +
-    "from the side, the rest in deep velvet shadow, faint trails of candle smoke and the " +
+    "from the side, rest in deep velvet shadow, faint trails of candle smoke and the " +
     "ghosts of arcane symbols in the dark background. In the tradition of Caravaggio and " +
-    "Rembrandt. Museum quality. Preserve the exact face, hair and likeness of the person " +
-    "in the input image. No text, no logos, no watermark.",
+    "Rembrandt. Museum quality. No text, no logos, no watermark.",
   alchemist:
-    "Transform this person into a wise Renaissance alchemist-scholar in an oil-painted " +
-    "study portrait. Head-and-shoulders composition. A contemplative steady expression, " +
-    "deep thoughtful eyes, a quiet inner authority. Heavy scholar's robes in burnished " +
-    "gold and deep crimson with a fur-trimmed collar, an alchemical pendant on a chain. " +
-    "Candlelit warm amber lighting, the background a softly defocused laboratory — copper " +
-    "distillation apparatus, brass instruments, stacks of old leather-bound books, a glass " +
-    "alembic catching the firelight. In the tradition of Joseph Wright of Derby and " +
-    "Vermeer's Astronomer. Museum quality. Preserve the exact face, hair and likeness of " +
-    "the person in the input image. No text, no logos, no watermark.",
+    IDENTITY_LOCK +
+    "Paint this same person as a wise Renaissance alchemist-scholar in an oil-painted " +
+    "study portrait. Head-and-shoulders, looking towards camera. Their natural expression " +
+    "settled into a contemplative steady gaze, a quiet inner authority. Heavy scholar's " +
+    "robes in burnished gold and deep crimson with a fur-trimmed collar, an alchemical " +
+    "pendant on a chain. Candlelit warm amber lighting, background a softly defocused " +
+    "laboratory — copper distillation apparatus, brass instruments, stacks of old " +
+    "leather-bound books, a glass alembic catching the firelight. In the tradition of " +
+    "Joseph Wright of Derby and Vermeer's Astronomer. Museum quality. No text, no logos, " +
+    "no watermark.",
 };
 
 // Short, archetype-specific notes sent in the email body alongside the card.
@@ -127,7 +137,7 @@ async function handlePortrait(request, env, cors) {
       body: JSON.stringify({
         prompt,
         image_url: image,           // flux-kontext accepts data URLs
-        guidance_scale: 3.5,
+        guidance_scale: 2.5,        // lower = stays closer to input face
         num_images: 1,
         output_format: "jpeg",
         safety_tolerance: "2",
