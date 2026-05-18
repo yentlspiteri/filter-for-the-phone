@@ -425,7 +425,6 @@
     </div>
     <div class="footer-mark">
       <span class="brand-logo sm" aria-label="Von Peach"></span>
-      <span class="tag" style="margin-left:4px;">vonpeach.com</span>
     </div>
   </div>
 </div>
@@ -875,13 +874,13 @@ async function renderTarotCard() {
   ctx.textAlign = "center";
   wrapText(ctx, arche.blurb, W / 2, cardY + cardH + 70, W - 200, 40);
 
-  // ----- Von Peach logo (tinted peach) + URL -----
+  // ----- Von Peach logo (tinted peach), centered at the foot -----
   await brandLogoReady;
   if (brandLogo.naturalWidth) {
-    const logoH = 56;
+    const logoH = 64;
     const logoW = logoH * (brandLogo.naturalWidth / brandLogo.naturalHeight);
     const lx = (W - logoW) / 2;
-    const ly = H - 130;
+    const ly = H - logoH - 70;
     // Tint via offscreen canvas: draw logo, then fill with brand peach using source-in
     const off = document.createElement("canvas");
     off.width = Math.ceil(logoW);
@@ -896,14 +895,10 @@ async function renderTarotCard() {
     ctx.globalAlpha = 1;
   } else {
     ctx.fillStyle = "rgba(255,214,187,0.92)";
-    ctx.font = "800 36px 'Aileron', sans-serif";
+    ctx.font = "800 40px 'Aileron', sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("VON PEACH", W / 2, H - 95);
+    ctx.fillText("VON PEACH", W / 2, H - 80);
   }
-  ctx.font = "500 22px 'General Sans', sans-serif";
-  ctx.fillStyle = "rgba(255,214,187,0.65)";
-  ctx.textAlign = "center";
-  ctx.fillText("vonpeach.com", W / 2, H - 50);
 
   // Push into preview <img>
   const dataUrl = c.toDataURL("image/jpeg", 0.92);
