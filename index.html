@@ -598,6 +598,48 @@
     0%, 100% { transform: scale(0.7); opacity: 0.45; }
     50%      { transform: scale(1.15); opacity: 1; }
   }
+
+  /* ChatGPT-style loading skeleton: a 9:16 card-shaped placeholder
+     showing the user's blurred selfie with a diagonal shimmer sweep
+     animating across it. Sits where the eventual tarot card will be. */
+  .painting-skeleton {
+    width: min(260px, 58vw);
+    aspect-ratio: 9 / 16;
+    border-radius: 18px;
+    overflow: hidden;
+    position: relative;
+    margin: 0 auto 24px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,214,187,0.08);
+    background: rgba(26,6,16,0.6);
+  }
+  .painting-skeleton-img {
+    position: absolute; inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(14px) brightness(0.78) saturate(1.05);
+    transform: scale(1.2);
+  }
+  .painting-skeleton-shimmer {
+    position: absolute; inset: 0;
+    background: linear-gradient(
+      115deg,
+      transparent 25%,
+      rgba(255,214,187,0.18) 42%,
+      rgba(253,136,57,0.32) 50%,
+      rgba(255,214,187,0.18) 58%,
+      transparent 75%
+    );
+    background-size: 250% 100%;
+    animation: skeleton-shimmer 2.4s ease-in-out infinite;
+    mix-blend-mode: screen;
+  }
+  @keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -100% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .painting-skeleton-shimmer { animation: none; opacity: 0.25; }
+  }
   .painting-hint {
     margin-top: 26px;
     font-family: "General Sans", sans-serif;
@@ -827,8 +869,11 @@
     <div class="painting-veil"></div>
     <div class="painting-stack" id="paintingStack">
       <div class="painting-loading" id="paintingLoading">
+        <div class="painting-skeleton" id="paintingSkeleton">
+          <div class="painting-skeleton-img" id="paintingSkeletonImg"></div>
+          <div class="painting-skeleton-shimmer"></div>
+        </div>
         <div class="painting-eyebrow">Developing your portrait</div>
-        <div class="painting-dots"><span></span><span></span><span></span></div>
         <p class="painting-hint" id="paintingHint">Catching the light…</p>
       </div>
     </div>
@@ -953,6 +998,7 @@ const paintingBg = $("paintingBg");
 const paintingStack = $("paintingStack");
 const paintingLoading = $("paintingLoading");
 const paintingHint = $("paintingHint");
+const paintingSkeletonImg = $("paintingSkeletonImg");
 const emailMeBtn = $("emailMeBtn");
 const emailModal = $("emailModal");
 const emailClose = $("emailClose");
@@ -1201,9 +1247,12 @@ function captureFrozenFrame() {
 async function paintPortrait() {
   usingAIPortrait = false;
 
-  // Show the loader with the captured photo blurred behind it
+  // Show the loader with the captured photo blurred behind it AND inside
+  // the card-shaped skeleton (the "this is where your portrait lands" cue).
   try {
-    paintingBg.style.backgroundImage = `url(${frozenFrame.toDataURL("image/jpeg", 0.85)})`;
+    const bgUrl = `url(${frozenFrame.toDataURL("image/jpeg", 0.85)})`;
+    paintingBg.style.backgroundImage = bgUrl;
+    paintingSkeletonImg.style.backgroundImage = bgUrl;
   } catch (_) { /* tainted canvas — leave the loader bg empty */ }
   paintingScreen.classList.add("show");
   startPaintingMessages();
