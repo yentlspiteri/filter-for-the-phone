@@ -1494,12 +1494,26 @@ async function renderTarotCard() {
   // Top right heart
   drawHeart(ctx, cardX + cardW - 64, cardY + 72, 16, "#99112F");
 
+  // Ornate corner flourishes inside the inner border — small curls in
+  // each of the four corners. Adds Rider-Waite-ish ornamental weight.
+  drawCornerFlourish(ctx, cardX + 32, cardY + 130,           1,  1);  // TL — below the XIII row
+  drawCornerFlourish(ctx, cardX + cardW - 32, cardY + 130,  -1,  1);  // TR
+  drawCornerFlourish(ctx, cardX + 32, cardY + cardH - 220,   1, -1);  // BL
+  drawCornerFlourish(ctx, cardX + cardW - 32, cardY + cardH - 220, -1, -1); // BR
+
   // ----- Photo window inside card -----
   const photoMargin = 60;
   const photoX = cardX + photoMargin;
   const photoY = cardY + 130;
   const photoW = cardW - photoMargin * 2;
   const photoH = cardH - photoMargin - 130 - 180; // leave room for name band
+
+  // Sunburst rays radiating from the photo centre out to the inner border —
+  // sits behind everything, visible in the margins around the photo.
+  drawSunburst(ctx, photoX + photoW/2, photoY + photoH/2, cardW * 0.46);
+
+  // Star sprinkles in the margins (between photo edge and inner border)
+  drawCardStars(ctx, cardX, cardY, cardW, cardH);
 
   // Clip photo to rounded rect
   ctx.save();
@@ -1545,13 +1559,19 @@ async function renderTarotCard() {
   }
   ctx.restore();
 
-  // ----- Archetype name band — Aileron, brand wine -----
+  // ----- Archetype name band — Aileron, brand wine, flanked by stars -----
   const nameY = cardY + cardH - 110;
   ctx.fillStyle = "#99112F";
   ctx.font = "800 84px 'Aileron', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(arche.name.toUpperCase(), cardX + cardW / 2, nameY);
+  const nameText = arche.name.toUpperCase();
+  ctx.fillText(nameText, cardX + cardW / 2, nameY);
+  // Star flourishes flanking the title
+  const nameWidth = ctx.measureText(nameText).width;
+  const starOffset = nameWidth / 2 + 48;
+  drawStar(ctx, cardX + cardW / 2 - starOffset, nameY, 12, "#99112F");
+  drawStar(ctx, cardX + cardW / 2 + starOffset, nameY, 12, "#99112F");
 
   // ----- Von Peach logo (tinted peach), centered at the foot -----
   await brandLogoReady;
@@ -1647,6 +1667,100 @@ function drawFlowerDoodle(ctx, cx, cy, r, color) {
   ctx.arc(cx, cy, r*0.18, 0, Math.PI*2);
   ctx.fillStyle = color;
   ctx.fill();
+  ctx.restore();
+}
+
+// 16 thin rays fanning out from a point — the classic Rider-Waite
+// sunburst behind the figure. Drawn at low opacity so it reads as an
+// ambient mystical halo rather than a literal sun.
+function drawSunburst(ctx, cx, cy, radius) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = "rgba(153,17,47,0.22)";
+  ctx.lineWidth = 1.8;
+  const rays = 24;
+  for (let i = 0; i < rays; i++) {
+    const angle = (i / rays) * Math.PI * 2;
+    const inner = radius * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+    ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// 5-point filled star — classic occult vocabulary, used to flank the
+// archetype title and dotted in the margins.
+function drawStar(ctx, cx, cy, r, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const angle = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    const rad = (i % 2 === 0) ? r : r * 0.4;
+    const x = cx + Math.cos(angle) * rad;
+    const y = cy + Math.sin(angle) * rad;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Small scattering of stars inside the inner border, in the margins
+// around the photo (not crowding it).
+function drawCardStars(ctx, cardX, cardY, cardW, cardH) {
+  const positions = [
+    // Top margin (above the photo, beside the XIII/∞/♥ row)
+    { x: cardX + cardW * 0.18, y: cardY + 95, r: 6 },
+    { x: cardX + cardW * 0.82, y: cardY + 95, r: 6 },
+    // Mid-side margins
+    { x: cardX + 45, y: cardY + cardH * 0.40, r: 5 },
+    { x: cardX + cardW - 45, y: cardY + cardH * 0.40, r: 5 },
+    { x: cardX + 45, y: cardY + cardH * 0.62, r: 4 },
+    { x: cardX + cardW - 45, y: cardY + cardH * 0.62, r: 4 },
+    // Bottom margin (around archetype name handled separately)
+    { x: cardX + cardW * 0.22, y: cardY + cardH - 50, r: 5 },
+    { x: cardX + cardW * 0.78, y: cardY + cardH - 50, r: 5 },
+  ];
+  for (const p of positions) drawStar(ctx, p.x, p.y, p.r, "rgba(153,17,47,0.85)");
+}
+
+// Ornate corner curl — two bezier strokes + a small dot anchor. dirX/dirY
+// (±1) determine which corner the curl opens into. Used inside each
+// corner of the inner border for Rider-Waite-style decorative weight.
+function drawCornerFlourish(ctx, x, y, dirX, dirY) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(dirX, dirY);
+  ctx.strokeStyle = "#99112F";
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+
+  // Horizontal arm with a small curl tail
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(18, 0, 36, 2, 46, 14);
+  ctx.bezierCurveTo(52, 22, 48, 30, 38, 30);
+  ctx.bezierCurveTo(30, 30, 30, 22, 36, 22);
+  ctx.stroke();
+
+  // Vertical arm with matching small curl tail
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(0, 18, 2, 36, 14, 46);
+  ctx.bezierCurveTo(22, 52, 30, 48, 30, 38);
+  ctx.bezierCurveTo(30, 30, 22, 30, 22, 36);
+  ctx.stroke();
+
+  // Small filled dot at the inner pivot
+  ctx.beginPath();
+  ctx.arc(5, 5, 3, 0, Math.PI * 2);
+  ctx.fillStyle = "#99112F";
+  ctx.fill();
+
   ctx.restore();
 }
 
