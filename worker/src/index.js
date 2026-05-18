@@ -50,7 +50,9 @@
 // Stages 2–4 are best-effort: if any errors, we fall through with the
 // most recent successful image so the user always sees a portrait.
 const FAL_URL       = "https://fal.run/fal-ai/flux-pulid";
-const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/face-swap";
+// easel-ai is its own org on fal.ai (NOT nested under fal-ai). Using
+// fal.run/fal-ai/easel-ai/* returns 404 "Application 'easel-ai' not found".
+const FACE_SWAP_URL = "https://fal.run/easel-ai/face-swap";
 const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
 const REALISM_URL   = "https://fal.run/fal-ai/clarity-upscaler";
 const RESEND_URL = "https://api.resend.com/emails";
