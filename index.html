@@ -315,21 +315,22 @@
     color: var(--peach);
   }
 
-  /* Result screen: logo on top, card preview as hero, compact buttons */
+  /* Result screen: card preview as hero, compact buttons, centered */
   #screenResult {
-    padding: 12px 16px 14px;
-    justify-content: flex-start;
-    gap: 8px;
+    padding: 14px 16px 16px;
+    justify-content: center;
+    gap: 14px;
     overflow-y: auto;
   }
-  .result-logo { margin: 2px auto 4px; }
   /* Size the wrap from available HEIGHT so aspect-ratio derives a true 9:16
-     width — prevents the flex column from crushing it. */
+     width — prevents the flex column from crushing it. max-width caps the
+     width so on narrow phones the wrap shrinks (and aspect-ratio reduces
+     height to match). */
   #resultPreviewWrap {
-    width: auto;
-    height: clamp(300px, calc(100dvh - 230px), 640px);
+    width: 100%;
+    max-width: 460px;
+    max-height: calc(100dvh - 170px);
     aspect-ratio: 9 / 16;
-    max-width: 100%;
     flex-shrink: 0;
     margin: 0;
     border-radius: 22px;
@@ -475,7 +476,6 @@
 
   <!-- result -->
   <div class="screen" id="screenResult">
-    <span class="brand-logo md result-logo" aria-label="Von Peach"></span>
     <div id="resultPreviewWrap">
       <img id="resultPreview" alt="Your archetype card" />
     </div>
