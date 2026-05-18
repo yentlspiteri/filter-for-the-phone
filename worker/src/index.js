@@ -49,9 +49,15 @@ const RESEND_URL = "https://api.resend.com/emails";
 
 // Universal flattering layer — appended to every archetype prompt. The
 // brief is "obviously the same person, on their best day". Magazine-grade
-// retouching, glowing skin, bright eyes, softly flattering light.
+// retouching, glowing skin, bright eyes, softly flattering light, AND the
+// subject's exact hair from the reference image (PuLID anchors the face
+// but not the hair — without this the model invents a new hairstyle).
 const FLATTERING =
-  " The subject looks their absolute best — clear glowing skin, bright " +
+  " The subject's hair is preserved exactly as in the reference image — " +
+  "same hairstyle, same length, same colour, same texture, same parting, " +
+  "same volume. Do NOT restyle, recolour, lengthen, shorten, smooth, " +
+  "curl or straighten the hair. " +
+  "The subject looks their absolute best — clear glowing skin, bright " +
   "well-rested eyes, sharp jawline, a subtle natural glow, confident and " +
   "magnetic. Professional magazine-quality retouching that softens any " +
   "blemishes, dark circles or shadows under the eyes while keeping skin " +
@@ -180,7 +186,10 @@ async function handlePortrait(request, env, cors) {
           "on face, harsh under-lighting, double chin, unflattering angle, " +
           "low angle from below, oily skin, blemishes, acne, red skin, " +
           "wrinkled, aged, dull skin, washed out, flat lighting, ugly, " +
-          "asymmetric face, deformed, bad anatomy",
+          "asymmetric face, deformed, bad anatomy, " +
+          "different hairstyle, restyled hair, recoloured hair, dyed hair, " +
+          "longer hair, shorter hair, changed haircut, wig, hat, headwear, " +
+          "head covering, hair extensions",
       }),
     });
 
