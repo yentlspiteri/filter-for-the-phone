@@ -23,21 +23,28 @@
 // Vars (set in wrangler.toml or via dashboard):
 //   FROM_EMAIL   — verified Resend sender, e.g. "Von Peach <hello@vonpeach.com>"
 
-// Two-stage portrait pipeline:
+// Three-stage portrait pipeline — the Higgsfield/Aragon approach:
 //
 //   1) flux-pulid generates the editorial scene with identity anchored
 //      from the user's face (text-prompted, identity-locked).
 //        docs: https://fal.ai/models/fal-ai/flux-pulid
 //
-//   2) CodeFormer polishes the resulting face — restores skin detail,
-//      lifts the eyes, magazine-grade finish. Fidelity tuned to 0.7 so
-//      the identity from step 1 doesn't shift.
+//   2) face-swap copies the user's ACTUAL face geometry from the input
+//      selfie onto the PuLID result. PuLID gets the scene right but
+//      can still drift on identity — this nails it.
+//        docs: https://fal.ai/models/fal-ai/easel-ai/face-swap
+//
+//   3) CodeFormer polishes the face-swapped result — restores skin
+//      detail, lifts the eyes, magazine-grade finish. Operates on the
+//      *swapped* face so the polish applies to the right identity.
 //        docs: https://fal.ai/models/fal-ai/codeformer
 //
-// CodeFormer is best-effort: if it errors, we return the PuLID result
-// unchanged so the user still sees their portrait.
-const FAL_URL    = "https://fal.run/fal-ai/flux-pulid";
-const POLISH_URL = "https://fal.run/fal-ai/codeformer";
+// Stages 2 and 3 are best-effort: if either errors, we fall through
+// with the most recent successful image so the user always sees a
+// portrait.
+const FAL_URL       = "https://fal.run/fal-ai/flux-pulid";
+const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/face-swap";
+const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
 const RESEND_URL = "https://api.resend.com/emails";
 
 // Universal flattering layer — appended to every archetype prompt. The
@@ -186,9 +193,39 @@ async function handlePortrait(request, env, cors) {
     const pulidUrl = data?.images?.[0]?.url;
     if (!pulidUrl) return jsonResp({ error: "no_image", data }, 502, cors);
 
-    // Step 2: CodeFormer face-detail polish (best-effort). Restores skin
-    // detail, lifts the eyes, polishes the face without shifting identity.
-    let finalUrl = pulidUrl;
+    // The "current best" URL — each stage overwrites if it succeeds.
+    let workingUrl = pulidUrl;
+
+    // Step 2: Face-swap. Copies the user's actual face geometry from the
+    // input selfie onto the PuLID result. Locks identity.
+    try {
+      const swapRes = await fetch(FACE_SWAP_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Key ${env.FAL_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          source_image_url: image,     // user's selfie (face to use)
+          target_image_url: pulidUrl,  // PuLID scene (face to replace)
+        }),
+      });
+      if (swapRes.ok) {
+        const swapData = await swapRes.json();
+        const swappedUrl =
+          swapData?.image?.url ||
+          swapData?.images?.[0]?.url ||
+          swapData?.output_url;
+        if (swappedUrl) workingUrl = swappedUrl;
+      } else {
+        console.warn("Face-swap failed:", swapRes.status, await swapRes.text());
+      }
+    } catch (swapErr) {
+      console.warn("Face-swap threw:", swapErr?.message);
+    }
+
+    // Step 3: CodeFormer face-detail polish (best-effort). Operates on the
+    // face-swapped result so the polish applies to the user's actual face.
     try {
       const polishRes = await fetch(POLISH_URL, {
         method: "POST",
@@ -197,8 +234,8 @@ async function handlePortrait(request, env, cors) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          image_url: pulidUrl,
-          fidelity: 0.7,           // 0..1 — higher = stays closer to PuLID identity
+          image_url: workingUrl,
+          fidelity: 0.7,           // 0..1 — higher = stays closer to swapped face
           upscaling: 2,            // 1x or 2x; 2x adds detail without much cost
           face_upsample: true,
           background_enhance: false,
@@ -210,7 +247,7 @@ async function handlePortrait(request, env, cors) {
           polishData?.image?.url ||
           polishData?.images?.[0]?.url ||
           polishData?.output_url;
-        if (polishedUrl) finalUrl = polishedUrl;
+        if (polishedUrl) workingUrl = polishedUrl;
       } else {
         console.warn("CodeFormer polish failed:", polishRes.status, await polishRes.text());
       }
@@ -218,9 +255,9 @@ async function handlePortrait(request, env, cors) {
       console.warn("CodeFormer polish threw:", polishErr?.message);
     }
 
-    // Proxy the (polished) image as inline base64 — avoids cross-origin
-    // canvas taint and keeps fal.ai's transient URLs off the client.
-    const imgRes = await fetch(finalUrl);
+    // Proxy the final image as inline base64 — avoids cross-origin canvas
+    // taint and keeps fal.ai's transient URLs off the client.
+    const imgRes = await fetch(workingUrl);
     if (!imgRes.ok) return jsonResp({ error: "image_fetch_failed", status: imgRes.status }, 502, cors);
     const buf = await imgRes.arrayBuffer();
     const dataUrl = `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
