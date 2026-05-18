@@ -381,6 +381,25 @@
     border-radius: 22px;
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+    /* Tarot reveal — settles in from a small soft state, then never stops
+       gently floating like a card hovering above the table. */
+    animation:
+      tarot-reveal 1.1s cubic-bezier(0.16, 1, 0.3, 1) both,
+      tarot-float 6s ease-in-out 1.1s infinite;
+    transform-origin: center;
+    will-change: transform;
+  }
+  @keyframes tarot-reveal {
+    0%   { transform: scale(0.85) rotate(-3deg) translateY(8px); opacity: 0; filter: blur(6px); }
+    60%  { transform: scale(1.02) rotate(0.6deg) translateY(-2px); opacity: 1; filter: blur(0); }
+    100% { transform: scale(1) rotate(0) translateY(0); opacity: 1; filter: blur(0); }
+  }
+  @keyframes tarot-float {
+    0%, 100% { transform: rotate(-0.7deg) translateY(-3px); }
+    50%      { transform: rotate(0.7deg)  translateY(3px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #resultPreviewWrap { animation: none; }
   }
   #resultPreview {
     width: 100%; height: 100%;
@@ -468,6 +487,18 @@
     filter: blur(28px) brightness(0.65) saturate(1.05);
     transform: scale(1.15);
     opacity: 0.85;
+    /* Slow Ken-Burns drift so the loader has constant motion even when
+       the dots and hint feel still. */
+    animation: painting-bg-drift 14s ease-in-out infinite;
+  }
+  @keyframes painting-bg-drift {
+    0%   { transform: scale(1.15) translate(0%, 0%); }
+    33%  { transform: scale(1.22) translate(-1.5%, -1.5%); }
+    66%  { transform: scale(1.20) translate(1.5%, 1%); }
+    100% { transform: scale(1.15) translate(0%, 0%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .painting-bg { animation: none; }
   }
   .painting-veil {
     position: absolute; inset: 0;
@@ -485,7 +516,7 @@
     text-align: center;
     padding: 28px;
   }
-  .painting-loading, .painting-confirm {
+  .painting-loading {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -520,105 +551,14 @@
   .painting-hint {
     margin-top: 26px;
     font-family: "General Sans", sans-serif;
-    font-size: 13px;
-    color: rgba(255,214,187,0.7);
+    font-size: 14px;
+    color: rgba(255,214,187,0.78);
     max-width: 320px;
     letter-spacing: 0.02em;
+    min-height: 1.4em;
+    transition: opacity 420ms ease;
+    font-style: italic;
   }
-  /* Skip-the-wait — drop email mid-loader, we send when done. Hidden for
-     the first 30s so most users just wait; revealed for the impatient. */
-  .painting-skip {
-    margin-top: 36px;
-    width: 100%;
-    max-width: 360px;
-    text-align: center;
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(6px);
-    transition: opacity 500ms ease, transform 500ms ease, visibility 0s linear 500ms;
-  }
-  .painting-skip.visible {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-    transition: opacity 500ms ease, transform 500ms ease, visibility 0s linear 0s;
-  }
-  .painting-skip-trigger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
-    color: #fff;
-    border: 0;
-    font-family: "Aileron", "General Sans", sans-serif;
-    font-weight: 800;
-    font-size: 13px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    padding: 14px 24px;
-    border-radius: 999px;
-    cursor: pointer;
-    box-shadow: 0 10px 26px rgba(204,28,14,0.32);
-    transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
-  }
-  .painting-skip-trigger svg {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-  }
-  .painting-skip-trigger:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.06);
-    box-shadow: 0 14px 30px rgba(204,28,14,0.40);
-  }
-  .painting-skip-trigger:active { transform: translateY(0); filter: brightness(0.96); }
-  .painting-skip-form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-  }
-  .painting-skip-form input[type="email"] {
-    width: 100%;
-    padding: 12px 14px;
-    border-radius: 10px;
-    border: 1.5px solid rgba(255,214,187,0.30);
-    background: rgba(255,214,187,0.08);
-    color: var(--peach);
-    font-family: "General Sans", sans-serif;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 140ms, background 140ms;
-  }
-  .painting-skip-form input[type="email"]:focus {
-    border-color: var(--orange);
-    background: rgba(255,214,187,0.12);
-  }
-  .painting-skip-form input[type="email"]::placeholder { color: rgba(255,214,187,0.45); }
-  .painting-skip-form button[type="submit"] {
-    background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
-    color: #fff;
-    border: 0;
-    font-family: "Aileron", "General Sans", sans-serif;
-    font-weight: 800;
-    font-size: 12px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    padding: 12px 18px;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-  .painting-skip-form button[type="submit"]:disabled { opacity: 0.55; cursor: default; }
-  .painting-skip-state {
-    margin-top: 10px;
-    font-family: "General Sans", sans-serif;
-    font-size: 12px;
-    min-height: 1.2em;
-    color: rgba(255,214,187,0.75);
-  }
-  .painting-skip-state.error   { color: #ff8a7e; }
-  .painting-skip-state.success { color: var(--orange); }
 
   /* Email-capture button arrangement: primary full-width, secondaries split */
   #screenResult .btnrow {
@@ -830,39 +770,10 @@
     <div class="painting-bg" id="paintingBg"></div>
     <div class="painting-veil"></div>
     <div class="painting-stack" id="paintingStack">
-      <!-- Default loader content -->
       <div class="painting-loading" id="paintingLoading">
         <div class="painting-eyebrow">Developing your portrait</div>
         <div class="painting-dots"><span></span><span></span><span></span></div>
-        <p class="painting-hint">A few seconds — sit tight.</p>
-
-        <!-- Skip-the-wait: drop your email, we send the portrait when ready. -->
-        <div class="painting-skip">
-          <button type="button" class="painting-skip-trigger" id="paintingSkipBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="14" rx="2"/>
-              <polyline points="3 7 12 13 21 7"/>
-            </svg>
-            <span>Email me my photo</span>
-          </button>
-          <form class="painting-skip-form" id="paintingSkipForm" style="display:none;">
-            <input type="email" id="paintingSkipInput" required
-                   placeholder="you@example.com"
-                   autocomplete="email" inputmode="email" />
-            <button type="submit" id="paintingSkipSubmit">Send when ready</button>
-          </form>
-          <div class="painting-skip-state" id="paintingSkipState" aria-live="polite"></div>
-        </div>
-      </div>
-
-      <!-- Skip-confirmation, shown after the user hands off to email -->
-      <div class="painting-confirm" id="paintingConfirm" style="display:none;">
-        <div class="painting-eyebrow">On its way</div>
-        <p class="painting-hint" style="margin-top:18px;">
-          We'll send your portrait to <strong id="paintingConfirmEmail" style="color:var(--peach);"></strong>
-          in a few minutes. Feel free to close this window.
-        </p>
-        <button class="btn ghost" style="margin-top:24px;" type="button" id="skipAgainBtn">Try another reading</button>
+        <p class="painting-hint" id="paintingHint">Catching the light…</p>
       </div>
     </div>
   </div>
@@ -936,7 +847,6 @@ const COOLDOWN_MS = 550;
 const WORKER_BASE          = "https://vonpeach-portrait.vonpeach.workers.dev";
 const AI_PORTRAIT_ENDPOINT = WORKER_BASE + "/portrait";        // synchronous: returns the image
 const EMAIL_ENDPOINT       = WORKER_BASE + "/send-card";       // synchronous: sends pre-rendered card
-const EMAIL_PORTRAIT_ENDPOINT = WORKER_BASE + "/portrait-email"; // async: generates + emails in background
 
 // ---------- STATE ----------
 let faceLandmarker = null;
@@ -952,10 +862,7 @@ let frozenFrame = null;       // canvas snapshot of camera at moment of result
 let frozenArchetype = null;   // key into ARCHETYPES
 let usingAIPortrait = false;  // true once an AI-painted portrait has replaced frozenFrame
 let aiPortraitDataUrl = null; // the clean AI portrait as a data URL, for the email (LinkedIn-ready, no card framing)
-let portraitAbortController = null; // aborts the in-flight /portrait fetch when the user picks "skip the wait"
-let portraitSkipped = false;        // true once the user has handed off to /portrait-email
-let skipRevealTimer = null;         // delayed reveal of the skip-the-wait affordance
-const SKIP_REVEAL_DELAY_MS = 30000; // wait 30s before offering the email opt-out
+let paintingMsgInterval = null; // rotates the "Catching the light…" hints during the loader
 
 // Pre-load brand logo so the share canvas can render it
 const brandLogo = new Image();
@@ -989,15 +896,7 @@ const paintingScreen = $("screenPainting");
 const paintingBg = $("paintingBg");
 const paintingStack = $("paintingStack");
 const paintingLoading = $("paintingLoading");
-const paintingConfirm = $("paintingConfirm");
-const paintingConfirmEmail = $("paintingConfirmEmail");
-const paintingSkipBtn = $("paintingSkipBtn");
-const paintingSkipForm = $("paintingSkipForm");
-const paintingSkipInput = $("paintingSkipInput");
-const paintingSkipSubmit = $("paintingSkipSubmit");
-const paintingSkipState = $("paintingSkipState");
-const skipAgainBtn = $("skipAgainBtn");
-skipAgainBtn.addEventListener("click", reset);
+const paintingHint = $("paintingHint");
 const emailMeBtn = $("emailMeBtn");
 const emailModal = $("emailModal");
 const emailClose = $("emailClose");
@@ -1198,11 +1097,6 @@ async function beginPose() {
   // frame goes in; an AI-painted canvas comes out and replaces frozenFrame.
   await paintPortrait();
 
-  // If the user opted to receive the portrait by email instead of waiting,
-  // the painting screen now shows a confirmation message — don't fall
-  // through to renderTarotCard/result screen.
-  if (portraitSkipped) return;
-
   await renderTarotCard();
 
   paintingScreen.classList.remove("show");
@@ -1256,16 +1150,9 @@ async function paintPortrait() {
     paintingBg.style.backgroundImage = `url(${frozenFrame.toDataURL("image/jpeg", 0.85)})`;
   } catch (_) { /* tainted canvas — leave the loader bg empty */ }
   paintingScreen.classList.add("show");
+  startPaintingMessages();
 
-  // Defer the "skip the wait" affordance — only the impatient need to see it.
-  const skipEl = document.querySelector(".painting-skip");
-  if (skipEl) skipEl.classList.remove("visible");
-  if (skipRevealTimer) clearTimeout(skipRevealTimer);
-  skipRevealTimer = setTimeout(() => {
-    if (skipEl) skipEl.classList.add("visible");
-  }, SKIP_REVEAL_DELAY_MS);
-
-  if (!AI_PORTRAIT_ENDPOINT) return; // AI step intentionally skipped
+  if (!AI_PORTRAIT_ENDPOINT) { stopPaintingMessages(); return; }
 
   try {
     const img = await requestAIPortrait(frozenFrame, frozenArchetype);
@@ -1282,16 +1169,10 @@ async function paintPortrait() {
       aiPortraitDataUrl = c.toDataURL("image/jpeg", 0.92);
     }
   } catch (err) {
-    // AbortError is expected when the user picks "skip the wait" — silent.
-    if (err && err.name === "AbortError") {
-      return;
-    }
     console.warn("AI portrait failed; falling back to the original frame.", err);
     // usingAIPortrait stays false — renderTarotCard will apply duotone.
   } finally {
-    // Pipeline finished (success or fail) — no need to keep teasing the
-    // skip-the-wait option, they're about to see the result.
-    if (skipRevealTimer) { clearTimeout(skipRevealTimer); skipRevealTimer = null; }
+    stopPaintingMessages();
   }
 }
 
@@ -1350,12 +1231,10 @@ function canvasToBlob(srcCanvas, maxDim = 1024, quality = 0.86) {
 
 async function requestAIPortrait(canvas, archetype) {
   const dataUrl = canvasToUploadDataURL(canvas);
-  portraitAbortController = new AbortController();
   const res = await fetch(AI_PORTRAIT_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ image: dataUrl, archetype }),
-    signal: portraitAbortController.signal,
   });
   if (!res.ok) throw new Error(`AI endpoint returned ${res.status}`);
   const data = await res.json();
@@ -1368,90 +1247,35 @@ async function requestAIPortrait(canvas, archetype) {
   });
 }
 
-// ---------- SKIP THE WAIT ----------
-// During the painting loader, user can drop their email and we email the
-// portrait when the pipeline finishes. Aborts the in-flight /portrait fetch
-// so paintPortrait() doesn't render a result that the user no longer wants.
-paintingSkipBtn.addEventListener("click", () => {
-  paintingSkipBtn.style.display = "none";
-  paintingSkipForm.style.display = "flex";
-  setTimeout(() => paintingSkipInput.focus({ preventScroll: true }), 0);
-});
+// ---------- ANTICIPATION HINTS ----------
+// Rotate evocative process-y messages while the AI pipeline runs so the
+// loader has motion and the wait feels like part of the experience.
+const PAINTING_MESSAGES = [
+  "Catching the light…",
+  "Reading the room in your eyes…",
+  "Setting the lens…",
+  "Composing the scene…",
+  "Brushing in the shadows…",
+  "Polishing the details…",
+  "Almost there — hold your breath…",
+];
 
-paintingSkipForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const email = paintingSkipInput.value.trim();
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    paintingSkipState.textContent = "That email doesn't look right — try again.";
-    paintingSkipState.className = "painting-skip-state error";
-    return;
-  }
-  if (!frozenFrame || !frozenArchetype) {
-    paintingSkipState.textContent = "Hmm, something's off — try again.";
-    paintingSkipState.className = "painting-skip-state error";
-    return;
-  }
-
-  paintingSkipSubmit.disabled = true;
-  paintingSkipSubmit.textContent = "Sending…";
-  paintingSkipState.textContent = "";
-  paintingSkipState.className = "painting-skip-state";
-
-  try {
-    // Use FormData (multipart/form-data) instead of JSON. multipart is a
-    // "simple" CORS request — no preflight required — which means iOS
-    // Safari can't silently fail the request between preflight and POST.
-    const blob = await canvasToBlob(frozenFrame);
-    const fd = new FormData();
-    fd.append("email", email);
-    fd.append("archetype", frozenArchetype);
-    fd.append("archetypeName", ARCHETYPES[frozenArchetype].name);
-    fd.append("image", blob, "portrait.jpg");
-    const res = await fetch(EMAIL_PORTRAIT_ENDPOINT, {
-      method: "POST",
-      // No Content-Type header — browser sets it with the boundary
-      body: fd,
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-
-    // Hand-off succeeded — abort the in-flight /portrait fetch so
-    // paintPortrait() unwinds without rendering a result.
-    portraitSkipped = true;
-    if (portraitAbortController) portraitAbortController.abort();
-
-    // Replace the loader with a friendly confirmation
-    showSkipConfirmation(email);
-  } catch (err) {
-    console.error("skip-the-wait failed:", err);
-    // Surface the actual error so we can diagnose silent failures on phones.
-    const detail = err?.message || err?.name || "unknown";
-    paintingSkipState.textContent = `Couldn't queue it: ${detail}`;
-    paintingSkipState.className = "painting-skip-state error";
-    paintingSkipSubmit.disabled = false;
-    paintingSkipSubmit.textContent = "Try again";
-  }
-});
-
-function showSkipConfirmation(email) {
-  paintingConfirmEmail.textContent = email;
-  paintingLoading.style.display = "none";
-  paintingConfirm.style.display = "flex";
+function startPaintingMessages() {
+  if (paintingMsgInterval) clearInterval(paintingMsgInterval);
+  let i = 0;
+  paintingHint.textContent = PAINTING_MESSAGES[0];
+  paintingHint.style.opacity = "1";
+  paintingMsgInterval = setInterval(() => {
+    paintingHint.style.opacity = "0";
+    setTimeout(() => {
+      i = (i + 1) % PAINTING_MESSAGES.length;
+      paintingHint.textContent = PAINTING_MESSAGES[i];
+      paintingHint.style.opacity = "1";
+    }, 380);
+  }, 3400);
 }
-
-// Reset the painting screen back to the loading state — called from reset()
-function resetPaintingScreen() {
-  paintingConfirm.style.display = "none";
-  paintingLoading.style.display = "flex";
-  paintingSkipBtn.style.display = "";
-  paintingSkipForm.style.display = "none";
-  paintingSkipInput.value = "";
-  paintingSkipSubmit.disabled = false;
-  paintingSkipSubmit.textContent = "Send when ready";
-  paintingSkipState.textContent = "";
-  paintingSkipState.className = "painting-skip-state";
-  const skipEl = document.querySelector(".painting-skip");
-  if (skipEl) skipEl.classList.remove("visible");
-  if (skipRevealTimer) { clearTimeout(skipRevealTimer); skipRevealTimer = null; }
+function stopPaintingMessages() {
+  if (paintingMsgInterval) { clearInterval(paintingMsgInterval); paintingMsgInterval = null; }
 }
 
 function renderQuestion() {
@@ -1474,9 +1298,7 @@ function reset() {
   aiPortraitDataUrl = null;
   frozenFrame = null;
   frozenArchetype = null;
-  portraitSkipped = false;
-  portraitAbortController = null;
-  resetPaintingScreen();
+  stopPaintingMessages();
   if (faceLandmarker && stream) {
     playOverlay.style.display = "flex";
     wash.style.display = "block";
