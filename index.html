@@ -440,6 +440,14 @@
     text-align: center;
     padding: 28px;
   }
+  .painting-loading, .painting-confirm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+    max-width: 360px;
+  }
   .painting-eyebrow {
     font-family: "Aileron", sans-serif;
     font-weight: 800;
@@ -472,6 +480,77 @@
     max-width: 320px;
     letter-spacing: 0.02em;
   }
+  /* Skip-the-wait — drop email mid-loader, we send when done */
+  .painting-skip {
+    margin-top: 36px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+  }
+  .painting-skip-trigger {
+    background: transparent;
+    border: 1.5px solid rgba(255,214,187,0.4);
+    color: var(--peach);
+    font-family: "Aileron", "General Sans", sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 11px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 140ms, border-color 140ms;
+  }
+  .painting-skip-trigger:hover {
+    background: rgba(255,214,187,0.08);
+    border-color: var(--peach);
+  }
+  .painting-skip-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  .painting-skip-form input[type="email"] {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1.5px solid rgba(255,214,187,0.30);
+    background: rgba(255,214,187,0.08);
+    color: var(--peach);
+    font-family: "General Sans", sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 140ms, background 140ms;
+  }
+  .painting-skip-form input[type="email"]:focus {
+    border-color: var(--orange);
+    background: rgba(255,214,187,0.12);
+  }
+  .painting-skip-form input[type="email"]::placeholder { color: rgba(255,214,187,0.45); }
+  .painting-skip-form button[type="submit"] {
+    background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
+    color: #fff;
+    border: 0;
+    font-family: "Aileron", "General Sans", sans-serif;
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 12px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .painting-skip-form button[type="submit"]:disabled { opacity: 0.55; cursor: default; }
+  .painting-skip-state {
+    margin-top: 10px;
+    font-family: "General Sans", sans-serif;
+    font-size: 12px;
+    min-height: 1.2em;
+    color: rgba(255,214,187,0.75);
+  }
+  .painting-skip-state.error   { color: #ff8a7e; }
+  .painting-skip-state.success { color: var(--orange); }
 
   /* Email-capture button arrangement: primary full-width, secondaries split */
   #screenResult .btnrow {
@@ -673,10 +752,37 @@
   <div class="screen" id="screenPainting">
     <div class="painting-bg" id="paintingBg"></div>
     <div class="painting-veil"></div>
-    <div class="painting-stack">
-      <div class="painting-eyebrow">Developing your portrait</div>
-      <div class="painting-dots"><span></span><span></span><span></span></div>
-      <p class="painting-hint">A few seconds — sit tight.</p>
+    <div class="painting-stack" id="paintingStack">
+      <!-- Default loader content -->
+      <div class="painting-loading" id="paintingLoading">
+        <div class="painting-eyebrow">Developing your portrait</div>
+        <div class="painting-dots"><span></span><span></span><span></span></div>
+        <p class="painting-hint">A few seconds — sit tight.</p>
+
+        <!-- Skip-the-wait: drop your email, we send the portrait when ready. -->
+        <div class="painting-skip">
+          <button type="button" class="painting-skip-trigger" id="paintingSkipBtn">
+            Don't want to wait? Email it to me
+          </button>
+          <form class="painting-skip-form" id="paintingSkipForm" style="display:none;">
+            <input type="email" id="paintingSkipInput" required
+                   placeholder="you@example.com"
+                   autocomplete="email" inputmode="email" />
+            <button type="submit" id="paintingSkipSubmit">Send when ready</button>
+          </form>
+          <div class="painting-skip-state" id="paintingSkipState" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <!-- Skip-confirmation, shown after the user hands off to email -->
+      <div class="painting-confirm" id="paintingConfirm" style="display:none;">
+        <div class="painting-eyebrow">On its way</div>
+        <p class="painting-hint" style="margin-top:18px;">
+          We'll send your portrait to <strong id="paintingConfirmEmail" style="color:var(--peach);"></strong>
+          in a few minutes. Feel free to close this window.
+        </p>
+        <button class="btn ghost" style="margin-top:24px;" type="button" id="skipAgainBtn">Try another reading</button>
+      </div>
     </div>
   </div>
 </div>
@@ -746,8 +852,10 @@ const COOLDOWN_MS = 550;
 // Leave AI_PORTRAIT_ENDPOINT empty to skip the AI step (the result will
 // then use the original photo with the duotone treatment). EMAIL_ENDPOINT
 // when empty will just disable the email button gracefully.
-const AI_PORTRAIT_ENDPOINT = "https://vonpeach-portrait.vonpeach.workers.dev/portrait";
-const EMAIL_ENDPOINT       = "https://vonpeach-portrait.vonpeach.workers.dev/send-card";
+const WORKER_BASE          = "https://vonpeach-portrait.vonpeach.workers.dev";
+const AI_PORTRAIT_ENDPOINT = WORKER_BASE + "/portrait";        // synchronous: returns the image
+const EMAIL_ENDPOINT       = WORKER_BASE + "/send-card";       // synchronous: sends pre-rendered card
+const EMAIL_PORTRAIT_ENDPOINT = WORKER_BASE + "/portrait-email"; // async: generates + emails in background
 
 // ---------- STATE ----------
 let faceLandmarker = null;
@@ -763,6 +871,8 @@ let frozenFrame = null;       // canvas snapshot of camera at moment of result
 let frozenArchetype = null;   // key into ARCHETYPES
 let usingAIPortrait = false;  // true once an AI-painted portrait has replaced frozenFrame
 let aiPortraitDataUrl = null; // the clean AI portrait as a data URL, for the email (LinkedIn-ready, no card framing)
+let portraitAbortController = null; // aborts the in-flight /portrait fetch when the user picks "skip the wait"
+let portraitSkipped = false;        // true once the user has handed off to /portrait-email
 
 // Pre-load brand logo so the share canvas can render it
 const brandLogo = new Image();
@@ -794,6 +904,17 @@ const posePanel = $("posePanel");
 const poseCount = $("poseCount");
 const paintingScreen = $("screenPainting");
 const paintingBg = $("paintingBg");
+const paintingStack = $("paintingStack");
+const paintingLoading = $("paintingLoading");
+const paintingConfirm = $("paintingConfirm");
+const paintingConfirmEmail = $("paintingConfirmEmail");
+const paintingSkipBtn = $("paintingSkipBtn");
+const paintingSkipForm = $("paintingSkipForm");
+const paintingSkipInput = $("paintingSkipInput");
+const paintingSkipSubmit = $("paintingSkipSubmit");
+const paintingSkipState = $("paintingSkipState");
+const skipAgainBtn = $("skipAgainBtn");
+skipAgainBtn.addEventListener("click", reset);
 const emailMeBtn = $("emailMeBtn");
 const emailModal = $("emailModal");
 const emailClose = $("emailClose");
@@ -994,6 +1115,11 @@ async function beginPose() {
   // frame goes in; an AI-painted canvas comes out and replaces frozenFrame.
   await paintPortrait();
 
+  // If the user opted to receive the portrait by email instead of waiting,
+  // the painting screen now shows a confirmation message — don't fall
+  // through to renderTarotCard/result screen.
+  if (portraitSkipped) return;
+
   await renderTarotCard();
 
   paintingScreen.classList.remove("show");
@@ -1065,6 +1191,10 @@ async function paintPortrait() {
       aiPortraitDataUrl = c.toDataURL("image/jpeg", 0.92);
     }
   } catch (err) {
+    // AbortError is expected when the user picks "skip the wait" — silent.
+    if (err && err.name === "AbortError") {
+      return;
+    }
     console.warn("AI portrait failed; falling back to the original frame.", err);
     // usingAIPortrait stays false — renderTarotCard will apply duotone.
   }
@@ -1072,10 +1202,12 @@ async function paintPortrait() {
 
 async function requestAIPortrait(canvas, archetype) {
   const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  portraitAbortController = new AbortController();
   const res = await fetch(AI_PORTRAIT_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ image: dataUrl, archetype }),
+    signal: portraitAbortController.signal,
   });
   if (!res.ok) throw new Error(`AI endpoint returned ${res.status}`);
   const data = await res.json();
@@ -1086,6 +1218,84 @@ async function requestAIPortrait(canvas, archetype) {
     img.onerror = () => reject(new Error("AI image failed to decode"));
     img.src = data.image;
   });
+}
+
+// ---------- SKIP THE WAIT ----------
+// During the painting loader, user can drop their email and we email the
+// portrait when the pipeline finishes. Aborts the in-flight /portrait fetch
+// so paintPortrait() doesn't render a result that the user no longer wants.
+paintingSkipBtn.addEventListener("click", () => {
+  paintingSkipBtn.style.display = "none";
+  paintingSkipForm.style.display = "flex";
+  setTimeout(() => paintingSkipInput.focus({ preventScroll: true }), 0);
+});
+
+paintingSkipForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = paintingSkipInput.value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    paintingSkipState.textContent = "That email doesn't look right — try again.";
+    paintingSkipState.className = "painting-skip-state error";
+    return;
+  }
+  if (!frozenFrame || !frozenArchetype) {
+    paintingSkipState.textContent = "Hmm, something's off — try again.";
+    paintingSkipState.className = "painting-skip-state error";
+    return;
+  }
+
+  paintingSkipSubmit.disabled = true;
+  paintingSkipSubmit.textContent = "Sending…";
+  paintingSkipState.textContent = "";
+  paintingSkipState.className = "painting-skip-state";
+
+  try {
+    const sourceDataUrl = frozenFrame.toDataURL("image/jpeg", 0.92);
+    const res = await fetch(EMAIL_PORTRAIT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: sourceDataUrl,
+        archetype: frozenArchetype,
+        archetypeName: ARCHETYPES[frozenArchetype].name,
+        email,
+      }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    // Hand-off succeeded — abort the in-flight /portrait fetch so
+    // paintPortrait() unwinds without rendering a result.
+    portraitSkipped = true;
+    if (portraitAbortController) portraitAbortController.abort();
+
+    // Replace the loader with a friendly confirmation
+    showSkipConfirmation(email);
+  } catch (err) {
+    console.error("skip-the-wait failed:", err);
+    paintingSkipState.textContent = "Couldn't queue it right now. Try again.";
+    paintingSkipState.className = "painting-skip-state error";
+    paintingSkipSubmit.disabled = false;
+    paintingSkipSubmit.textContent = "Send when ready";
+  }
+});
+
+function showSkipConfirmation(email) {
+  paintingConfirmEmail.textContent = email;
+  paintingLoading.style.display = "none";
+  paintingConfirm.style.display = "flex";
+}
+
+// Reset the painting screen back to the loading state — called from reset()
+function resetPaintingScreen() {
+  paintingConfirm.style.display = "none";
+  paintingLoading.style.display = "flex";
+  paintingSkipBtn.style.display = "";
+  paintingSkipForm.style.display = "none";
+  paintingSkipInput.value = "";
+  paintingSkipSubmit.disabled = false;
+  paintingSkipSubmit.textContent = "Send when ready";
+  paintingSkipState.textContent = "";
+  paintingSkipState.className = "painting-skip-state";
 }
 
 function renderQuestion() {
@@ -1108,6 +1318,9 @@ function reset() {
   aiPortraitDataUrl = null;
   frozenFrame = null;
   frozenArchetype = null;
+  portraitSkipped = false;
+  portraitAbortController = null;
+  resetPaintingScreen();
   if (faceLandmarker && stream) {
     playOverlay.style.display = "flex";
     wash.style.display = "block";

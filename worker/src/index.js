@@ -152,7 +152,7 @@ const READS = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     // Tighten this to your deployed origin once everything works:
     //   "Access-Control-Allow-Origin": "https://tarot.vonpeach.com"
     const cors = {
@@ -165,22 +165,66 @@ export default {
     if (request.method !== "POST") return jsonResp({ error: "method_not_allowed" }, 405, cors);
 
     const url = new URL(request.url);
-    if (url.pathname === "/portrait")  return handlePortrait(request, env, cors);
-    if (url.pathname === "/send-card") return handleSendCard(request, env, cors);
+    if (url.pathname === "/portrait")        return handlePortrait(request, env, cors);
+    if (url.pathname === "/send-card")       return handleSendCard(request, env, cors);
+    if (url.pathname === "/portrait-email")  return handlePortraitEmail(request, env, ctx, cors);
     return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
   },
 };
 
-// ---------- /portrait ----------
+// ---------- /portrait — synchronous, returns the image inline ----------
 async function handlePortrait(request, env, cors) {
   try {
     const { image, archetype } = (await request.json()) || {};
-    if (!image || !archetype)  return jsonResp({ error: "missing_fields" }, 400, cors);
-    const prompt = PROMPTS[archetype];
-    if (!prompt)               return jsonResp({ error: "unknown_archetype" }, 400, cors);
-    if (!env.FAL_KEY)          return jsonResp({ error: "no_fal_key" }, 500, cors);
+    if (!image || !archetype) return jsonResp({ error: "missing_fields" }, 400, cors);
+    const dataUrl = await runPortraitPipeline(env, image, archetype);
+    return jsonResp({ image: dataUrl }, 200, cors);
+  } catch (err) {
+    const msg = err?.message || "server";
+    const status = /upstream/i.test(msg) ? 502 : 500;
+    return jsonResp({ error: "portrait_failed", message: msg }, status, cors);
+  }
+}
 
-    const falRes = await fetch(FAL_URL, {
+// ---------- /portrait-email — async, generates then emails in the background ----------
+// Returns 200 OK immediately so the user can close the tab. The pipeline +
+// Resend send happen inside ctx.waitUntil(), so Cloudflare keeps the worker
+// alive until both finish (within the 30s wall-clock limit).
+async function handlePortraitEmail(request, env, ctx, cors) {
+  try {
+    const body = (await request.json()) || {};
+    const { image, archetype, archetypeName, email } = body;
+    if (!image || !archetype || !email)  return jsonResp({ error: "missing_fields" }, 400, cors);
+    if (!isValidEmail(email))            return jsonResp({ error: "invalid_email" }, 400, cors);
+    if (!PROMPTS[archetype])             return jsonResp({ error: "unknown_archetype" }, 400, cors);
+
+    ctx.waitUntil((async () => {
+      try {
+        const portraitDataUrl = await runPortraitPipeline(env, image, archetype);
+        await sendCardEmail(env, {
+          email,
+          archetype,
+          archetypeName,
+          image: portraitDataUrl,
+        });
+      } catch (err) {
+        console.error("portrait-email background pipeline failed:", err?.message);
+      }
+    })());
+
+    return jsonResp({ ok: true, queued: true }, 200, cors);
+  } catch (err) {
+    return jsonResp({ error: "server", message: err?.message }, 500, cors);
+  }
+}
+
+// ---------- pipeline: runs all four AI stages, returns a data URL ----------
+async function runPortraitPipeline(env, image, archetype) {
+  const prompt = PROMPTS[archetype];
+  if (!prompt) throw new Error("unknown_archetype");
+  if (!env.FAL_KEY) throw new Error("no_fal_key");
+
+  const falRes = await fetch(FAL_URL, {
       method: "POST",
       headers: {
         Authorization: `Key ${env.FAL_KEY}`,
@@ -219,16 +263,16 @@ async function handlePortrait(request, env, cors) {
       }),
     });
 
-    if (!falRes.ok) {
-      const detail = await falRes.text();
-      return jsonResp({ error: "upstream", status: falRes.status, detail }, 502, cors);
-    }
+  if (!falRes.ok) {
+    const detail = await falRes.text();
+    throw new Error(`pulid_upstream:${falRes.status}:${detail}`);
+  }
 
-    const data = await falRes.json();
-    const pulidUrl = data?.images?.[0]?.url;
-    if (!pulidUrl) return jsonResp({ error: "no_image", data }, 502, cors);
+  const data = await falRes.json();
+  const pulidUrl = data?.images?.[0]?.url;
+  if (!pulidUrl) throw new Error("pulid_no_image");
 
-    // The "current best" URL — each stage overwrites if it succeeds.
+  // The "current best" URL — each stage overwrites if it succeeds.
     let workingUrl = pulidUrl;
 
     // Step 2: Face-swap. Copies the user's actual face geometry from the
@@ -334,69 +378,73 @@ async function handlePortrait(request, env, cors) {
       console.warn("Clarity realism pass threw:", realismErr?.message);
     }
 
-    // Proxy the final image as inline base64 — avoids cross-origin canvas
-    // taint and keeps fal.ai's transient URLs off the client.
-    const imgRes = await fetch(workingUrl);
-    if (!imgRes.ok) return jsonResp({ error: "image_fetch_failed", status: imgRes.status }, 502, cors);
-    const buf = await imgRes.arrayBuffer();
-    const dataUrl = `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
+  // Proxy the final image as inline base64 — avoids cross-origin canvas
+  // taint and keeps fal.ai's transient URLs off the client.
+  const imgRes = await fetch(workingUrl);
+  if (!imgRes.ok) throw new Error(`image_fetch_failed:${imgRes.status}`);
+  const buf = await imgRes.arrayBuffer();
+  return `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
+}
 
-    return jsonResp({ image: dataUrl }, 200, cors);
+// ---------- /send-card — synchronous, uses a pre-rendered image ----------
+async function handleSendCard(request, env, cors) {
+  try {
+    const body = (await request.json()) || {};
+    const { email, archetype, image } = body;
+    if (!email || !archetype || !image) return jsonResp({ error: "missing_fields" }, 400, cors);
+    if (!isValidEmail(email))           return jsonResp({ error: "invalid_email" }, 400, cors);
+
+    const data = await sendCardEmail(env, body);
+    return jsonResp({ ok: true, id: data?.id }, 200, cors);
   } catch (err) {
-    return jsonResp({ error: "server", message: err?.message }, 500, cors);
+    const msg = err?.message || "server";
+    const status = /upstream/i.test(msg) ? 502 : 500;
+    return jsonResp({ error: "send_failed", message: msg }, status, cors);
   }
 }
 
-// ---------- /send-card ----------
-async function handleSendCard(request, env, cors) {
-  try {
-    const { email, archetype, archetypeName, image } = (await request.json()) || {};
-    if (!email || !archetype || !image) return jsonResp({ error: "missing_fields" }, 400, cors);
-    if (!isValidEmail(email))           return jsonResp({ error: "invalid_email" }, 400, cors);
-    if (!env.RESEND_KEY)                return jsonResp({ error: "no_resend_key" }, 500, cors);
+// ---------- email send: posts to Resend, throws on failure ----------
+async function sendCardEmail(env, { email, archetype, archetypeName, image }) {
+  if (!env.RESEND_KEY) throw new Error("no_resend_key");
 
-    const read = READS[archetype];
-    const name = read?.name || archetypeName || "your archetype";
-    const note = read?.note || "";
-    const from = env.FROM_EMAIL || "Von Peach <onboarding@resend.dev>";
+  const read = READS[archetype];
+  const name = read?.name || archetypeName || "your archetype";
+  const note = read?.note || "";
+  const from = env.FROM_EMAIL || "Von Peach <onboarding@resend.dev>";
 
-    // Strip "data:image/jpeg;base64," prefix — Resend wants raw base64.
-    const b64 = String(image).split(",").pop();
+  // Strip "data:image/jpeg;base64," prefix — Resend wants raw base64.
+  const b64 = String(image).split(",").pop();
 
-    const payload = {
-      from,
-      to: [email],
-      subject: `Your Von Peach photo — ${name}`,
-      html: emailHtml(name, note, image),
-      text: emailText(name, note),
-      attachments: [
-        { filename: `von-peach-${archetype}.jpg`, content: b64 },
-      ],
-      tags: [
-        { name: "campaign", value: "filter-for-the-phone" },
-        { name: "archetype", value: archetype },
-      ],
-    };
+  const payload = {
+    from,
+    to: [email],
+    subject: `Your Von Peach photo — ${name}`,
+    html: emailHtml(name, note, image),
+    text: emailText(name, note),
+    attachments: [
+      { filename: `von-peach-${archetype}.jpg`, content: b64 },
+    ],
+    tags: [
+      { name: "campaign", value: "filter-for-the-phone" },
+      { name: "archetype", value: archetype },
+    ],
+  };
 
-    const res = await fetch(RESEND_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.RESEND_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+  const res = await fetch(RESEND_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 
-    if (!res.ok) {
-      const detail = await res.text();
-      return jsonResp({ error: "resend_upstream", status: res.status, detail }, 502, cors);
-    }
-
-    const data = await res.json();
-    return jsonResp({ ok: true, id: data?.id }, 200, cors);
-  } catch (err) {
-    return jsonResp({ error: "server", message: err?.message }, 500, cors);
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`resend_upstream:${res.status}:${detail}`);
   }
+
+  return await res.json();
 }
 
 // ---------- helpers ----------
