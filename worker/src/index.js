@@ -29,10 +29,11 @@
 //      from the user's face (text-prompted, identity-locked).
 //        docs: https://fal.ai/models/fal-ai/flux-pulid
 //
-//   2) face-swap copies the user's ACTUAL face geometry from the input
-//      selfie onto the PuLID result. PuLID gets the scene right but
-//      can still drift on identity — this nails it.
-//        docs: https://fal.ai/models/fal-ai/easel-ai/face-swap
+//   2) advanced face-swap copies the user's ACTUAL face + hair region
+//      from the input selfie onto the PuLID result. PuLID gets the
+//      scene right but can drift on identity and invents a new
+//      hairstyle — this nails both.
+//        docs: https://fal.ai/models/fal-ai/easel-ai/advanced-face-swap
 //
 //   3) CodeFormer polishes the face-swapped result — restores skin
 //      detail, lifts the eyes, magazine-grade finish. Operates on the
@@ -43,7 +44,7 @@
 // with the most recent successful image so the user always sees a
 // portrait.
 const FAL_URL       = "https://fal.run/fal-ai/flux-pulid";
-const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/face-swap";
+const FACE_SWAP_URL = "https://fal.run/fal-ai/easel-ai/advanced-face-swap";
 const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
 const RESEND_URL = "https://api.resend.com/emails";
 
