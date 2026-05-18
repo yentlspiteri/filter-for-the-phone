@@ -104,17 +104,20 @@ const PROMPTS = {
     "Editorial B&W studio headshot. Expression: a warm relaxed open " +
     "expression, hint of a natural half-smile, eyes engaging the camera " +
     "with quiet warmth. Wardrobe: contemporary open-collar shirt or fine " +
-    "knit, no jacket. Prop: holds a single fresh rose loosely between " +
-    "the fingers near the chest, the rose slightly out of focus in the " +
-    "foreground — a small charming romantic touch, not theatrical." +
-    FLATTERING,
+    "knit, no jacket. Prop: holds a vintage crystal champagne coupe " +
+    "casually at chest height, slightly tilted, the glass surface " +
+    "catching the side-light in a single bright highlight along the " +
+    "rim — old-money charm, mid-toast, not raised in cheers. Hand " +
+    "relaxed around the stem." + FLATTERING,
   magician:
     "Editorial B&W studio headshot. Expression: a knowing slight smirk, " +
     "sharp intelligent eyes that read the viewer. Wardrobe: sleek dark " +
-    "turtleneck or a structured dark jacket. Prop: faint wisps of smoke " +
-    "or steam catching the side-light around the shoulders and just " +
-    "behind the face — subtle magical atmosphere, suggestive not " +
-    "theatrical." + FLATTERING,
+    "turtleneck or a structured dark jacket. Prop: holds a fanned spread " +
+    "of three tarot cards between thumb and forefinger, raised near the " +
+    "chest, the backs of the cards facing the camera with an ornate " +
+    "geometric pattern visible. Hand poised, fingers elegant. A faint " +
+    "wisp of smoke catches the side-light just behind the shoulder for " +
+    "atmosphere." + FLATTERING,
   alchemist:
     "Editorial B&W studio headshot. Expression: a calm steady " +
     "contemplative expression, a quiet inner authority at the corners " +
