@@ -773,11 +773,11 @@
   <!-- intro -->
   <div class="screen show" id="screenIntro">
     <span class="brand-logo md" style="margin-bottom: 24px;" aria-label="Von Peach"></span>
-    <h1>Which one are you?</h1>
+    <h1>What does your tarot reveal?</h1>
     <p class="lede">Tilt your head to answer.</p>
     <div class="btnrow">
       <button class="btn" id="startBtn">Start camera</button>
-      <div class="hint">Camera stays on your device. Nothing is uploaded.</div>
+      <div class="hint">Your camera stays private — nothing is stored or uploaded.</div>
     </div>
     <div id="introErr" style="margin-top:14px; display:none;" class="err"></div>
   </div>
@@ -873,8 +873,8 @@
           <div class="painting-skeleton-img" id="paintingSkeletonImg"></div>
           <div class="painting-skeleton-shimmer"></div>
         </div>
-        <div class="painting-eyebrow">Developing your portrait</div>
-        <p class="painting-hint" id="paintingHint">Catching the light…</p>
+        <div class="painting-eyebrow">Reading your cards</div>
+        <p class="painting-hint" id="paintingHint">Sit tall and look into the lens.</p>
       </div>
     </div>
   </div>
@@ -890,47 +890,90 @@ import { FaceLandmarker, FilesetResolver }
 // ---------- CONTENT (swap copy here) ----------
 // Brand-aligned duotones built from Von Peach core palette:
 //   wine #99112F · red #CC1C0E · orange #FD8839 · peach #FFD6BB
+// Eight archetypes — each one matches exactly one L/R combination across
+// the three questions (see ARCHETYPE_MAP below). taglines come from the
+// brand brief; duotones are fallback colours for when the AI step is off.
 const ARCHETYPES = {
   charmer: {
     name: "The Charmer",
-    blurb: "You move through rooms like warm light. People say yes before they know why.",
-    // wine → peach
+    tagline: "Magnetism & connection",
     duotone: { dark: [153, 17, 47],  light: [255, 214, 187] },
     accents: ["#FD8839", "#99112F", "#FFD6BB"]
   },
   magician: {
     name: "The Magician",
-    blurb: "You bend the obvious. Where others see a wall, you see a curtain.",
-    // deep wine → orange
+    tagline: "Skill & manifestation",
     duotone: { dark: [60, 8, 22],    light: [253, 136, 57] },
     accents: ["#CC1C0E", "#99112F", "#FD8839"]
   },
   alchemist: {
     name: "The Alchemist",
-    blurb: "You take the raw and the broken and turn it to gold. Slow fire, true gold.",
-    // red → peach
+    tagline: "Transformation & wisdom",
     duotone: { dark: [120, 14, 22],  light: [255, 214, 187] },
     accents: ["#FD8839", "#CC1C0E", "#FFD6BB"]
-  }
+  },
+  oracle: {
+    name: "The Oracle",
+    tagline: "Intuition & foresight",
+    duotone: { dark: [60, 10, 40],   light: [255, 214, 187] },
+    accents: ["#99112F", "#FD8839", "#FFD6BB"]
+  },
+  rebel: {
+    name: "The Rebel",
+    tagline: "Disruption & freedom",
+    duotone: { dark: [40, 4, 8],     light: [204, 28, 14] },
+    accents: ["#CC1C0E", "#FD8839", "#99112F"]
+  },
+  monk: {
+    name: "The Monk",
+    tagline: "Solitude & inner truth",
+    duotone: { dark: [80, 30, 40],   light: [240, 220, 200] },
+    accents: ["#99112F", "#FFD6BB", "#CC1C0E"]
+  },
+  architect: {
+    name: "The Architect",
+    tagline: "Creativity & vision",
+    duotone: { dark: [40, 30, 50],   light: [253, 136, 57] },
+    accents: ["#FD8839", "#CC1C0E", "#99112F"]
+  },
+  luminary: {
+    name: "The Luminary",
+    tagline: "Leadership & power",
+    duotone: { dark: [80, 12, 30],   light: [253, 200, 100] },
+    accents: ["#FD8839", "#99112F", "#FFD6BB"]
+  },
 };
 
 const QUESTIONS = [
   {
-    q: "At a party, you would rather…",
-    left:  { label: "Charm the host",         score: { charmer: 2, magician: 0, alchemist: 0 } },
-    right: { label: "Dazzle the whole room",  score: { charmer: 0, magician: 2, alchemist: 0 } }
+    q: "When you enter a room, you are more likely to:",
+    left:  { label: "Own it" },
+    right: { label: "Read it" }
   },
   {
-    q: "When you make something, you…",
-    left:  { label: "Polish until it sings",  score: { charmer: 0, magician: 0, alchemist: 2 } },
-    right: { label: "Surprise even yourself", score: { charmer: 0, magician: 2, alchemist: 0 } }
+    q: "Your power comes more from:",
+    left:  { label: "Instinct" },
+    right: { label: "Strategy" }
   },
   {
-    q: "Your real superpower is…",
-    left:  { label: "Reading people",         score: { charmer: 2, magician: 0, alchemist: 1 } },
-    right: { label: "Turning lead to gold",   score: { charmer: 0, magician: 1, alchemist: 2 } }
+    q: "At heart, you are more of a:",
+    left:  { label: "Force of nature" },
+    right: { label: "Keeper of secrets" }
   }
 ];
+
+// L/R answer string → archetype key. All 8 combinations are reachable
+// from 3 binary questions. Mapping follows the brand brief's vibe-pairings.
+const ARCHETYPE_MAP = {
+  LLL: "luminary",  // Own + Instinct + Force         — commanding & raw
+  LLR: "charmer",   // Own + Instinct + Keeper        — magnetic, holds connection
+  LRL: "rebel",     // Own + Strategy + Force         — deliberate disruption
+  LRR: "architect", // Own + Strategy + Keeper        — designs the system
+  RLL: "magician",  // Read + Instinct + Force        — reads opening, executes with flair
+  RLR: "oracle",    // Read + Instinct + Keeper       — intuits, sees ahead
+  RRL: "alchemist", // Read + Strategy + Force        — transforms what's given
+  RRR: "monk",      // Read + Strategy + Keeper       — still, inward, deep
+};
 
 const TILT_THRESHOLD_DEG = 9;
 const HOLD_MS = 280;
@@ -953,7 +996,7 @@ const EMAIL_ENDPOINT       = WORKER_BASE + "/send-card";       // synchronous: s
 let faceLandmarker = null;
 let video, stage, stageCtx, stream;
 let qIndex = 0;
-let scores = { charmer: 0, magician: 0, alchemist: 0 };
+let answers = []; // "L" or "R" per question — combined into ARCHETYPE_MAP key
 let activeSide = null;
 let sideEnteredAt = 0;
 let lastCommitAt = 0;
@@ -1057,7 +1100,7 @@ async function begin() {
     playOverlay.style.display = "flex";
     wash.style.display = "block";
     qIndex = 0;
-    scores = { charmer: 0, magician: 0, alchemist: 0 };
+    answers = [];
     renderQuestion();
     acceptingInput = true;
     loop();
@@ -1160,9 +1203,7 @@ function commit(side) {
   if (!acceptingInput) return;
   acceptingInput = false;
   lastCommitAt = performance.now();
-  const q = QUESTIONS[qIndex];
-  const pick = side === "left" ? q.left : q.right;
-  for (const k of Object.keys(pick.score)) scores[k] += pick.score[k];
+  answers.push(side === "left" ? "L" : "R");
 
   setActiveSide(null);
   leftFill.style.height = "0%";
@@ -1224,10 +1265,8 @@ function runPoseCountdown() {
 }
 
 function pickArchetype() {
-  const order = ["charmer", "magician", "alchemist"];
-  let bestKey = order[0], bestScore = -1;
-  for (const k of order) if (scores[k] > bestScore) { bestScore = scores[k]; bestKey = k; }
-  return bestKey;
+  const code = answers.join("");
+  return ARCHETYPE_MAP[code] || "charmer";
 }
 
 function captureFrozenFrame() {
@@ -1358,9 +1397,9 @@ async function requestAIPortrait(canvas, archetype) {
 // Rotate evocative process-y messages while the AI pipeline runs so the
 // loader has motion and the wait feels like part of the experience.
 const PAINTING_MESSAGES = [
-  "Catching the light…",
+  "Sit tall and look into the lens.",
+  "Hold tight — this will only take a minute.",
   "Reading the room in your eyes…",
-  "Setting the lens…",
   "Composing the scene…",
   "Brushing in the shadows…",
   "Polishing the details…",
@@ -1400,7 +1439,7 @@ function reset() {
   paintingScreen.classList.remove("show");
   shareHint.textContent = "";
   qIndex = 0;
-  scores = { charmer: 0, magician: 0, alchemist: 0 };
+  answers = [];
   usingAIPortrait = false;
   aiPortraitDataUrl = null;
   frozenFrame = null;

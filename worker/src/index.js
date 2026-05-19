@@ -193,6 +193,118 @@ const PROMPT_TEMPLATES = {
         "fountain pen tucked into the binding.",
     ],
   },
+  oracle: {
+    base:
+      "Editorial B&W studio headshot. Expression: a serene knowing " +
+      "expression, gentle small smile, eyes carrying a quiet depth — " +
+      "the look of someone who's already seen where this conversation " +
+      "is going. Wardrobe: a flowing soft drape, fine knit, or " +
+      "considered tailoring in a calm tone. ",
+    props: [
+      "Prop: cradles a small smoky-quartz crystal in the palm at chest " +
+        "height, the faceted surface catching the side-light in small " +
+        "sharp highlights.",
+      "Prop: holds a small bundle of dried sage delicately between " +
+        "two fingers near the chest, a thin wisp of pale smoke drifting " +
+        "up past the shoulder.",
+      "Prop: holds a vintage hand-mirror at a slight angle near the " +
+        "shoulder, the glass catching a soft luminous highlight — only " +
+        "the back of the mirror's frame is visible, not the reflection.",
+      "Prop: cradles a silk-wrapped tarot deck in one hand, the cards " +
+        "edge-on, the silk fabric catching soft folds of light.",
+      "Prop: holds a small clear glass orb pinched between thumb and " +
+        "forefinger near the cheekbone, the orb catching one bright " +
+        "specular highlight at its centre.",
+    ],
+  },
+  rebel: {
+    base:
+      "Editorial B&W studio headshot. Expression: a wry confident " +
+      "half-smile, sharp direct eyes, slight chin-tilt — the look of " +
+      "someone who's already broken the rule you were about to mention. " +
+      "Wardrobe: a worn leather jacket, vintage band tee, or sharp " +
+      "structured wear with a punk edge. ",
+    props: [
+      "Prop: wears a worn black leather jacket with the collar turned " +
+        "up, the leather catching side-light highlights along its grain.",
+      "Prop: wears a single fingerless black leather glove on the hand " +
+        "raised at chest height, the textured leather catching highlights.",
+      "Prop: wears a vintage motorcycle key on a thick chain around the " +
+        "throat, the key resting at the centre of the chest catching " +
+        "one bright highlight.",
+      "Prop: wears a heavy silver signet ring on the index finger, the " +
+        "hand resting at the collarbone, the polished metal catching a " +
+        "small bright highlight.",
+      "Prop: a patched bomber jacket worn open over a vintage band tee, " +
+        "subtle embroidered patches just visible at the lapel.",
+    ],
+  },
+  monk: {
+    base:
+      "Editorial B&W studio headshot. Expression: a calm centred " +
+      "expression with a small soft smile, eyes closed gently in some " +
+      "frames or open in quiet directness — present, unhurried, " +
+      "approachable. Wardrobe: simple natural cloth, a plain shawl, " +
+      "or considered minimal layers in muted tones. ",
+    props: [
+      "Prop: holds wooden mala prayer beads draped over the fingers " +
+        "at chest height, the beads catching small soft highlights.",
+      "Prop: holds a single white lily stem delicately at the chest, " +
+        "petals catching the side-light against the dark wardrobe.",
+      "Prop: cradles a small handmade clay teacup between both palms " +
+        "at chest height, gentle hands warming around it.",
+      "Prop: holds an open cloth-bound simple book at the chest, hands " +
+        "framing the spine, paper catching the side-light.",
+      "Prop: holds a small wooden meditation singing-bowl cupped " +
+        "between the hands at chest height, the wood catching warm " +
+        "highlights.",
+    ],
+  },
+  architect: {
+    base:
+      "Editorial B&W studio headshot. Expression: a focused considered " +
+      "expression with a faint pleased smile at the corner of the " +
+      "mouth, sharp eyes that look like they're sketching something " +
+      "behind the camera. Wardrobe: clean modern tailoring, a fine " +
+      "structured shirt or a precisely-cut jacket. ",
+    props: [
+      "Prop: holds a vintage brass architect's compass / divider in " +
+        "one hand at chest height, the polished metal arms catching " +
+        "the side-light.",
+      "Prop: holds a rolled paper blueprint tucked casually under one " +
+        "arm at the chest, the edge of architectural drawings just " +
+        "visible at the open end.",
+      "Prop: holds a finely sharpened drafting pencil poised between " +
+        "thumb and forefinger near the chin, mid-thought.",
+      "Prop: holds an open sketchbook at the chest with clean geometric " +
+        "line drawings just visible on the page.",
+      "Prop: cradles a small precise metal geometric sculpture (a " +
+        "polished brass cube or icosahedron) in one palm, hand raised " +
+        "to chest height.",
+    ],
+  },
+  luminary: {
+    base:
+      "Editorial B&W studio headshot. Expression: an open confident " +
+      "smile that reaches the eyes, easy magnetic presence, the look " +
+      "of someone who walks into a room and brings the light with " +
+      "them. Wardrobe: a sharp tailored jacket, a fine knit, or a " +
+      "considered statement piece. ",
+    props: [
+      "Prop: wears a single statement signet ring on the index finger, " +
+        "the polished metal catching a bright side-light highlight, " +
+        "hand raised to the collarbone.",
+      "Prop: wears a small enamel-and-gold lapel pin at the chest, " +
+        "the metal trim catching a small bright highlight.",
+      "Prop: a confident hand-on-chin pose, fingers gently against the " +
+        "jawline, eyes meeting the camera.",
+      "Prop: wears a heavy fine-link chain at the throat, resting just " +
+        "below the collar, the links catching highlights.",
+      "Prop: wears a small ornate medallion on a fine chain at the " +
+        "chest, the medallion's centre catching a clear single " +
+        "highlight.",
+    ],
+  },
 };
 
 function getPromptFor(archetype) {
@@ -202,31 +314,72 @@ function getPromptFor(archetype) {
   return t.base + prop + FLATTERING;
 }
 
-// Short, archetype-specific notes sent in the email body alongside the card.
+// Eight-archetype email content. `paragraphs` is rendered as separate <p>
+// blocks in the email body. Copy comes verbatim from the brand brief.
 const READS = {
   charmer: {
     name: "The Charmer",
-    note:
-      "You move through rooms like warm light — people say yes before they know why. " +
-      "Your gift is making the room feel chosen. Used well, it earns trust faster than " +
-      "any pitch; used carelessly, it can read as performance. This week, pick one " +
-      "conversation where the most charming thing you can do is hold a silence.",
+    tagline: "Magnetism & connection",
+    paragraphs: [
+      "You make people feel like they're the most interesting person in the room. That's a rare kind of emotional intelligence, and it will come back to you in spades.",
+      "People remember how you made them feel long after they've forgotten what you said. Just make sure you're also paying attention to how people are making you feel — connection should go both ways.",
+    ],
   },
   magician: {
     name: "The Magician",
-    note:
-      "Where others see a wall, you see a curtain. You reframe the obvious so the new " +
-      "answer feels inevitable in hindsight. Your gift is making old constraints stop " +
-      "applying. The trap is dazzling for its own sake. This week, pick one problem " +
-      "where the smartest move is to bore people with the solution.",
+    tagline: "Skill & manifestation",
+    paragraphs: [
+      "Where others see a wall, you see a curtain. You have a knack for reframing a problem until the answer feels so obvious everyone wonders why they didn't see it sooner.",
+      "You don't hang around waiting for perfect conditions. You just work with what's there and somehow make it magic. Don't forget to bring people along with you though — not everyone can see solutions at your pace.",
+    ],
   },
   alchemist: {
     name: "The Alchemist",
-    note:
-      "You take the raw and the broken and turn it to gold. Slow fire, true gold. Your " +
-      "gift is patience with messy beginnings — and a refusal to let them stay messy. " +
-      "The risk is over-polishing. This week, pick one piece of work you'd normally " +
-      "keep refining, and let it leave your hands one revision sooner.",
+    tagline: "Transformation & wisdom",
+    paragraphs: [
+      "You've been through things that stopped others cold. Instead, you turned the lessons into something useful. Something transformative, even.",
+      "You're not afraid of the messy middle. In fact, that's probably where you do your best work. Just make sure you're giving yourself the same energy you give everything else.",
+    ],
+  },
+  oracle: {
+    name: "The Oracle",
+    tagline: "Intuition & foresight",
+    paragraphs: [
+      "You notice things before they happen. Not because of magic, but because you pay attention in a way that most people don't.",
+      "People come to you when they're stuck, because somehow you always know the question they should actually be asking. Don't be scared to trust your gut more loudly — the world needs to hear it.",
+    ],
+  },
+  rebel: {
+    name: "The Rebel",
+    tagline: "Disruption & freedom",
+    paragraphs: [
+      "You've never been that interested in the way things are supposed to work. You have a genuine, restless curiosity about what happens if you don't follow the script.",
+      "That instinct to question, disrupt and reimagine is rarer than people realise. Just make sure you can tell the difference between knowing when to burn something down and when to build on what's already there.",
+    ],
+  },
+  monk: {
+    name: "The Monk",
+    tagline: "Solitude & inner truth",
+    paragraphs: [
+      "You know something most people spend their whole lives chasing — that you don't need to fill every silence with noise just for the sake of it.",
+      "Your presence is quieter than most. And usually, far more lasting. The world will keep trying to rush you, but keep pushing against it. Your stillness is where the clearest thinking happens.",
+    ],
+  },
+  architect: {
+    name: "The Architect",
+    tagline: "Creativity & vision",
+    paragraphs: [
+      "You see the possibility beneath the surface of things. Where most people see chaos or noise, you're already sketching the system that could sit underneath it all.",
+      "You're a strategic thinker with an eye for beauty, but you can see the end vision so clearly that it's easy to get frustrated with how long it takes others to catch up. Stay patient and trust the process — it'll be worth it.",
+    ],
+  },
+  luminary: {
+    name: "The Luminary",
+    tagline: "Leadership & power",
+    paragraphs: [
+      "You have the rare ability to lead not by force, but by making people believe something is possible that they didn't think was before.",
+      "People are drawn to your energy without always being able to explain why. Just make sure you also have your own Luminary — you inspire others so naturally that you can forget to seek inspiration yourself.",
+    ],
   },
 };
 
@@ -589,9 +742,10 @@ async function addToMailchimp(env, email, archetype) {
 async function sendCardEmail(env, { email, archetype, archetypeName, image, imageAttachment }) {
   if (!env.RESEND_KEY) throw new Error("no_resend_key");
 
-  const read = READS[archetype];
-  const name = read?.name || archetypeName || "your archetype";
-  const note = read?.note || "";
+  const read = READS[archetype] || {};
+  const name = read.name || archetypeName || "your archetype";
+  const tagline = read.tagline || "";
+  const paragraphs = read.paragraphs || [];
   const from = env.FROM_EMAIL || "Von Peach <onboarding@resend.dev>";
 
   // Strip "data:image/jpeg;base64," prefix — Resend wants raw base64.
@@ -602,8 +756,8 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image, imag
     from,
     to: [email],
     subject: `Your Von Peach photo — ${name}`,
-    html: emailHtml(name, note, image),
-    text: emailText(name, note),
+    html: emailHtml(name, tagline, paragraphs, image),
+    text: emailText(name, tagline, paragraphs),
     attachments: [
       { filename: `von-peach-${archetype}.jpg`, content: attachmentB64 },
     ],
@@ -897,13 +1051,14 @@ const LOGO_URL = "https://tarot.vonpeach.com/vonpeach-logo.png";
 const LINKEDIN_SHARE_URL =
   "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftarot.vonpeach.com";
 
-function emailHtml(name, note, imageDataUrl) {
-  // Stripped layout — no archetype title, no body text — but the white card
-  // wrapper stays around the logo, hero tarot image, share button + socials.
-  // Black-on-white logo reads naturally, no peach pill needed. Outer remains
-  // the brand near-black so the white card pops. A gentle wiggle animation
-  // is declared in <style>; Apple Mail / iOS Mail honour it, Gmail strips
-  // <style> blocks and the card sits static there — graceful degradation.
+function emailHtml(name, tagline, paragraphs, imageDataUrl) {
+  // White inner card on dark outer with orange→red→wine accent stripes.
+  // Layout: logo → hero tarot card (with wiggle) → archetype title →
+  // italic tagline → archetype reading paragraphs → "your portrait is
+  // attached" line → Share on LinkedIn → divider → "Ready to write the
+  // rest of your story?" CTA pointing to vonpeach.com → socials.
+  // Wiggle animation declared in <style>; Apple/iOS Mail honour it,
+  // Gmail strips <style> and the card sits static — graceful degradation.
   return `<!doctype html>
 <html>
 <head>
@@ -937,15 +1092,42 @@ function emailHtml(name, note, imageDataUrl) {
                style="display:block;width:100%;max-width:420px;height:auto;border:0;outline:none;border-radius:12px;" />
         </td></tr>
 
+        <!-- Archetype title + italic tagline -->
+        <tr><td style="padding:28px 36px 0 36px;">
+          <h1 style="margin:0;font-size:28px;font-weight:800;color:#99112F;letter-spacing:-0.01em;line-height:1.2;">${name}</h1>
+          <p style="margin:6px 0 0 0;font-size:14px;font-style:italic;color:#CC1C0E;letter-spacing:0.02em;">${tagline}</p>
+          <div style="height:3px;width:56px;background:#FD8839;margin-top:14px;border-radius:2px;line-height:0;font-size:0;">&nbsp;</div>
+        </td></tr>
+
+        <!-- Body paragraphs -->
+        ${paragraphs.map((p) => `
+        <tr><td style="padding:18px 36px 0 36px;font-size:15px;line-height:1.6;color:#3a0812;">
+          ${escapeHtml(p)}
+        </td></tr>`).join("")}
+
+        <!-- Portrait-attached note -->
+        <tr><td style="padding:22px 36px 0 36px;font-size:13px;line-height:1.55;color:rgba(58,8,18,0.72);">
+          Your portrait is attached. Share it, or keep it close as a reminder of what makes you special.
+        </td></tr>
+
         <!-- Share-on-LinkedIn CTA -->
-        <tr><td align="center" style="padding:32px 36px 0 36px;">
+        <tr><td align="center" style="padding:22px 36px 0 36px;">
           <a href="${LINKEDIN_SHARE_URL}"
              style="display:inline-block;background:linear-gradient(135deg,#FD8839 0%,#CC1C0E 60%,#99112F 100%);color:#FFFFFF;text-decoration:none;padding:14px 28px;border-radius:999px;font-family:inherit;font-weight:800;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;box-shadow:0 8px 18px rgba(204,28,14,0.30);">
             Share on LinkedIn
           </a>
         </td></tr>
 
-        <!-- Socials + URL footer -->
+        <!-- "Ready to write the rest of your story?" CTA block -->
+        <tr><td style="padding:36px 36px 0 36px;">
+          <div style="border-top:1px solid rgba(253,136,57,0.30);padding-top:28px;">
+            <h2 style="margin:0;font-size:20px;font-weight:800;color:#99112F;letter-spacing:-0.01em;line-height:1.3;">Ready to write the rest of your story?</h2>
+            <p style="margin:8px 0 18px 0;font-size:14px;line-height:1.55;color:rgba(58,8,18,0.78);">We'll help you get started.</p>
+            <a href="https://vonpeach.com" style="display:inline-block;background:transparent;color:#99112F;border:1.5px solid #99112F;text-decoration:none;padding:12px 24px;border-radius:999px;font-family:inherit;font-weight:800;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;">vonpeach.com →</a>
+          </div>
+        </td></tr>
+
+        <!-- Socials -->
         <tr><td align="center" style="padding:28px 36px 0 36px;">
           <a href="https://www.instagram.com/vonpeachonline/" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;color:#99112F;margin:0 12px;line-height:0;">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;">
@@ -959,9 +1141,7 @@ function emailHtml(name, note, imageDataUrl) {
           </a>
         </td></tr>
 
-        <tr><td align="center" style="padding:14px 36px 28px 36px;">
-          <a href="https://vonpeach.com" style="font-size:12px;letter-spacing:0.28em;text-transform:uppercase;color:#99112F;text-decoration:none;font-weight:700;">vonpeach.com</a>
-        </td></tr>
+        <tr><td style="padding:12px 36px 28px 36px;" align="center">&nbsp;</td></tr>
 
         <!-- Bottom brand stripe — wine → red → orange -->
         <tr><td style="height:6px;line-height:0;font-size:0;background:linear-gradient(90deg,#99112F 0%,#CC1C0E 50%,#FD8839 100%);">&nbsp;</td></tr>
@@ -972,19 +1152,22 @@ function emailHtml(name, note, imageDataUrl) {
 </html>`;
 }
 
-function emailText(name, note) {
+function emailText(name, tagline, paragraphs) {
   return [
     "VON PEACH",
     "",
     name,
+    tagline ? tagline : null,
     "",
-    note,
+    ...(paragraphs || []).flatMap((p) => [p, ""]),
+    "Your portrait is attached. Share it, or keep it close as a reminder of what makes you special.",
     "",
-    "Your card is attached. Save it, share it, or keep it close.",
-    "",
-    "If this read landed, we'd love to hear about it — just reply.",
-    "",
-    "— Von Peach",
+    "Ready to write the rest of your story?",
+    "We'll help you get started.",
     "vonpeach.com",
-  ].join("\n");
+  ].filter((line) => line !== null).join("\n");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
