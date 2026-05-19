@@ -782,7 +782,7 @@
   <!-- intro -->
   <div class="screen show" id="screenIntro">
     <span class="brand-logo sm intro-logo" aria-label="Von Peach"></span>
-    <h1>Which game changer are you?</h1>
+    <h1>What's your game changer archetype?</h1>
     <p class="lede">Tilt your head to answer.</p>
     <div class="btnrow">
       <button class="btn" id="startBtn">Start camera</button>
@@ -971,17 +971,17 @@ const QUESTIONS = [
   }
 ];
 
-// L/R answer string → archetype key. All 8 combinations are reachable
-// from 3 binary questions. Mapping follows the brand brief's vibe-pairings.
+// L/R answer string → archetype key. Mapping per the Notion brand brief
+// (Filter App Quiz Copy, Result section, yellow-highlighted combinations).
 const ARCHETYPE_MAP = {
-  LLL: "luminary",  // Own + Instinct + Force         — commanding & raw
-  LLR: "charmer",   // Own + Instinct + Keeper        — magnetic, holds connection
-  LRL: "rebel",     // Own + Strategy + Force         — deliberate disruption
-  LRR: "architect", // Own + Strategy + Keeper        — designs the system
-  RLL: "magician",  // Read + Instinct + Force        — reads opening, executes with flair
-  RLR: "oracle",    // Read + Instinct + Keeper       — intuits, sees ahead
-  RRL: "alchemist", // Read + Strategy + Force        — transforms what's given
-  RRR: "monk",      // Read + Strategy + Keeper       — still, inward, deep
+  LLL: "charmer",   // Own + Instinct + Force
+  LLR: "rebel",     // Own + Instinct + Keeper
+  LRL: "luminary",  // Own + Strategy + Force
+  LRR: "architect", // Own + Strategy + Keeper
+  RLL: "magician",  // Read + Instinct + Force
+  RLR: "monk",      // Read + Instinct + Keeper
+  RRL: "alchemist", // Read + Strategy + Force
+  RRR: "oracle",    // Read + Strategy + Keeper
 };
 
 const TILT_THRESHOLD_DEG = 9;
