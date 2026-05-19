@@ -20,6 +20,7 @@
 <!-- Von Peach brand fonts: Aileron (primary, headlines) + General Sans (secondary, body) -->
 <link href="https://fonts.cdnfonts.com/css/aileron" rel="stylesheet">
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@300,400,500,600,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     /* Von Peach core palette */
@@ -1472,115 +1473,52 @@ async function renderTarotCard() {
 
   const arche = ARCHETYPES[frozenArchetype];
 
-  // ----- Background: Von Peach moody brand gradient -----
-  // Base — near-black wine
+  // ----- Page background -----
+  // Brand near-black with a subtle radial wash so the card pops.
   ctx.fillStyle = "#1a0610";
   ctx.fillRect(0, 0, W, H);
-  // Big radial orange gradient top-left (orange #FD8839)
   let g = ctx.createRadialGradient(W*0.2, H*0.15, 0, W*0.2, H*0.15, W*1.1);
-  g.addColorStop(0, "rgba(253,136,57,0.85)");
-  g.addColorStop(0.4, "rgba(204,28,14,0.55)");
+  g.addColorStop(0, "rgba(253,136,57,0.50)");
+  g.addColorStop(0.4, "rgba(204,28,14,0.30)");
   g.addColorStop(1, "rgba(26,6,16,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0,0,W,H);
-  // Deeper wine glow bottom-right (wine #99112F)
   g = ctx.createRadialGradient(W*0.85, H*0.95, 0, W*0.85, H*0.95, W*0.9);
-  g.addColorStop(0, "rgba(153,17,47,0.92)");
+  g.addColorStop(0, "rgba(153,17,47,0.60)");
   g.addColorStop(1, "rgba(26,6,16,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0,0,W,H);
-  // Soft vignette
-  g = ctx.createRadialGradient(W/2, H/2, W*0.3, W/2, H/2, W*0.9);
-  g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.55)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,W,H);
-
-  // (decor intentionally omitted — image is the focal point)
 
   // ----- Card geometry -----
-  const cardW = W * 0.78;
-  const cardH = H * 0.74;
+  const cardW = W * 0.84;
+  const cardH = H * 0.78;
   const cardX = (W - cardW) / 2;
-  const cardY = (H - cardH) / 2 - 30;
-  const cardR = 36;
+  const cardY = (H - cardH) / 2 - 40;
+  const cardR = 14;
 
-  // Card shadow — paper is brand peach #FFD6BB
+  // ----- Card paper — peach #FFD6BB, soft drop-shadow underneath
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.5)";
-  ctx.shadowBlur = 60;
-  ctx.shadowOffsetY = 30;
+  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowBlur = 50;
+  ctx.shadowOffsetY = 24;
   ctx.fillStyle = "#FFD6BB";
   roundRect(ctx, cardX, cardY, cardW, cardH, cardR);
   ctx.fill();
   ctx.restore();
 
-  // Aged paper grain — random low-opacity wine-tinted speckle, clipped to
-  // the card shape. Reads as a Rider-Waite reprint texture.
+  // ----- Illustration area — fills the card with a small peach margin
+  const innerInset = 22;
+  const photoX = cardX + innerInset;
+  const photoY = cardY + innerInset;
+  const photoW = cardW - innerInset * 2;
+  const photoH = cardH - innerInset * 2;
+  const photoR = 6;
+
+  // Clip illustration to a rounded rect that nearly fills the card
   ctx.save();
-  roundRect(ctx, cardX, cardY, cardW, cardH, cardR);
-  ctx.clip();
-  drawAgedPaperTexture(ctx, cardX, cardY, cardW, cardH);
-  ctx.restore();
-
-  // Card border — brand wine #99112F
-  ctx.strokeStyle = "#99112F";
-  ctx.lineWidth = 8;
-  roundRect(ctx, cardX + 14, cardY + 14, cardW - 28, cardH - 28, cardR - 10);
-  ctx.stroke();
-
-  // Inner thin line
-  ctx.strokeStyle = "rgba(153,17,47,0.40)";
-  ctx.lineWidth = 2;
-  roundRect(ctx, cardX + 24, cardY + 24, cardW - 48, cardH - 48, cardR - 18);
-  ctx.stroke();
-
-  // Top row glyphs — celestial trio: sun, star, moon
-  // (Symbols fall back to system unicode font; that's fine, they're
-  //  meant to read as iconic shapes, not letterforms.)
-  ctx.fillStyle = "#99112F";
-  ctx.font = "400 52px 'Apple Symbols', 'Segoe UI Symbol', 'Aileron', serif";
-  ctx.textBaseline = "top";
-
-  ctx.textAlign = "left";
-  ctx.fillText("☉", cardX + 56, cardY + 46);          // sun TL
-
-  ctx.textAlign = "center";
-  ctx.fillText("✦", cardX + cardW / 2, cardY + 46);   // star TC
-
-  ctx.textAlign = "right";
-  ctx.fillText("☾", cardX + cardW - 56, cardY + 46);  // moon TR
-
-  // Ornate corner flourishes inside the inner border — small curls in
-  // each of the four corners. Adds Rider-Waite-ish ornamental weight.
-  drawCornerFlourish(ctx, cardX + 32, cardY + 130,           1,  1);  // TL — below the XIII row
-  drawCornerFlourish(ctx, cardX + cardW - 32, cardY + 130,  -1,  1);  // TR
-  drawCornerFlourish(ctx, cardX + 32, cardY + cardH - 220,   1, -1);  // BL
-  drawCornerFlourish(ctx, cardX + cardW - 32, cardY + cardH - 220, -1, -1); // BR
-
-  // ----- Photo window inside card -----
-  const photoMargin = 60;
-  const photoX = cardX + photoMargin;
-  const photoY = cardY + 130;
-  const photoW = cardW - photoMargin * 2;
-  const photoH = cardH - photoMargin - 130 - 180; // leave room for name band
-
-  // Sunburst rays radiating from the photo centre out to the inner border —
-  // sits behind everything, visible in the margins around the photo.
-  drawSunburst(ctx, photoX + photoW/2, photoY + photoH/2, cardW * 0.46);
-
-  // Star sprinkles in the margins (between photo edge and inner border)
-  drawCardStars(ctx, cardX, cardY, cardW, cardH);
-
-  // Clip photo to rounded rect
-  ctx.save();
-  roundRect(ctx, photoX, photoY, photoW, photoH, 16);
+  roundRect(ctx, photoX, photoY, photoW, photoH, photoR);
   ctx.clip();
 
-  // Draw frozen frame (cover fit). If we have an AI-painted portrait, skip
-  // the heavy duotone — the painting is already styled — and apply only a
-  // gentle warm overlay for brand cohesion. Otherwise use the original
-  // duotone treatment.
   if (frozenFrame) {
     const vw = frozenFrame.width, vh = frozenFrame.height;
     const s = Math.max(photoW / vw, photoH / vh);
@@ -1589,15 +1527,9 @@ async function renderTarotCard() {
     const dy = photoY + (photoH - dH) / 2;
     ctx.drawImage(frozenFrame, dx, dy, dW, dH);
 
-    if (usingAIPortrait) {
-      // Subtle warm tint, preserves painterly detail
-      ctx.save();
-      ctx.globalCompositeOperation = "soft-light";
-      ctx.fillStyle = "rgba(253,136,57,0.18)";
-      ctx.fillRect(photoX, photoY, photoW, photoH);
-      ctx.restore();
-    } else {
-      // Full duotone of the photo area
+    if (!usingAIPortrait) {
+      // Graceful fallback: if the AI step didn't run, the photo gets a
+      // brand-coloured duotone so the card still reads on-palette.
       const id = ctx.getImageData(photoX, photoY, photoW, photoH);
       const data = id.data;
       const [dr, dg, db] = arche.duotone.dark;
@@ -1616,19 +1548,41 @@ async function renderTarotCard() {
   }
   ctx.restore();
 
-  // ----- Archetype name band — Aileron, brand wine, flanked by stars -----
-  const nameY = cardY + cardH - 110;
-  ctx.fillStyle = "#99112F";
-  ctx.font = "800 84px 'Aileron', sans-serif";
+  // Thin dark outline around the illustration
+  ctx.strokeStyle = "#1a0610";
+  ctx.lineWidth = 3;
+  roundRect(ctx, photoX, photoY, photoW, photoH, photoR);
+  ctx.stroke();
+
+  // ----- White pill banner with archetype name (serif, overlapping
+  // the bottom of the illustration like in the reference cards).
+  const bannerW = cardW * 0.78;
+  const bannerH = 108;
+  const bannerX = cardX + (cardW - bannerW) / 2;
+  const bannerY = cardY + cardH - bannerH - 36;
+  const bannerR = bannerH / 2;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.18)";
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 6;
+  ctx.fillStyle = "#FFFFFF";
+  roundRect(ctx, bannerX, bannerY, bannerW, bannerH, bannerR);
+  ctx.fill();
+  ctx.restore();
+
+  // Thin outline on the banner for definition
+  ctx.strokeStyle = "rgba(26,6,16,0.10)";
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, bannerX, bannerY, bannerW, bannerH, bannerR);
+  ctx.stroke();
+
+  // Archetype name — classic serif, dark, centred in the banner
+  ctx.fillStyle = "#1a0610";
+  ctx.font = "800 56px 'Playfair Display', 'Georgia', serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const nameText = arche.name.toUpperCase();
-  ctx.fillText(nameText, cardX + cardW / 2, nameY);
-  // Star flourishes flanking the title
-  const nameWidth = ctx.measureText(nameText).width;
-  const starOffset = nameWidth / 2 + 48;
-  drawStar(ctx, cardX + cardW / 2 - starOffset, nameY, 12, "#99112F");
-  drawStar(ctx, cardX + cardW / 2 + starOffset, nameY, 12, "#99112F");
+  ctx.fillText(arche.name.toUpperCase(), cardX + cardW / 2, bannerY + bannerH / 2 + 2);
 
   // ----- Von Peach logo (tinted peach), centered at the foot -----
   await brandLogoReady;
@@ -2020,6 +1974,7 @@ window.addEventListener("pagehide", () => {
 if (document.fonts) {
   document.fonts.load("800 84px 'Aileron'");
   document.fonts.load("500 30px 'General Sans'");
+  document.fonts.load("800 56px 'Playfair Display'");
 }
 </script>
 </body>
