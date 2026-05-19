@@ -23,81 +23,43 @@
 // Vars (set in wrangler.toml or via dashboard):
 //   FROM_EMAIL   — verified Resend sender, e.g. "Von Peach <hello@vonpeach.com>"
 
-// Four-stage portrait pipeline — the Higgsfield/Aragon approach plus a
-// realism finisher:
-//
-//   1) flux-pulid generates the editorial scene with identity anchored
-//      from the user's face (text-prompted, identity-locked).
-//        docs: https://fal.ai/models/fal-ai/flux-pulid
-//
-//   2) advanced face-swap copies the user's ACTUAL face + hair region
-//      from the input selfie onto the PuLID result. PuLID gets the
-//      scene right but can drift on identity and invents a new
-//      hairstyle — this nails both.
-//        docs: https://fal.ai/models/fal-ai/easel-ai/advanced-face-swap
-//
-//   3) CodeFormer polishes the face-swapped result — restores skin
-//      detail, lifts the eyes. Light fidelity (0.85) so natural skin
-//      texture survives.
-//        docs: https://fal.ai/models/fal-ai/codeformer
-//
-//   4) Clarity Upscaler layers photographic detail throughout — film
-//      grain, sharper micro-texture, natural shadow gradients. This is
-//      what kills the "AI generated" look. Low creativity + high
-//      resemblance so the face/structure is preserved.
-//        docs: https://fal.ai/models/fal-ai/clarity-upscaler
-//
-// Stages 2–4 are best-effort: if any errors, we fall through with the
-// most recent successful image so the user always sees a portrait.
-const FAL_URL       = "https://fal.run/fal-ai/flux-pulid";
-// easel-ai is its own org on fal.ai (NOT nested under fal-ai). Using
-// fal.run/fal-ai/easel-ai/* returns 404 "Application 'easel-ai' not found".
-const FACE_SWAP_URL = "https://fal.run/easel-ai/face-swap";
-const POLISH_URL    = "https://fal.run/fal-ai/codeformer";
-const REALISM_URL   = "https://fal.run/fal-ai/clarity-upscaler";
+// Single-stage illustration pipeline: flux-pulid with the brand-locked
+// illustrated-tarot prompts. Identity is anchored from the user's face
+// via reference_image_url + id_weight. We previously chained
+// face-swap + CodeFormer + Clarity Upscaler to drive the output toward
+// a polished photograph; those stages all fight the flat-illustration
+// look we want now, so they're removed. Net: ~10s + ~$0.04 per portrait
+// (down from ~25s + ~$0.10).
+//   docs: https://fal.ai/models/fal-ai/flux-pulid
+const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// Universal studio-B&W headshot layer — appended to every archetype
-// prompt. Locks the photography style across all three archetypes: same
-// studio, same lighting, same lens, same backdrop, same photographer
-// vocabulary. The three portraits should read as three shots from one
-// session — only expression, wardrobe, and prop change.
+// Universal illustrated-tarot-card layer — appended to every archetype
+// prompt. Locks the visual language across all eight cards: flat
+// vector-poster art on peach paper with wine outlines and brand-orange
+// /red accents. Modern comic-tarot aesthetic (Rider-Waite × poster art).
 const FLATTERING =
-  " Black and white studio portrait photograph, fine-art monochrome — " +
-  "no colour, rich tonal range, deep blacks, luminous mid-tones. " +
-  "STUDIO SETUP (identical across all portraits): a large soft-box key " +
-  "light at 45 degrees from the camera, GENEROUS reflector fill on the " +
-  "opposite side about 1 stop below the key (not heavily shadowed, no " +
-  "harsh chiaroscuro), plain mid-grey seamless studio backdrop softly " +
-  "graduated darker at the edges. The overall mood is approachable and " +
-  "warm — bright editorial portrait, not moody or gloomy. Same studio, " +
-  "same lighting, same backdrop, same lens for every portrait — only " +
-  "the subject's expression, wardrobe and accessories change. " +
-  "Professional editorial HEADSHOT crop: framed from mid-chest to just " +
-  "above the top of the head, the eyes positioned on the upper third of " +
-  "the frame, the face fills the central area generously. Camera at " +
-  "eye-level — NOT from above, NOT from below, NOT tilted. " +
-  "The subject's hair is preserved exactly as in the reference image — " +
-  "same hairstyle, same length, same texture, same parting, same volume. " +
-  "Hair frames the face naturally, falling around the temples; the " +
-  "hairline sits where it normally would on the subject's head. The " +
-  "forehead is naturally proportioned — NOT exaggerated, NOT enlarged. " +
-  "The subject looks their absolute best — clear healthy skin, bright " +
-  "well-rested eyes, a subtle natural glow, confident and magnetic. " +
-  "Natural balanced facial proportions, soft jawline, gentle chin line — " +
-  "do NOT enlarge or exaggerate the chin. Tasteful editorial retouching " +
-  "that softens dark circles and " +
-  "blemishes while KEEPING natural skin texture, fine pores, faint " +
-  "imperfections, subtle fine lines and the real grain of the face — " +
-  "not plastic, not over-smoothed. Slight three-quarter angle if at all, " +
-  "but mostly face-forward. " +
-  "Style: candid editorial B&W photography by a master studio " +
-  "photographer in the manner of Yousuf Karsh — confident, dignified, " +
-  "slightly cinematic. Shot on a medium-format camera with an 85mm " +
-  "portrait prime lens, natural film-like fall-off, fine silver-gelatin " +
-  "grain, the texture of fine art black-and-white photography. Shallow " +
-  "depth of field, beautiful soft bokeh. No text, no logos, no " +
-  "watermark, no overly-stylised illustration look, no colour cast.";
+  " Style: bold modern tarot card illustration in the manner of a " +
+  "contemporary illustrated tarot deck. Flat vector-poster artwork with " +
+  "heavy clean wine-red linework outlines, smooth solid colour fills, " +
+  "dramatic dynamic composition. NOT a photograph. STRICTLY LIMITED " +
+  "PALETTE — only these four colours and their tones: warm peach paper " +
+  "background (#FFD6BB), deep wine red (#99112F) for line work and " +
+  "shadows, brand orange (#FD8839) for highlights, brand red (#CC1C0E) " +
+  "for accents and flames. No other hues, no realistic skin tone. " +
+  "Composition: full-body or three-quarter-body figure framed centrally, " +
+  "edge-to-edge illustration filling the panel, dynamic dramatic pose " +
+  "with arms / hands engaged in a specific symbolic action. Background " +
+  "is a flat decorative scene of swirling forms, abstract motifs, and " +
+  "symbolic props relevant to the archetype — never plain. " +
+  "The face is stylised in the same illustrated language as the rest of " +
+  "the figure (heavy outline + flat colour fills, simplified features) " +
+  "but the underlying facial structure, hair length, hair colour, " +
+  "ethnicity, age range and overall identity should clearly resemble the " +
+  "reference subject — a friend should recognise them. " +
+  "No text on the card, no caption, no banner, no logo, no watermark. " +
+  "No photographic style, no photorealism, no realistic skin texture, " +
+  "no gradients beyond simple cel-shaded fills.";
 
 // Archetype prompts diverge ONLY on expression + wardrobe + prop.
 // Lighting, backdrop, lens, crop and tonal treatment all live in the
@@ -106,203 +68,208 @@ const FLATTERING =
 // Each archetype carries a POOL of 5 props that the Worker randomly
 // picks from at request time, so two people landing on the same
 // archetype get visually distinct portraits.
+// Illustrated tarot card scenes — each archetype is a dramatic
+// vector-poster scene with the figure mid-action and a symbolic
+// background. Each archetype has 5 scene variants for visual variety
+// across generations.
 const PROMPT_TEMPLATES = {
   charmer: {
     base:
-      "Editorial B&W studio headshot. Expression: a genuine warm smile " +
-      "that reaches the eyes, slightly parted lips, an inviting open " +
-      "expression — magnetic and welcoming, like greeting a close " +
-      "friend. Wardrobe: contemporary open-collar shirt or fine knit, " +
-      "no jacket. ",
+      "Illustrated tarot card: 'The Charmer'. Three-quarter-body " +
+      "figure in a flowing dramatic wine-red gown or tunic with peach " +
+      "highlights, arms gracefully outstretched in a welcoming " +
+      "gesture, warm magnetic smile. Background swirling with " +
+      "decorative ribbon-like patterns and scattered roses. ",
     props: [
-      "Prop: holds a vintage crystal champagne coupe casually at chest " +
-        "height, slightly tilted, the glass surface catching the " +
-        "side-light in a single bright highlight along the rim — " +
-        "old-money charm, mid-toast, not raised in cheers. Hand relaxed " +
-        "around the stem.",
-      "Prop: a single fresh white camellia bloom tucked at the lapel " +
-        "or held loosely near the collarbone, petals catching a soft " +
-        "highlight against the dark wardrobe.",
-      "Prop: holds a folded handwritten letter or a wax-sealed envelope " +
-        "casually between the fingers near the chest, paper texture " +
-        "visible in the side-light — the gesture of someone about to " +
-        "share a secret.",
-      "Prop: a vintage silk scarf draped casually over one shoulder, " +
-        "the fabric catching soft highlights and folds — elegant, lived-in, " +
-        "considered styling without being theatrical.",
-      "Prop: wears a single pearl earring catching the side-light in a " +
-        "small bright highlight, a quiet Vermeer-style detail. No other " +
-        "visible jewellery.",
+      "Variant: arms wide open in a hosting gesture, large red roses " +
+        "tumbling through the air around the figure, decorative " +
+        "spiral motifs swirling behind in peach and orange.",
+      "Variant: one hand offered forward as if inviting the viewer to " +
+        "dance, the other hand holding a single long-stemmed rose, " +
+        "gown billowing dramatically.",
+      "Variant: head tilted slightly with a confident knowing smile, " +
+        "fingers grazing a string of pearls at the throat, " +
+        "rose-vine motifs framing the figure.",
+      "Variant: arms crossed elegantly over the chest holding a posy " +
+        "of roses, decorative heart motif and swirling ribbon " +
+        "patterns in the background.",
+      "Variant: one arm raised holding a vintage champagne coupe in a " +
+        "mid-toast gesture, scattered rose petals and swirling " +
+        "decorative flourishes filling the background.",
     ],
   },
   magician: {
     base:
-      "Editorial B&W studio headshot. Expression: a playful confident " +
-      "half-smile with a knowing glint in the eye — mischief and " +
-      "intelligence, the kind of person who's about to show you " +
-      "something brilliant. Approachable, not stern. Wardrobe: sleek " +
-      "dark turtleneck or a structured dark jacket. ",
+      "Illustrated tarot card: 'The Magician'. Three-quarter-body " +
+      "figure in a flowing hooded robe with rune-embroidered edges, " +
+      "one hand raised commanding the elements, sharp determined " +
+      "gaze. Background swirling with abstract flame patterns and " +
+      "runic glyphs. ",
     props: [
-      "Prop: holds a fanned spread of three tarot cards between thumb " +
-        "and forefinger, raised near the chest, the backs of the cards " +
-        "facing the camera with an ornate geometric pattern visible. " +
-        "Hand poised, fingers elegant. A faint wisp of smoke catches " +
-        "the side-light just behind the shoulder for atmosphere.",
-      "Prop: a vintage pocket watch on a fine chain dangling from the " +
-        "breast pocket, the brass casing catching a single bright " +
-        "side-light highlight, the chain looping elegantly across the " +
-        "front of the jacket.",
-      "Prop: holds a single antique coin pinched between thumb and " +
-        "forefinger, raised near the cheekbone at chest height — the " +
-        "edge of the coin catching the side-light in a sharp metallic " +
-        "highlight, a sleight-of-hand pose.",
-      "Prop: wears an antique brass key on a fine chain at the throat, " +
-        "the key resting flat against the dark wardrobe, catching a " +
-        "single bright highlight in the side-light.",
-      "Prop: holds a single ornate playing card pinched edge-on between " +
-        "two fingers at chest height, the card's back pattern catching " +
-        "the side-light. A faint wisp of smoke drifts past the shoulder " +
-        "for atmosphere.",
+      "Variant: one arm raised high holding a slim wand or staff, " +
+        "flames and rune symbols swirling in a halo around the upper " +
+        "body, hood casting a sharp shadow across the brow.",
+      "Variant: both hands raised conjuring a glowing orb of light " +
+        "between the palms, swirling flame patterns and runic symbols " +
+        "filling the background.",
+      "Variant: one hand outstretched with sparks and small flames " +
+        "leaping from the fingertips, the other tucked into the robe, " +
+        "decorative rune circles framing the figure.",
+      "Variant: holding a fanned spread of tarot cards in one hand, " +
+        "the other raised in a casting gesture, abstract flame motifs " +
+        "and arcane glyphs swirling behind.",
+      "Variant: one hand brought to the lips in a knowing 'shh' " +
+        "gesture, the other holding a wand pointed downward, halo of " +
+        "runes glowing around the head.",
     ],
   },
   alchemist: {
     base:
-      "Editorial B&W studio headshot. Expression: a calm warm " +
-      "contemplative expression with a small natural smile playing at " +
-      "the corners of the mouth — quiet inner authority but visibly " +
-      "kind, the look of someone who's pleased you've stopped by. " +
-      "Wardrobe: refined intellectual attire — a fine knit, a tweed " +
-      "jacket, or considered tailoring. ",
+      "Illustrated tarot card: 'The Alchemist'. Three-quarter-body " +
+      "figure in a heavy rune-embroidered robe in deep wine red with " +
+      "orange accents, focused determined expression, one hand " +
+      "gesturing over a steaming vessel. Background swirling with " +
+      "smoke and runic transformation symbols. ",
     props: [
-      "Prop: wears a classic monocle fixed in one eye by a fine chain, " +
-        "with a hint of leather-bound books or a vintage brass instrument " +
-        "just visible in the soft-focus background.",
-      "Prop: holds a vintage fountain pen poised mid-thought between " +
-        "thumb and forefinger near the chin, the polished nib catching " +
-        "a small highlight — the gesture of someone about to write " +
-        "down a thought.",
-      "Prop: holds a small antique brass compass or astrolabe at chest " +
-        "height, the engraved metal catching the side-light, hand " +
-        "cradling it carefully like an instrument worth studying.",
-      "Prop: holds a vintage magnifying glass near the chest, the round " +
-        "glass catching a soft highlight, a scholar mid-investigation. " +
-        "Faint suggestion of an old notebook or papers in the soft-focus " +
-        "background.",
-      "Prop: an open leather-bound notebook held at the chest with fine " +
-        "ink sketches and handwriting just visible on the page, a " +
-        "fountain pen tucked into the binding.",
+      "Variant: leaning over a bubbling cauldron with one hand " +
+        "stirring above it, billowing smoke rising into runic glyphs " +
+        "in the air, dramatic robe folds.",
+      "Variant: holding a glass alembic flask up to the light, the " +
+        "liquid catching highlights, swirling runic patterns and " +
+        "transformation motifs around the figure.",
+      "Variant: one hand pouring shimmering liquid from a brass " +
+        "vessel, vapour rising into swirling sigil patterns, robe " +
+        "billowing dramatically behind.",
+      "Variant: both palms cupping a glowing orb of transmuted " +
+        "energy, ancient script and decorative flourishes spiralling " +
+        "around the figure.",
+      "Variant: leaning thoughtfully over an open grimoire with " +
+        "alchemical symbols visible, smoke rising from a small " +
+        "burner, runic patterns filling the background.",
     ],
   },
   oracle: {
     base:
-      "Editorial B&W studio headshot. Expression: a serene knowing " +
-      "expression, gentle small smile, eyes carrying a quiet depth — " +
-      "the look of someone who's already seen where this conversation " +
-      "is going. Wardrobe: a flowing soft drape, fine knit, or " +
-      "considered tailoring in a calm tone. ",
+      "Illustrated tarot card: 'The Oracle'. Three-quarter-body " +
+      "figure in flowing layered robes catching peach and wine " +
+      "highlights, a serene knowing expression with eyes that seem " +
+      "to look past the viewer. Background filled with stars, " +
+      "celestial swirls, and abstract eye motifs. ",
     props: [
-      "Prop: cradles a small smoky-quartz crystal in the palm at chest " +
-        "height, the faceted surface catching the side-light in small " +
-        "sharp highlights.",
-      "Prop: holds a small bundle of dried sage delicately between " +
-        "two fingers near the chest, a thin wisp of pale smoke drifting " +
-        "up past the shoulder.",
-      "Prop: holds a vintage hand-mirror at a slight angle near the " +
-        "shoulder, the glass catching a soft luminous highlight — only " +
-        "the back of the mirror's frame is visible, not the reflection.",
-      "Prop: cradles a silk-wrapped tarot deck in one hand, the cards " +
-        "edge-on, the silk fabric catching soft folds of light.",
-      "Prop: holds a small clear glass orb pinched between thumb and " +
-        "forefinger near the cheekbone, the orb catching one bright " +
-        "specular highlight at its centre.",
+      "Variant: both hands cradling a glowing crystal orb at chest " +
+        "height, the orb radiating decorative light beams, stars and " +
+        "moon phases scattered through the background.",
+      "Variant: one hand raised palm-up with a small constellation " +
+        "of stars hovering above the fingertips, robes flowing into " +
+        "celestial swirl patterns.",
+      "Variant: head slightly turned, one finger touched to the " +
+        "temple as if hearing a whisper, decorative eye motifs and " +
+        "starbursts framing the figure.",
+      "Variant: holding a vintage hand mirror angled to one side, " +
+        "reflective light and decorative starlight motifs swirling " +
+        "around the figure.",
+      "Variant: arms crossed protectively over the chest holding a " +
+        "silk-wrapped deck of cards, halo of stars and abstract " +
+        "celestial swirls filling the background.",
     ],
   },
   rebel: {
     base:
-      "Editorial B&W studio headshot. Expression: a wry confident " +
-      "half-smile, sharp direct eyes, slight chin-tilt — the look of " +
-      "someone who's already broken the rule you were about to mention. " +
-      "Wardrobe: a worn leather jacket, vintage band tee, or sharp " +
-      "structured wear with a punk edge. ",
+      "Illustrated tarot card: 'The Rebel'. Dynamic full-body figure " +
+      "in a leather jacket and battered trousers, mid-leap or " +
+      "defiant stance, wry knowing half-smile and fierce eyes. " +
+      "Background of cracked stone, jagged flame patterns, and " +
+      "broken chain motifs. ",
     props: [
-      "Prop: wears a worn black leather jacket with the collar turned " +
-        "up, the leather catching side-light highlights along its grain.",
-      "Prop: wears a single fingerless black leather glove on the hand " +
-        "raised at chest height, the textured leather catching highlights.",
-      "Prop: wears a vintage motorcycle key on a thick chain around the " +
-        "throat, the key resting at the centre of the chest catching " +
-        "one bright highlight.",
-      "Prop: wears a heavy silver signet ring on the index finger, the " +
-        "hand resting at the collarbone, the polished metal catching a " +
-        "small bright highlight.",
-      "Prop: a patched bomber jacket worn open over a vintage band tee, " +
-        "subtle embroidered patches just visible at the lapel.",
+      "Variant: leaping forward with arms raised triumphantly, broken " +
+        "chains scattering in the air, flame motifs swirling at the " +
+        "feet, hair caught mid-motion.",
+      "Variant: standing defiantly with one fist raised, chain " +
+        "wrapped around the forearm, jagged graffiti-style patterns " +
+        "and flames in the background.",
+      "Variant: kicking through a cracked stone wall with one boot, " +
+        "shards of stone flying outward, abstract flame patterns " +
+        "filling the background.",
+      "Variant: one hand on a hip in a confident sneer, other hand " +
+        "holding a torch flaring with abstract flame motifs, jacket " +
+        "billowing dramatically behind.",
+      "Variant: tearing apart a paper scroll labelled with abstract " +
+        "rules, pieces scattering in the air, sharp jagged background " +
+        "patterns suggesting movement and disruption.",
     ],
   },
   monk: {
     base:
-      "Editorial B&W studio headshot. Expression: a calm centred " +
-      "expression with a small soft smile, eyes closed gently in some " +
-      "frames or open in quiet directness — present, unhurried, " +
-      "approachable. Wardrobe: simple natural cloth, a plain shawl, " +
-      "or considered minimal layers in muted tones. ",
+      "Illustrated tarot card: 'The Monk'. Full-body figure seated in " +
+      "a meditative cross-legged pose or standing serenely, wearing a " +
+      "simple draped robe in peach and wine tones, eyes gently " +
+      "closed or open with quiet directness. Background of radiating " +
+      "lines, lotus petals, and abstract mountain silhouettes. ",
     props: [
-      "Prop: holds wooden mala prayer beads draped over the fingers " +
-        "at chest height, the beads catching small soft highlights.",
-      "Prop: holds a single white lily stem delicately at the chest, " +
-        "petals catching the side-light against the dark wardrobe.",
-      "Prop: cradles a small handmade clay teacup between both palms " +
-        "at chest height, gentle hands warming around it.",
-      "Prop: holds an open cloth-bound simple book at the chest, hands " +
-        "framing the spine, paper catching the side-light.",
-      "Prop: holds a small wooden meditation singing-bowl cupped " +
-        "between the hands at chest height, the wood catching warm " +
-        "highlights.",
+      "Variant: seated in lotus position with palms upward in the " +
+        "lap, halo of concentric circles radiating outward, lotus " +
+        "petals scattered in the background.",
+      "Variant: standing with hands clasped at the chest in a gentle " +
+        "prayer gesture, decorative mountain silhouettes and rising " +
+        "sun-rays in the background.",
+      "Variant: kneeling with one hand resting on a small stone " +
+        "altar, the other raised in benediction, decorative " +
+        "swirling-water motifs at the feet.",
+      "Variant: walking with a wooden staff in one hand, robes " +
+        "flowing gently, distant mountain peaks and a thin path " +
+        "winding through the background.",
+      "Variant: seated cross-legged holding a small singing bowl in " +
+        "both hands, sound-ripple motifs and lotus flowers " +
+        "decorating the background.",
     ],
   },
   architect: {
     base:
-      "Editorial B&W studio headshot. Expression: a focused considered " +
-      "expression with a faint pleased smile at the corner of the " +
-      "mouth, sharp eyes that look like they're sketching something " +
-      "behind the camera. Wardrobe: clean modern tailoring, a fine " +
-      "structured shirt or a precisely-cut jacket. ",
+      "Illustrated tarot card: 'The Architect'. Three-quarter-body " +
+      "figure in a structured long coat with geometric trim, focused " +
+      "considered expression. Background filled with blueprint grid " +
+      "lines, geometric structures, and abstract cityscape " +
+      "silhouettes in peach and wine. ",
     props: [
-      "Prop: holds a vintage brass architect's compass / divider in " +
-        "one hand at chest height, the polished metal arms catching " +
-        "the side-light.",
-      "Prop: holds a rolled paper blueprint tucked casually under one " +
-        "arm at the chest, the edge of architectural drawings just " +
-        "visible at the open end.",
-      "Prop: holds a finely sharpened drafting pencil poised between " +
-        "thumb and forefinger near the chin, mid-thought.",
-      "Prop: holds an open sketchbook at the chest with clean geometric " +
-        "line drawings just visible on the page.",
-      "Prop: cradles a small precise metal geometric sculpture (a " +
-        "polished brass cube or icosahedron) in one palm, hand raised " +
-        "to chest height.",
+      "Variant: holding a large brass compass / divider open between " +
+        "both hands at chest height, geometric grid patterns and " +
+        "skyline silhouettes filling the background.",
+      "Variant: standing in front of an unrolled blueprint scroll " +
+        "with one hand pointing at a sketched structure, geometric " +
+        "wireframes and tower silhouettes in the background.",
+      "Variant: arms folded thoughtfully across the chest while " +
+        "surveying a floating geometric model (cube, sphere, " +
+        "pyramid) hovering before the figure, grid lines radiating outward.",
+      "Variant: one hand sketching mid-air with a glowing pencil, " +
+        "intricate geometric construction lines forming a building " +
+        "skeleton in the air, abstract grid in the background.",
+      "Variant: seated at a drafting table angled forward, fingers on " +
+        "a half-drawn plan, blueprint patterns and architectural " +
+        "silhouettes filling the background.",
     ],
   },
   luminary: {
     base:
-      "Editorial B&W studio headshot. Expression: an open confident " +
-      "smile that reaches the eyes, easy magnetic presence, the look " +
-      "of someone who walks into a room and brings the light with " +
-      "them. Wardrobe: a sharp tailored jacket, a fine knit, or a " +
-      "considered statement piece. ",
+      "Illustrated tarot card: 'The Luminary'. Commanding full-body " +
+      "figure in a regal robe or sharp ceremonial coat with " +
+      "ornamental trim, open confident smile, radiant presence. " +
+      "Background of radial sun-rays, decorative halo motifs, and " +
+      "abstract throne silhouettes. ",
     props: [
-      "Prop: wears a single statement signet ring on the index finger, " +
-        "the polished metal catching a bright side-light highlight, " +
-        "hand raised to the collarbone.",
-      "Prop: wears a small enamel-and-gold lapel pin at the chest, " +
-        "the metal trim catching a small bright highlight.",
-      "Prop: a confident hand-on-chin pose, fingers gently against the " +
-        "jawline, eyes meeting the camera.",
-      "Prop: wears a heavy fine-link chain at the throat, resting just " +
-        "below the collar, the links catching highlights.",
-      "Prop: wears a small ornate medallion on a fine chain at the " +
-        "chest, the medallion's centre catching a clear single " +
-        "highlight.",
+      "Variant: standing tall with one hand raised in greeting, the " +
+        "other holding a tall slim staff, halo of radial sun-rays " +
+        "fanning out behind the head.",
+      "Variant: seated on an abstract throne silhouette with arms " +
+        "open in a welcoming gesture, decorative laurel-wreath motifs " +
+        "and radiating beams in the background.",
+      "Variant: arms crossed confidently with a small crown or " +
+        "circlet on the brow, sun-ray motifs filling the background.",
+      "Variant: holding a glowing torch high in one hand, light beams " +
+        "radiating outward, the other hand resting on the hip, " +
+        "decorative laurel patterns at the feet.",
+      "Variant: striding forward with one hand outstretched palm-up " +
+        "offering a glowing flame, abstract crowd silhouettes in " +
+        "the lower background looking toward the figure.",
     ],
   },
 };
@@ -493,38 +460,26 @@ async function runPortraitPipeline(env, image, archetype) {
         prompt,
         reference_image_url: image,   // user's face — PuLID anchors on this
         image_size: "portrait_4_3",   // editorial portrait crop
-        num_inference_steps: 12,      // dropped from 16 → 12 — floor before quality drops, saves another ~2-3s
-        guidance_scale: 4,
+        num_inference_steps: 18,      // illustration benefits from a few more steps for clean line work
+        guidance_scale: 4.5,
         true_cfg: 1,
-        id_weight: 0.9,               // 0.9 = strong likeness + just enough latitude to flatter
+        id_weight: 1.1,               // pushed up — stylization tends to abstract the face, so anchor harder
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
         negative_prompt:
-          "colour, color photograph, colour cast, warm tones, sepia, " +
-          "blurry, out of focus, low quality, distorted face, wrong identity, " +
-          "different person, cartoon, painting, illustration, anime, watermark, " +
-          "text, tired, exhausted, bags under eyes, dark circles, harsh shadows " +
-          "on face, harsh under-lighting, double chin, unflattering angle, " +
-          "low angle from below, high angle from above, tilted camera, " +
-          "oversized forehead, exaggerated forehead, enlarged forehead, " +
-          "tall forehead, exposed forehead, high hairline, receding hairline, " +
-          "big chin, oversized chin, prominent chin, exaggerated chin, " +
-          "jutting chin, lantern jaw, heavy jaw, masculine square jaw, " +
-          "wide jaw, bulky jawline, " +
-          "tight ponytail, slicked-back hair, hair pulled back, wet hair, " +
-          "wide-angle distortion, fisheye, head proportions wrong, " +
-          "oily skin, blemishes, acne, red skin, wrinkled, aged, dull skin, " +
-          "washed out, flat lighting, ugly, asymmetric face, deformed, bad anatomy, " +
-          "different hairstyle, restyled hair, recoloured hair, dyed hair, " +
-          "longer hair, shorter hair, changed haircut, wig, hat, headwear, " +
-          "head covering, hair extensions, " +
-          "AI generated look, plastic skin, over-smoothed, waxy skin, " +
-          "fake, synthetic, CGI, 3D render, doll-like, uncanny, airbrushed, " +
-          "perfect symmetry, glossy, polished plastic, smooth perfection, " +
-          "stern, gloomy, melancholic, joyless, severe, sad, depressed, " +
-          "scowling, frowning, grim, moody, sombre, heavy shadows on the " +
-          "face, deep chiaroscuro, low-key lighting",
+          "photograph, photo, photorealistic, realistic, real photo, " +
+          "DSLR photo, photographic skin texture, realistic skin, " +
+          "skin pores, fine detail skin, hair strands, blurry, " +
+          "shallow depth of field, bokeh, lens flare, film grain, " +
+          "studio photo, headshot photo, portrait photo, " +
+          "anime, manga, 3D render, CGI, sculpture, statue, " +
+          "deformed face, asymmetric face, distorted face, bad anatomy, " +
+          "different person, wrong identity, " +
+          "watermark, text, caption, banner, signature, logo, " +
+          "complex gradients, rainbow colours, full colour palette, " +
+          "blue, green, purple, yellow, brown, " +
+          "stern, gloomy, melancholic, scowling, frowning, grim",
       }),
     });
 
@@ -542,119 +497,16 @@ async function runPortraitPipeline(env, image, archetype) {
   }
   console.log(`[pipeline] PuLID ok t+${Date.now()-t0}ms`);
 
-  // The "current best" URL — each stage overwrites if it succeeds.
-    let workingUrl = pulidUrl;
-
-    // Step 2: Face-swap. Copies the user's actual face geometry from the
-    // input selfie onto the PuLID result. Locks identity.
-    try {
-      const swapRes = await fetch(FACE_SWAP_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Key ${env.FAL_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          source_image_url: image,     // user's selfie (face to use)
-          target_image_url: pulidUrl,  // PuLID scene (face to replace)
-        }),
-      });
-      if (swapRes.ok) {
-        const swapData = await swapRes.json();
-        const swappedUrl =
-          swapData?.image?.url ||
-          swapData?.images?.[0]?.url ||
-          swapData?.output_url;
-        if (swappedUrl) workingUrl = swappedUrl;
-        console.log(`[pipeline] face-swap ok t+${Date.now()-t0}ms`);
-      } else {
-        console.warn(`[pipeline] face-swap failed status=${swapRes.status} detail=${(await swapRes.text()).slice(0,300)}`);
-      }
-    } catch (swapErr) {
-      console.warn(`[pipeline] face-swap threw: ${swapErr?.message}`);
-    }
-
-    // Step 3: CodeFormer face-detail polish (best-effort). Operates on the
-    // face-swapped result so the polish applies to the user's actual face.
-    try {
-      const polishRes = await fetch(POLISH_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Key ${env.FAL_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image_url: workingUrl,
-          fidelity: 0.85,          // 0..1 — higher = stays closer to swapped face / more natural texture; lower = more over-polished
-          upscaling: 1,            // leave the upscale to step 4 so we don't compound
-          face_upsample: true,
-          background_enhance: false,
-        }),
-      });
-      if (polishRes.ok) {
-        const polishData = await polishRes.json();
-        const polishedUrl =
-          polishData?.image?.url ||
-          polishData?.images?.[0]?.url ||
-          polishData?.output_url;
-        if (polishedUrl) workingUrl = polishedUrl;
-        console.log(`[pipeline] CodeFormer ok t+${Date.now()-t0}ms`);
-      } else {
-        console.warn(`[pipeline] CodeFormer failed status=${polishRes.status} detail=${(await polishRes.text()).slice(0,300)}`);
-      }
-    } catch (polishErr) {
-      console.warn(`[pipeline] CodeFormer threw: ${polishErr?.message}`);
-    }
-
-    // Step 4: Clarity Upscaler realism pass (best-effort). Low creativity
-    // so the face/structure doesn't shift; high resemblance so the
-    // upscaler treats the input as authoritative. Result: photographic
-    // texture and grain layered onto an otherwise AI-flat image.
-    try {
-      const realismRes = await fetch(REALISM_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Key ${env.FAL_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image_url: workingUrl,
-          prompt:
-            "Black and white studio portrait photograph, fine silver-gelatin " +
-            "grain, real-camera photographic detail, natural skin texture with " +
-            "subtle fine pores, shot on 85mm prime lens, photorealistic, " +
-            "monochrome editorial portrait",
-          negative_prompt:
-            "colour, color photograph, colour cast, sepia, " +
-            "AI generated, plastic skin, over-smoothed, fake, synthetic, " +
-            "CGI, render, doll-like, uncanny, airbrushed, glossy, " +
-            "oversized forehead, exaggerated head proportions",
-          creativity:  0.3,        // low — don't reinvent, just add detail
-          resemblance: 0.7,        // high — preserve the input structure
-          upscale_factor: 1,       // keep 1× — 2× was pushing the pipeline past Cloudflare's waitUntil window
-          num_inference_steps: 10, // halved from 18 — fastest setting that still adds visible grain
-          guidance_scale: 3,
-        }),
-      });
-      if (realismRes.ok) {
-        const realismData = await realismRes.json();
-        const realismOut =
-          realismData?.image?.url ||
-          realismData?.images?.[0]?.url ||
-          realismData?.output_url;
-        if (realismOut) workingUrl = realismOut;
-        console.log(`[pipeline] Clarity ok t+${Date.now()-t0}ms`);
-      } else {
-        console.warn(`[pipeline] Clarity failed status=${realismRes.status} detail=${(await realismRes.text()).slice(0,300)}`);
-      }
-    } catch (realismErr) {
-      console.warn(`[pipeline] Clarity threw: ${realismErr?.message}`);
-    }
+  // Illustration pipeline is single-stage: PuLID with the new prompts.
+  // We previously chained face-swap + CodeFormer + Clarity to drive the
+  // output toward a polished photograph — all three fight the flat-
+  // illustration style we're now aiming for, so they're skipped.
+  // Pipeline drops from ~25s/$0.10 → ~10s/$0.04 as a side benefit.
 
   // Proxy the final image as inline base64 — avoids cross-origin canvas
   // taint and keeps fal.ai's transient URLs off the client.
   console.log(`[pipeline] fetching final image t+${Date.now()-t0}ms`);
-  const imgRes = await fetch(workingUrl);
+  const imgRes = await fetch(pulidUrl);
   if (!imgRes.ok) throw new Error(`image_fetch_failed:${imgRes.status}`);
   const buf = await imgRes.arrayBuffer();
   const result = `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
