@@ -102,6 +102,15 @@
   .brand-logo.sm { width: 132px; height: 20px; }
   .brand-logo.md { width: 200px; height: 30px; }
   .brand-logo.lg { width: 280px; height: 42px; }
+  /* Pin the intro logo to the very top of the screen (out of the
+     centered flex flow), so the headline + CTA are vertically
+     centred on their own. */
+  .intro-logo {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
   .brand-logo.wine { background-color: var(--wine); filter: none; }
   .brand-logo.orange { background-color: var(--orange); filter: none; }
 
@@ -289,10 +298,10 @@
   .screen h1 {
     font-family: "Aileron", "General Sans", sans-serif;
     font-size: clamp(32px, 9vw, 56px);
-    margin: 0 0 14px 0;
+    margin: 0 0 20px 0;
     letter-spacing: -0.015em;
     font-weight: 800;
-    line-height: 1.05;
+    line-height: 1.12;
     color: var(--peach);
   }
   .screen p {
@@ -301,7 +310,7 @@
     max-width: 520px;
     line-height: 1.55;
     color: rgba(255,214,187,0.88);
-    margin: 0 0 24px 0;
+    margin: 0 0 32px 0;
   }
   .btn {
     appearance: none;
@@ -772,7 +781,7 @@
 
   <!-- intro -->
   <div class="screen show" id="screenIntro">
-    <span class="brand-logo md" style="margin-bottom: 24px;" aria-label="Von Peach"></span>
+    <span class="brand-logo sm intro-logo" aria-label="Von Peach"></span>
     <h1>Which game changer are you?</h1>
     <p class="lede">Tilt your head to answer.</p>
     <div class="btnrow">
