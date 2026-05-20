@@ -34,43 +34,37 @@
 const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
 const RESEND_URL = "https://api.resend.com/emails";
 
-// Universal illustrated-tarot-card layer — appended to every archetype
-// prompt. Locks the visual language across all eight cards: flat
-// vector-poster art on peach paper with wine outlines and brand-orange
-// /red accents. Modern comic-tarot aesthetic (Rider-Waite × poster art).
-const FLATTERING =
-  " Style: bold modern tarot card illustration in the manner of a " +
-  "contemporary illustrated tarot deck. Flat vector-poster artwork with " +
-  "heavy clean wine-red linework outlines, smooth solid colour fills, " +
-  "dramatic dynamic composition. NOT a photograph. STRICTLY LIMITED " +
-  "PALETTE — only these four colours and their tones: warm peach paper " +
-  "background (#FFD6BB), deep wine red (#99112F) for line work and " +
-  "shadows, brand orange (#FD8839) for highlights, brand red (#CC1C0E) " +
-  "for accents and flames. No other hues, no realistic skin tone. " +
-  "Composition: full-body or three-quarter-body figure framed centrally, " +
-  "edge-to-edge illustration filling the panel, dynamic dramatic pose " +
-  "with arms / hands engaged in a specific symbolic action. Background " +
-  "is a flat decorative scene of swirling forms, abstract motifs, and " +
-  "symbolic props relevant to the archetype — never plain. " +
-  "The face is stylised in the same illustrated language as the rest of " +
-  "the figure (heavy outline + flat colour fills, simplified features) " +
-  "but the underlying facial structure, hair length, hair colour, " +
-  "ethnicity, age range and overall identity should clearly resemble the " +
-  "reference subject — a friend should recognise them. " +
-  "No text on the card, no caption, no banner, no logo, no watermark. " +
-  "No photographic style, no photorealism, no realistic skin texture, " +
-  "no gradients beyond simple cel-shaded fills.";
+// Universal illustrated-tarot-card layer — placed at the FRONT of every
+// prompt (PuLID weights early tokens more heavily). Locks the visual
+// language across all eight cards: flat vector-poster art on peach
+// paper with wine outlines and brand-orange/red accents. Modern
+// comic-tarot aesthetic (Rider-Waite × poster art).
+const STYLE_LEAD =
+  "FLAT VECTOR ILLUSTRATION, modern tarot card art in the manner of a " +
+  "contemporary illustrated tarot deck. NOT A PHOTOGRAPH, NOT " +
+  "PHOTOREALISTIC. Heavy clean wine-red linework outlines, smooth solid " +
+  "colour fills, cel-shaded, comic-book illustration style. STRICTLY " +
+  "LIMITED PALETTE: warm peach paper background (#FFD6BB), deep wine red " +
+  "(#99112F) for linework and shadows, brand orange (#FD8839) for " +
+  "highlights, brand red (#CC1C0E) for accents and flames. NO realistic " +
+  "skin tone, NO photographic skin texture. ";
 
-// Archetype prompts diverge ONLY on expression + wardrobe + prop.
-// Lighting, backdrop, lens, crop and tonal treatment all live in the
-// shared FLATTERING block above.
-//
-// Each archetype carries a POOL of 5 props that the Worker randomly
-// picks from at request time, so two people landing on the same
-// archetype get visually distinct portraits.
+const STYLE_TRAIL =
+  " The face is rendered in the same flat illustrated language as the " +
+  "rest of the figure (heavy outline, flat colour fills, simplified " +
+  "stylised features — NOT a photographic face) but the underlying " +
+  "facial structure, hair length, hair colour, ethnicity and age range " +
+  "should clearly resemble the reference subject — a friend should " +
+  "recognise them in the cartoon. " +
+  "No text on the card, no caption, no banner, no logo, no watermark. " +
+  "No photographic style, no realistic skin texture, no gradients beyond " +
+  "simple cel-shaded fills, no off-palette hues.";
+
 // Illustrated tarot card scenes — each archetype is a dramatic
 // vector-poster scene with the figure mid-action and a symbolic
-// background. Each archetype has 5 scene variants for visual variety
+// background. The shared STYLE_LEAD goes at the front and STYLE_TRAIL
+// at the back of every prompt (see getPromptFor below). Each archetype
+// has 5 scene variants for visual variety
 // across generations.
 const PROMPT_TEMPLATES = {
   charmer: {
@@ -278,7 +272,10 @@ function getPromptFor(archetype) {
   const t = PROMPT_TEMPLATES[archetype];
   if (!t) return null;
   const prop = t.props[Math.floor(Math.random() * t.props.length)];
-  return t.base + prop + FLATTERING;
+  // STYLE_LEAD goes FIRST — PuLID/Flux weight the first prompt tokens
+  // most heavily, and we need the "flat illustration, not a photograph"
+  // directive to win against Flux's photo bias.
+  return STYLE_LEAD + t.base + prop + STYLE_TRAIL;
 }
 
 // Eight-archetype email content. `paragraphs` is rendered as separate <p>
@@ -460,10 +457,10 @@ async function runPortraitPipeline(env, image, archetype) {
         prompt,
         reference_image_url: image,   // user's face — PuLID anchors on this
         image_size: "portrait_4_3",   // editorial portrait crop
-        num_inference_steps: 18,      // illustration benefits from a few more steps for clean line work
-        guidance_scale: 4.5,
+        num_inference_steps: 22,      // illustration benefits from a few more steps for clean line work
+        guidance_scale: 7,            // pushed up hard — Flux base has a photo bias; high CFG forces the illustration prompt to win
         true_cfg: 1,
-        id_weight: 1.1,               // pushed up — stylization tends to abstract the face, so anchor harder
+        id_weight: 0.7,               // dropped — high id_weight was preserving the photographic face. 0.7 keeps strong likeness while letting stylization happen
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
