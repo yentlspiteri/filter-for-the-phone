@@ -40,25 +40,33 @@ const RESEND_URL = "https://api.resend.com/emails";
 // paper with wine outlines and brand-orange/red accents. Modern
 // comic-tarot aesthetic (Rider-Waite × poster art).
 const STYLE_LEAD =
-  "FLAT VECTOR ILLUSTRATION, modern tarot card art in the manner of a " +
-  "contemporary illustrated tarot deck. NOT A PHOTOGRAPH, NOT " +
-  "PHOTOREALISTIC. Heavy clean wine-red linework outlines, smooth solid " +
-  "colour fills, cel-shaded, comic-book illustration style. STRICTLY " +
-  "LIMITED PALETTE: warm peach paper background (#FFD6BB), deep wine red " +
-  "(#99112F) for linework and shadows, brand orange (#FD8839) for " +
-  "highlights, brand red (#CC1C0E) for accents and flames. NO realistic " +
-  "skin tone, NO photographic skin texture. ";
+  "FLAT 2D COMIC ILLUSTRATION, hand-drawn vector tarot card art. NOT A " +
+  "PHOTOGRAPH. NOT PHOTOREALISTIC. NOT A PHOTO COMPOSITE. The ENTIRE " +
+  "image including the face, skin, hair, eyes, lips, hands and " +
+  "everything else is drawn in the SAME flat cel-shaded illustration " +
+  "language — heavy clean wine-red linework outlines, smooth solid " +
+  "colour fills, comic-book style. The face has illustrated comic-style " +
+  "eyes (drawn pupils + simplified eyelid shapes), drawn lips, drawn " +
+  "nose lines, and flat-fill skin tone — NEVER a photographic face on " +
+  "an illustrated body. Edge-to-edge artwork that completely fills the " +
+  "frame with decorative illustrated content — no white margins, no " +
+  "empty space, no centred 'spotlight' composition with blank " +
+  "surroundings. STRICTLY LIMITED PALETTE: warm peach background " +
+  "(#FFD6BB), deep wine red (#99112F) for linework and shadows, brand " +
+  "orange (#FD8839) for highlights, brand red (#CC1C0E) for accents " +
+  "and flames. ";
 
 const STYLE_TRAIL =
-  " The face is rendered in the same flat illustrated language as the " +
-  "rest of the figure (heavy outline, flat colour fills, simplified " +
-  "stylised features — NOT a photographic face) but the underlying " +
-  "facial structure, hair length, hair colour, ethnicity and age range " +
-  "should clearly resemble the reference subject — a friend should " +
-  "recognise them in the cartoon. " +
+  " The face is rendered in the SAME flat illustrated language as the " +
+  "rest of the figure — drawn comic-style eyes with pupils, drawn lips, " +
+  "drawn nose lines, simplified cel-shaded skin in peach-wine tones with " +
+  "heavy outline. The hairstyle, hair length, hair colour, face shape " +
+  "and overall identity should resemble the reference subject — but " +
+  "rendered as a comic illustration, not a photograph. Background " +
+  "decoration fills every corner of the frame with illustrated motifs. " +
   "No text on the card, no caption, no banner, no logo, no watermark. " +
-  "No photographic style, no realistic skin texture, no gradients beyond " +
-  "simple cel-shaded fills, no off-palette hues.";
+  "No photographic skin texture, no photographic eyes, no skin pores, " +
+  "no real hair strands, no off-palette hues, no white empty margins.";
 
 // Illustrated tarot card scenes — each archetype is a dramatic
 // vector-poster scene with the figure mid-action and a symbolic
@@ -460,23 +468,27 @@ async function runPortraitPipeline(env, image, archetype) {
         num_inference_steps: 22,      // illustration benefits from a few more steps for clean line work
         guidance_scale: 7,            // pushed up hard — Flux base has a photo bias; high CFG forces the illustration prompt to win
         true_cfg: 1,
-        id_weight: 0.7,               // dropped — high id_weight was preserving the photographic face. 0.7 keeps strong likeness while letting stylization happen
+        id_weight: 0.5,               // dropped further — at 0.7 the FACE region was still photographic against an illustrated body. 0.5 lets the face cartoonify too while still resembling the subject
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
         negative_prompt:
-          "photograph, photo, photorealistic, realistic, real photo, " +
-          "DSLR photo, photographic skin texture, realistic skin, " +
-          "skin pores, fine detail skin, hair strands, blurry, " +
-          "shallow depth of field, bokeh, lens flare, film grain, " +
+          "photograph, photo, photorealistic, realistic face, real photo, " +
+          "photographic face on illustrated body, photo composite, " +
+          "mixed media photo-illustration, real human face, " +
+          "DSLR photo, photographic skin texture, skin pores, fine pores, " +
+          "individual hair strands, photographic eyes, eye reflections, " +
+          "catchlights, real eyelashes, " +
+          "blurry, shallow depth of field, bokeh, lens flare, film grain, " +
           "studio photo, headshot photo, portrait photo, " +
+          "white empty margin, white border, blank space, centred " +
+          "spotlight composition, isolated subject on plain background, " +
+          "incomplete background, vignette, dark margins, " +
           "anime, manga, 3D render, CGI, sculpture, statue, " +
           "deformed face, asymmetric face, distorted face, bad anatomy, " +
-          "different person, wrong identity, " +
           "watermark, text, caption, banner, signature, logo, " +
           "complex gradients, rainbow colours, full colour palette, " +
-          "blue, green, purple, yellow, brown, " +
-          "stern, gloomy, melancholic, scowling, frowning, grim",
+          "blue, green, purple, yellow, brown",
       }),
     });
 
