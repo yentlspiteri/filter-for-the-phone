@@ -657,8 +657,8 @@
     color: rgba(255,214,187,0.78);
     max-width: 320px;
     letter-spacing: 0.02em;
-    min-height: 1.4em;
-    transition: opacity 420ms ease;
+    min-height: 2.8em; /* room for two lines so swaps don't push layout */
+    transition: opacity 280ms ease;
     font-style: italic;
   }
 
@@ -1408,12 +1408,9 @@ async function requestAIPortrait(canvas, archetype) {
 // loader has motion and the wait feels like part of the experience.
 const PAINTING_MESSAGES = [
   "Sit tall and look into the lens.",
-  "Hold tight — this will only take a minute.",
-  "Reading the room in your eyes…",
+  "Hold tight — just a minute.",
   "Composing the scene…",
-  "Brushing in the shadows…",
-  "Polishing the details…",
-  "Almost there — hold your breath…",
+  "Almost there…",
 ];
 
 function startPaintingMessages() {
