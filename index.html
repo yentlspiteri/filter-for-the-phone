@@ -628,6 +628,16 @@
     background-position: center;
     filter: blur(14px) brightness(0.78) saturate(1.05);
     transform: scale(1.2);
+    will-change: transform, filter;
+    animation: skeleton-breathe 5.5s ease-in-out infinite;
+  }
+  @keyframes skeleton-breathe {
+    0%   { transform: scale(1.2)  translate(0%, 0%);   filter: blur(14px) brightness(0.78) saturate(1.05); }
+    50%  { transform: scale(1.32) translate(-1.5%, 1%); filter: blur(18px) brightness(0.84) saturate(1.10); }
+    100% { transform: scale(1.2)  translate(0%, 0%);   filter: blur(14px) brightness(0.78) saturate(1.05); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .painting-skeleton-img { animation: none; }
   }
   .painting-skeleton-shimmer {
     position: absolute; inset: 0;
