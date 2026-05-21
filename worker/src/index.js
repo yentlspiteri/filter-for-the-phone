@@ -23,14 +23,21 @@
 // Vars (set in wrangler.toml or via dashboard):
 //   FROM_EMAIL   — verified Resend sender, e.g. "Von Peach <hello@vonpeach.com>"
 
-// Single-stage illustration pipeline: flux-pulid with the brand-locked
-// illustrated-tarot prompts. Identity is anchored from the user's face
-// via reference_image_url + id_weight. We previously chained
-// face-swap + CodeFormer + Clarity Upscaler to drive the output toward
-// a polished photograph; those stages all fight the flat-illustration
-// look we want now, so they're removed. Net: ~10s + ~$0.04 per portrait
-// (down from ~25s + ~$0.10).
+// Illustration pipeline: a Workers AI vision pre-pass + flux-pulid with the
+// brand-locked illustrated-tarot prompts. Identity is anchored two ways:
+//   1. A vision pre-pass (Llama 3.2 Vision) reads the photo and extracts
+//      gender / hair colour+length or baldness / facial hair / eye colour,
+//      which get baked into the prompt as a hard "the figure MUST be …"
+//      directive. Without this the prompt is silent on identity and Flux
+//      defaults to a generic woman — so men, bald subjects, and distinct
+//      hair/eye colours were all being lost.
+//   2. reference_image_url + id_weight on PuLID for facial likeness.
+// We previously chained face-swap + CodeFormer + Clarity Upscaler to drive the
+// output toward a polished photograph; those stages all fight the flat-
+// illustration look we want now, so they're removed. Net: ~12s + ~$0.04 per
+// portrait (the vision pre-pass adds ~2-3s; Workers AI is free-tier cheap).
 //   docs: https://fal.ai/models/fal-ai/flux-pulid
+//         https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/
 const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
 const RESEND_URL = "https://api.resend.com/emails";
 
@@ -78,10 +85,11 @@ const PROMPT_TEMPLATES = {
   charmer: {
     base:
       "Illustrated tarot card: 'The Charmer'. Three-quarter-body " +
-      "figure in a flowing dramatic wine-red gown or tunic with peach " +
-      "highlights, arms gracefully outstretched in a welcoming " +
-      "gesture, warm magnetic smile. Background swirling with " +
-      "decorative ribbon-like patterns and scattered roses. ",
+      "figure in flowing dramatic wine-red attire (robe, tunic, or " +
+      "sharp open-collar coat — appropriate to the subject's gender) " +
+      "with peach highlights, arms gracefully outstretched in a " +
+      "welcoming gesture, warm magnetic smile. Background swirling " +
+      "with decorative ribbon-like patterns and scattered roses. ",
     props: [
       "Variant: arms wide open in a hosting gesture, large red roses " +
         "tumbling through the air around the figure, decorative " +
@@ -276,14 +284,45 @@ const PROMPT_TEMPLATES = {
   },
 };
 
-function getPromptFor(archetype) {
+// Turn the vision pre-pass attributes into a hard identity directive. This is
+// placed RIGHT AFTER the style lead (very early in the prompt) because PuLID/
+// Flux weight early tokens most heavily — and identity is exactly what we were
+// losing. Without it, the templates are silent on who the figure is and Flux
+// defaults to a generic woman. With it, gender / hair / baldness / eye colour /
+// facial hair are stated explicitly and repeated as a constraint.
+function buildSubjectDirective(subject) {
+  if (!subject) return "";
+  const bits = [];
+  if (subject.gender)   bits.push(`a ${subject.gender}`);
+  if (subject.age)      bits.push(subject.age);
+  if (subject.hair)     bits.push(subject.hair);
+  if (subject.facial)   bits.push(subject.facial);
+  if (subject.eyes)     bits.push(subject.eyes);
+  if (subject.skin)     bits.push(subject.skin);
+  if (!bits.length) return "";
+  const desc = bits.join(", ");
+  return (
+    `THE SUBJECT IS ${desc.toUpperCase()}. The figure MUST be ${desc} — ` +
+    `match the gender, hairstyle, hair colour (or baldness), facial hair and ` +
+    `eye colour exactly. Do NOT change the subject's gender. ` +
+    (/\bman\b|male/i.test(subject.gender || "")
+      ? "This is a MALE figure with masculine features and build. "
+      : "") +
+    (/bald|balding|shaved head|no hair/i.test(subject.hair || "")
+      ? "The figure is BALD with no hair on top of the head. "
+      : "")
+  );
+}
+
+function getPromptFor(archetype, subject) {
   const t = PROMPT_TEMPLATES[archetype];
   if (!t) return null;
   const prop = t.props[Math.floor(Math.random() * t.props.length)];
   // STYLE_LEAD goes FIRST — PuLID/Flux weight the first prompt tokens
   // most heavily, and we need the "flat illustration, not a photograph"
-  // directive to win against Flux's photo bias.
-  return STYLE_LEAD + t.base + prop + STYLE_TRAIL;
+  // directive to win against Flux's photo bias. The subject directive comes
+  // immediately after so identity (gender/hair/eyes) is locked early too.
+  return STYLE_LEAD + buildSubjectDirective(subject) + t.base + prop + STYLE_TRAIL;
 }
 
 // Eight-archetype email content. `paragraphs` is rendered as separate <p>
@@ -446,14 +485,86 @@ async function handlePortraitEmail(request, env, ctx, cors) {
   }
 }
 
+// ---------- vision pre-pass: describe the subject so we can keep their identity
+// Runs the user's photo through Workers AI (Llama 3.2 Vision) and extracts the
+// few attributes that PuLID was losing: gender, hair colour/length or baldness,
+// facial hair, eye colour, skin tone. Returns a plain object the prompt builder
+// turns into a hard directive, or null if the AI binding is missing / the call
+// fails (in which case we fall back to the old identity-silent behaviour).
+async function describeSubject(env, imageDataUrl) {
+  if (!env.AI) return null;
+  try {
+    const b64 = String(imageDataUrl).split(",").pop();
+    const bytes = base64ToUint8Array(b64);
+    const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+      // Image as a byte array per Workers AI vision input contract.
+      image: [...bytes],
+      max_tokens: 256,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise facial-attribute extractor for an illustration " +
+            "pipeline. Look at the single most prominent face in the photo and " +
+            "report only what you can clearly see. Respond with STRICT JSON " +
+            "only — no prose, no markdown — using exactly these keys: " +
+            '{"gender":"man"|"woman", "age":"young adult"|"adult"|"middle-aged"|"older", ' +
+            '"hair":"<colour + length, e.g. short dark brown hair> OR bald OR shaved head", ' +
+            '"facial":"clean-shaven" | "<beard/moustache description>", ' +
+            '"eyes":"<eye colour> eyes", "skin":"<skin tone> skin"}. ' +
+            "If the person clearly has no hair, set hair to \"bald\". " +
+            "Never omit the gender key.",
+        },
+        { role: "user", content: "Describe this person's visible attributes as JSON." },
+      ],
+    });
+    const raw = (out && (out.response ?? out.description ?? out.text)) || "";
+    const subject = parseSubjectJson(raw);
+    if (subject) console.log(`[pipeline] subject=${JSON.stringify(subject)}`);
+    return subject;
+  } catch (err) {
+    console.warn(`[pipeline] subject describe failed: ${err?.message}`);
+    return null;
+  }
+}
+
+// Pull the first {...} block out of the model output and validate it. Vision
+// models occasionally wrap JSON in prose or code fences despite instructions,
+// so we extract defensively rather than JSON.parse the whole string.
+function parseSubjectJson(raw) {
+  if (!raw) return null;
+  const match = String(raw).match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    const obj = JSON.parse(match[0]);
+    const clean = (v) => (typeof v === "string" ? v.trim() : "");
+    const subject = {
+      gender: clean(obj.gender),
+      age: clean(obj.age),
+      hair: clean(obj.hair),
+      facial: clean(obj.facial),
+      eyes: clean(obj.eyes),
+      skin: clean(obj.skin),
+    };
+    // Gender is the attribute we most need; if it's missing the rest is noise.
+    return subject.gender ? subject : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- pipeline: runs all four AI stages, returns a data URL ----------
 async function runPortraitPipeline(env, image, archetype) {
-  const prompt = getPromptFor(archetype);
-  if (!prompt) throw new Error("unknown_archetype");
+  if (!PROMPT_TEMPLATES[archetype]) throw new Error("unknown_archetype");
   if (!env.FAL_KEY) throw new Error("no_fal_key");
 
   const t0 = Date.now();
   console.log(`[pipeline] start archetype=${archetype}`);
+
+  // Vision pre-pass first so the descriptor can be baked into the prompt.
+  const subject = await describeSubject(env, image);
+  const prompt = getPromptFor(archetype, subject);
+  console.log(`[pipeline] subject pre-pass done t+${Date.now()-t0}ms hasSubject=${!!subject}`);
 
   const falRes = await fetch(FAL_URL, {
       method: "POST",
