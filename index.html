@@ -660,16 +660,36 @@
   @media (prefers-reduced-motion: reduce) {
     .painting-skeleton-shimmer { animation: none; opacity: 0.25; }
   }
-  .painting-hint {
-    margin-top: 26px;
+  /* Fixed-height slot for the rotating hint. The slot reserves the space; the
+     hint is absolutely positioned inside and cross-fades IN PLACE. This means a
+     one-line vs two-line message can never change the block's height — so the
+     skeleton + "Reading your cards" eyebrow above never jolt during rotation,
+     and the hint can never collide with the eyebrow. (The previous min-height
+     reservation was defeated: `.screen p` out-specifies `.painting-hint` and
+     forces 16px, making a two-line message 49.6px — taller than the 44.8px
+     reservation — so every swap nudged the whole block.) */
+  .painting-hint-slot {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    font-size: 14px;
+    height: 3.2em;   /* room for up to two 14px / 1.5 lines */
+  }
+  /* `.painting-loading` prefix raises specificity above `.screen p`. */
+  .painting-loading .painting-hint {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
     font-family: "General Sans", sans-serif;
     font-size: 14px;
+    line-height: 1.5;
     color: rgba(255,214,187,0.78);
-    max-width: 320px;
     letter-spacing: 0.02em;
-    min-height: 2.8em; /* room for two lines so swaps don't push layout */
-    transition: opacity 280ms ease;
+    text-align: center;
     font-style: italic;
+    transition: opacity 260ms ease;
   }
 
   /* Email-capture button arrangement: primary full-width, secondaries split */
@@ -894,7 +914,9 @@
           <div class="painting-skeleton-shimmer"></div>
         </div>
         <div class="painting-eyebrow">Reading your cards</div>
-        <p class="painting-hint" id="paintingHint">Sit tall and look into the lens.</p>
+        <div class="painting-hint-slot">
+          <p class="painting-hint" id="paintingHint">Sit tall and look into the lens.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1027,6 +1049,7 @@ let frozenArchetype = null;   // key into ARCHETYPES
 let usingAIPortrait = false;  // true once an AI-painted portrait has replaced frozenFrame
 let aiPortraitDataUrl = null; // the clean AI portrait as a data URL, for the email (LinkedIn-ready, no card framing)
 let paintingMsgInterval = null; // rotates the "Catching the light…" hints during the loader
+let paintingMsgTimeout = null;  // pending text-swap inside a fade; cleared on stop
 
 // Pre-load brand logo so the share canvas can render it
 const brandLogo = new Image();
@@ -1424,21 +1447,25 @@ const PAINTING_MESSAGES = [
 ];
 
 function startPaintingMessages() {
-  if (paintingMsgInterval) clearInterval(paintingMsgInterval);
+  stopPaintingMessages();
   let i = 0;
   paintingHint.textContent = PAINTING_MESSAGES[0];
   paintingHint.style.opacity = "1";
   paintingMsgInterval = setInterval(() => {
     paintingHint.style.opacity = "0";
-    setTimeout(() => {
+    // Swap the text only after the 260ms fade-out has fully completed, then
+    // fade the new message back in. The handle is tracked so a fast result
+    // (stopPaintingMessages) can cancel a pending swap mid-fade.
+    paintingMsgTimeout = setTimeout(() => {
       i = (i + 1) % PAINTING_MESSAGES.length;
       paintingHint.textContent = PAINTING_MESSAGES[i];
       paintingHint.style.opacity = "1";
-    }, 380);
+    }, 300);
   }, 3400);
 }
 function stopPaintingMessages() {
   if (paintingMsgInterval) { clearInterval(paintingMsgInterval); paintingMsgInterval = null; }
+  if (paintingMsgTimeout) { clearTimeout(paintingMsgTimeout); paintingMsgTimeout = null; }
 }
 
 function renderQuestion() {
