@@ -35,38 +35,53 @@ const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
 const RESEND_URL = "https://api.resend.com/emails";
 
 // Universal illustrated-tarot-card layer — placed at the FRONT of every
-// prompt (PuLID weights early tokens more heavily). Locks the visual
-// language across all eight cards: flat vector-poster art on peach
-// paper with wine outlines and brand-orange/red accents. Modern
-// comic-tarot aesthetic (Rider-Waite × poster art).
+// prompt (PuLID weights early tokens most heavily). Locks the visual
+// language across all eight cards: bold cel-shaded animated graphic-novel
+// art on peach paper with deep-wine/near-black linework and brand
+// orange/red accents. Modern animated-tarot aesthetic — think Western
+// animation concept art (Disney/Pixar character energy) crossed with a
+// hand-inked tarot deck, NOT flat poster art.
 const STYLE_LEAD =
-  "FLAT 2D COMIC ILLUSTRATION, hand-drawn vector tarot card art. NOT A " +
-  "PHOTOGRAPH. NOT PHOTOREALISTIC. NOT A PHOTO COMPOSITE. The ENTIRE " +
-  "image including the face, skin, hair, eyes, lips, hands and " +
-  "everything else is drawn in the SAME flat cel-shaded illustration " +
-  "language — heavy clean wine-red linework outlines, smooth solid " +
-  "colour fills, comic-book style. The face has illustrated comic-style " +
-  "eyes (drawn pupils + simplified eyelid shapes), drawn lips, drawn " +
-  "nose lines, and flat-fill skin tone — NEVER a photographic face on " +
-  "an illustrated body. Edge-to-edge artwork that completely fills the " +
-  "frame with decorative illustrated content — no white margins, no " +
-  "empty space, no centred 'spotlight' composition with blank " +
-  "surroundings. STRICTLY LIMITED PALETTE: warm peach background " +
-  "(#FFD6BB), deep wine red (#99112F) for linework and shadows, brand " +
-  "orange (#FD8839) for highlights, brand red (#CC1C0E) for accents " +
-  "and flames. ";
+  "BOLD CEL-SHADED ANIMATED GRAPHIC-NOVEL TAROT ILLUSTRATION, in a " +
+  "modern Western animation style — think Disney/Pixar concept art " +
+  "crossed with a hand-inked comic-book tarot deck. NOT A PHOTOGRAPH. " +
+  "NOT PHOTOREALISTIC. NOT A PHOTO COMPOSITE. NOT ANIME OR MANGA. The " +
+  "ENTIRE image — face, skin, hair, eyes, lips, hands and everything " +
+  "else — is drawn in the SAME bold ink-illustration language with " +
+  "HEAVY DEEP-WINE OR NEAR-BLACK LINEWORK outlines, smooth solid " +
+  "colour fills, and clean cel-shaded volumes that give the figure " +
+  "real weight and dimension. The character has an EXPRESSIVE " +
+  "ANIMATED-FILM FACE with large lively comic-style eyes (clearly " +
+  "drawn pupils + simplified eyelid shapes), a clearly drawn open or " +
+  "smiling mouth, drawn nose lines, and flat-fill skin tone — vibrant " +
+  "animated-character energy, NEVER a photographic face on an " +
+  "illustrated body. Strong DYNAMIC MID-ACTION POSE with clear " +
+  "gestural movement — not a stiff frontal beauty shot. Edge-to-edge " +
+  "artwork that completely fills the frame with DENSELY ILLUSTRATED " +
+  "SYMBOLIC BACKGROUND MOTIFS (architecture, weather, props, " +
+  "creatures relevant to the archetype) — no white margins, no empty " +
+  "space, no centred 'spotlight' composition with blank surroundings. " +
+  "STRICTLY LIMITED PALETTE: warm peach background / paper (#FFD6BB), " +
+  "deep wine red (#99112F) for linework, shadows and fills, brand " +
+  "orange (#FD8839) for highlights and warm accents, brand red " +
+  "(#CC1C0E) for flames and bold accents. ";
 
 const STYLE_TRAIL =
-  " The face is rendered in the SAME flat illustrated language as the " +
-  "rest of the figure — drawn comic-style eyes with pupils, drawn lips, " +
-  "drawn nose lines, simplified cel-shaded skin in peach-wine tones with " +
-  "heavy outline. The hairstyle, hair length, hair colour, face shape " +
-  "and overall identity should resemble the reference subject — but " +
-  "rendered as a comic illustration, not a photograph. Background " +
-  "decoration fills every corner of the frame with illustrated motifs. " +
-  "No text on the card, no caption, no banner, no logo, no watermark. " +
-  "No photographic skin texture, no photographic eyes, no skin pores, " +
-  "no real hair strands, no off-palette hues, no white empty margins.";
+  " The face is rendered in the SAME bold ink-illustration language as " +
+  "the rest of the figure — large drawn comic-style eyes with bright " +
+  "visible pupils, drawn lips with clear shape, drawn nose lines, " +
+  "cel-shaded skin in peach-wine tones with heavy outline, vivid " +
+  "animated-character expression. The hairstyle, hair length, hair " +
+  "colour, face shape and overall identity should resemble the " +
+  "reference subject — but rendered as an animated graphic-novel " +
+  "character, not a photograph. The background fills every corner of " +
+  "the frame with densely illustrated thematic motifs that tell the " +
+  "archetype's story (buildings, weather, props, creatures, smoke or " +
+  "flame patterns appropriate to the scene). No text on the card, no " +
+  "caption, no banner, no logo, no watermark. No photographic skin " +
+  "texture, no photographic eyes, no skin pores, no real hair strands, " +
+  "no off-palette hues, no white empty margins, no stiff frontal " +
+  "beauty-pose composition, no flat blank background.";
 
 // Illustrated tarot card scenes — each archetype is a dramatic
 // vector-poster scene with the figure mid-action and a symbolic
@@ -484,7 +499,12 @@ async function runPortraitPipeline(env, image, archetype) {
           "white empty margin, white border, blank space, centred " +
           "spotlight composition, isolated subject on plain background, " +
           "incomplete background, vignette, dark margins, " +
-          "anime, manga, 3D render, CGI, sculpture, statue, " +
+          "stiff frontal pose, beauty shot, expressionless face, " +
+          "neutral closed-mouth expression, flat affect, lifeless eyes, " +
+          "small beady eyes, dead-eyed stare, " +
+          "thin sparse linework, faint outlines, washed-out colours, " +
+          "flat poster art, sticker-like figure, low-detail background, " +
+          "anime, manga, chibi, 3D render, CGI, sculpture, statue, " +
           "deformed face, asymmetric face, distorted face, bad anatomy, " +
           "watermark, text, caption, banner, signature, logo, " +
           "complex gradients, rainbow colours, full colour palette, " +
