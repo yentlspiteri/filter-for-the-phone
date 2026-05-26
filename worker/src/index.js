@@ -316,17 +316,68 @@ function buildSubjectDirective(subject) {
   if (subject.skin)     bits.push(subject.skin);
   if (!bits.length) return "";
   const desc = bits.join(", ");
+  const isMan  = /\bman\b|male/i.test(subject.gender || "");
+  const isBald = /bald|balding|shaved head|no hair/i.test(subject.hair || "");
   return (
     `THE SUBJECT IS ${desc.toUpperCase()}. The figure MUST be ${desc} — ` +
-    `match the gender, hairstyle, hair colour (or baldness), facial hair and ` +
-    `eye colour exactly. Do NOT change the subject's gender. ` +
-    (/\bman\b|male/i.test(subject.gender || "")
-      ? "This is a MALE figure with masculine features and build. "
+    `match the GENDER, hairstyle, hair colour (or BALDNESS), facial hair and ` +
+    `eye colour EXACTLY. Do NOT change the subject's gender. ` +
+    (isMan
+      ? "This is a MALE figure with masculine features, jawline and build. "
       : "") +
-    (/bald|balding|shaved head|no hair/i.test(subject.hair || "")
-      ? "The figure is BALD with no hair on top of the head. "
+    (isBald
+      ? "The figure is BALD with NO hair on top of the head — a shiny clean scalp, no flowing locks. "
+      : "") +
+    // Eye colour and hair colour are the two attributes Flux is most likely to
+    // lose under stylization, so spell them out again as their own clauses.
+    (subject.eyes
+      ? `Eye colour is critical: render clearly visible ${subject.eyes} — the iris colour must read unmistakably as ${subject.eyes}. `
+      : "") +
+    (subject.hair && !isBald
+      ? `Hair: ${subject.hair} — that exact colour and length, drawn unmistakably. `
       : "")
   );
+}
+
+// Late-token identity recap. Placed AFTER STYLE_TRAIL because Flux gives
+// significant weight to the LAST tokens of a prompt as well as the first —
+// repeating the core attributes here makes them much harder for the model to
+// drop during sampling.
+function buildSubjectTail(subject) {
+  if (!subject) return "";
+  const bits = [];
+  if (subject.gender) bits.push(subject.gender);
+  if (subject.hair)   bits.push(subject.hair);
+  if (subject.eyes)   bits.push(subject.eyes);
+  if (subject.facial && !/clean-?shaven|none/i.test(subject.facial)) bits.push(subject.facial);
+  if (!bits.length) return "";
+  return ` FINAL IDENTITY CHECK — the figure in this card is unmistakably a ${bits.join(", ")}. Do not deviate from these attributes.`;
+}
+
+// Build a small negative-prompt fragment that excludes the OPPOSITE identity
+// (e.g. "woman, gown, dress, feminine features" when the subject is a man).
+// Without this the static negative prompt has no idea who the subject is, so
+// the model can silently fall back to its training-distribution default —
+// which for tarot-style art skews female.
+function buildSubjectNegative(subject) {
+  if (!subject || !subject.gender) return "";
+  const parts = [];
+  const g = subject.gender.toLowerCase();
+  if (/\b(man|male)\b/.test(g)) {
+    parts.push(
+      "woman, female figure, feminine features, feminine body shape, breasts, " +
+      "gown, dress, long flowing feminine robe, long feminine hair on a man"
+    );
+  } else if (/\b(woman|female)\b/.test(g)) {
+    parts.push(
+      "man, male figure, masculine features, masculine jawline, male body shape, " +
+      "thick beard on a woman, moustache on a woman"
+    );
+  }
+  if (subject.hair && /bald|shaved head|no hair/i.test(subject.hair)) {
+    parts.push("full head of hair, long hair, flowing locks, thick hair on top of head, hair covering the scalp");
+  }
+  return parts.join(", ");
 }
 
 function getPromptFor(archetype, subject) {
@@ -336,8 +387,9 @@ function getPromptFor(archetype, subject) {
   // STYLE_LEAD goes FIRST — PuLID/Flux weight the first prompt tokens
   // most heavily, and we need the "flat illustration, not a photograph"
   // directive to win against Flux's photo bias. The subject directive comes
-  // immediately after so identity (gender/hair/eyes) is locked early too.
-  return STYLE_LEAD + buildSubjectDirective(subject) + t.base + prop + STYLE_TRAIL;
+  // immediately after so identity (gender/hair/eyes) is locked early too,
+  // and a compact recap goes at the very end (also a high-weight position).
+  return STYLE_LEAD + buildSubjectDirective(subject) + t.base + prop + STYLE_TRAIL + buildSubjectTail(subject);
 }
 
 // Eight-archetype email content. `paragraphs` is rendered as separate <p>
@@ -576,9 +628,11 @@ async function runPortraitPipeline(env, image, archetype) {
   const t0 = Date.now();
   console.log(`[pipeline] start archetype=${archetype}`);
 
-  // Vision pre-pass first so the descriptor can be baked into the prompt.
+  // Vision pre-pass first so the descriptor can be baked into the prompt
+  // (and the negative prompt — see buildSubjectNegative below).
   const subject = await describeSubject(env, image);
   const prompt = getPromptFor(archetype, subject);
+  const subjectNegative = buildSubjectNegative(subject);
   console.log(`[pipeline] subject pre-pass done t+${Date.now()-t0}ms hasSubject=${!!subject}`);
 
   const falRes = await fetch(FAL_URL, {
@@ -594,7 +648,7 @@ async function runPortraitPipeline(env, image, archetype) {
         num_inference_steps: 22,      // illustration benefits from a few more steps for clean line work
         guidance_scale: 7,            // pushed up hard — Flux base has a photo bias; high CFG forces the illustration prompt to win
         true_cfg: 1,
-        id_weight: 0.5,               // dropped further — at 0.7 the FACE region was still photographic against an illustrated body. 0.5 lets the face cartoonify too while still resembling the subject
+        id_weight: 0.6,               // bumped from 0.5 — the new style envelope asks for cel-shaded volumes (not flat sticker art), which is compatible with more identity anchoring. Combined with the subject directive + dynamic negative, this preserves the subject's actual face features (jawline, hair, eyes) without turning the face photographic.
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
@@ -619,7 +673,10 @@ async function runPortraitPipeline(env, image, archetype) {
           "deformed face, asymmetric face, distorted face, bad anatomy, " +
           "watermark, text, caption, banner, signature, logo, " +
           "complex gradients, rainbow colours, full colour palette, " +
-          "blue, green, purple, yellow, brown",
+          "blue, green, purple, yellow, brown" +
+          // Subject-specific exclusions (opposite gender, "full head of hair"
+          // when bald, etc.). Empty string when the vision pre-pass failed.
+          (subjectNegative ? ", " + subjectNegative : ""),
       }),
     });
 
