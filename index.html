@@ -1370,12 +1370,16 @@ async function paintPortrait() {
 
 // Resize a canvas so the upload payload is sane on mobile networks. Phone
 // cameras can produce 1920×1080 frames which encode to ~800KB-1MB as
-// base64 — large enough to take 60-90s to upload on weak LTE. PuLID and
-// face-swap only need a recognizable face as a reference (not a high-res
-// image), so 640px long edge + quality 0.82 is plenty — payload drops to
-// ~80-120KB JPEG / ~110-160KB base64 / ~200KB JSON. Much faster on slow
-// networks.
-function canvasToUploadDataURL(srcCanvas, maxDim = 640, quality = 0.82) {
+// base64 — large enough to take 60-90s to upload on weak LTE.
+//
+// Bumped from 640 → 1024 long edge because the vision pre-pass (Llama 3.2
+// Vision) needs higher-resolution faces to extract subtle identity cues:
+// beard texture, salt-and-pepper hair, age lines, visible tattoos. At 640
+// these features were being blurred away before the model saw them, and
+// male renders were coming out babyfaced + beardless. 1024 keeps the
+// payload around ~200-300KB base64 — still fast on LTE, much richer for
+// extraction. PuLID also benefits from the extra face detail.
+function canvasToUploadDataURL(srcCanvas, maxDim = 1024, quality = 0.85) {
   const w = srcCanvas.width, h = srcCanvas.height;
   if (!w || !h) return srcCanvas.toDataURL("image/jpeg", quality);
   const scale = Math.min(1, maxDim / Math.max(w, h));
