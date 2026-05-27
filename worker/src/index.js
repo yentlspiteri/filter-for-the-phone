@@ -84,7 +84,10 @@ const STYLE_LEAD =
 const STYLE_TRAIL =
   " The face is rendered in the SAME bold ink-illustration language as " +
   "the rest of the figure — large drawn comic-style eyes with bright " +
-  "visible pupils, drawn lips with clear shape, drawn nose lines, " +
+  "visible pupils, BOTH PUPILS ALIGNED AND LOOKING IN THE SAME " +
+  "DIRECTION (parallel gaze, NOT cross-eyed, NOT walleyed, NOT a lazy " +
+  "eye — both irises symmetrically placed at the same height with the " +
+  "same gaze angle), drawn lips with clear shape, drawn nose lines, " +
   "cel-shaded skin in the subject's REAL natural skin tone with heavy " +
   "outline (do NOT recolour the skin to peach or orange — keep the " +
   "real skin tone from the reference photo), vivid animated-character " +
@@ -995,7 +998,7 @@ async function runPortraitPipeline(env, image, archetype, faceImage) {
         prompt,
         reference_image_url: image,   // user's face — PuLID anchors on this
         image_size: "portrait_4_3",   // editorial portrait crop
-        num_inference_steps: 22,      // illustration benefits from a few more steps for clean line work
+        num_inference_steps: 28,      // bumped from 22 — fine facial detail (especially pupil alignment / eye symmetry) crystallises with more sampling steps. Adds ~3s to render time and ~$0.01 per render but materially reduces cross-eyed / lazy-eye artifacts.
         guidance_scale: 7,            // pushed up hard — Flux base has a photo bias; high CFG forces the illustration prompt to win
         true_cfg: 1,
         // id_weight tuned per-subject: PuLID's face embedding is trained on
@@ -1023,6 +1026,15 @@ async function runPortraitPipeline(env, image, archetype, faceImage) {
           "stiff frontal pose, beauty shot, expressionless face, " +
           "neutral closed-mouth expression, flat affect, lifeless eyes, " +
           "small beady eyes, dead-eyed stare, " +
+          // Eye-alignment failure modes — Flux + PuLID at our id_weight
+          // routinely produces cross-eyed / lazy-eye / asymmetric-gaze faces
+          // because the model generates each eye region independently. These
+          // negatives explicitly forbid that.
+          "cross-eyed, walleyed, lazy eye, strabismus, wandering eye, " +
+          "asymmetric pupils, pupils pointing different directions, " +
+          "misaligned gaze, one eye higher than the other, " +
+          "uneven eye sizes, mismatched eye shape, googly eyes, " +
+          "pupil drift, off-centre pupils, " +
           "thin sparse linework, faint outlines, washed-out colours, " +
           "flat poster art, sticker-like figure, low-detail background, " +
           "anime, manga, chibi, 3D render, CGI, sculpture, statue, " +
