@@ -369,9 +369,18 @@ function buildSubjectDirective(subject) {
       : "") +
     // Beard / facial hair — given the same emphasis as baldness, because
     // animated styles aggressively default to clean-shaven and were dropping
-    // beards from male subjects.
+    // beards from male subjects. Repeated and made physical: we describe
+    // the actual pixel pattern (dark hair covering the lower face) so the
+    // model can't interpret "beard" abstractly and skip it.
     (hasBeard
-      ? `FACIAL HAIR IS REQUIRED — the subject has ${subject.facial}. Draw the ${subject.facial} CLEARLY and UNMISTAKABLY covering the appropriate areas of the face. Do NOT render a clean-shaven version. `
+      ? `FACIAL HAIR — THIS IS NON-NEGOTIABLE: the subject has ${subject.facial}. ` +
+        `The figure MUST be drawn WITH ${subject.facial} clearly visible — ` +
+        `physical, drawn-in dark / coloured hair pixels covering the chin, ` +
+        `upper lip, jawline and cheeks as appropriate to a ${subject.facial}. ` +
+        `If you have ANY tendency to render a clean-shaven face, IGNORE IT — ` +
+        `this man has a beard and it MUST appear. Do NOT smooth the lower ` +
+        `face. Do NOT skip the beard because of the illustration style. The ` +
+        `${subject.facial} is part of his core identity and recognising him. `
       : "") +
     // Tattoos — never extracted before, so the model couldn't draw them.
     (hasTattoos
@@ -680,9 +689,80 @@ async function describeSubject(env, imageDataUrl) {
     const raw = (out && (out.response ?? out.description ?? out.text)) || "";
     const subject = parseSubjectJson(raw);
     if (subject) console.log(`[pipeline] subject=${JSON.stringify(subject)}`);
+
+    // Beard re-check. Llama 3.2 Vision is unreliable for facial hair: it tends
+    // to label short / medium beards as "clean-shaven," especially when the
+    // model is also juggling 10 other JSON fields. If the first pass said
+    // clean-shaven (or didn't return facial info) for a male subject, do a
+    // SECOND focused call that asks ONLY about facial hair. Single-attribute
+    // calls are noticeably more accurate than multi-attribute extraction.
+    if (
+      subject &&
+      /\b(man|male)\b/i.test(subject.gender || "") &&
+      (!subject.facial || /^clean[-\s]?shaven$/i.test(subject.facial))
+    ) {
+      const beard = await detectBeardOnly(env, bytes);
+      if (beard) {
+        console.log(`[pipeline] beard re-check overrode facial: "${subject.facial}" → "${beard}"`);
+        subject.facial = beard;
+      }
+    }
+
     return subject;
   } catch (err) {
     console.warn(`[pipeline] subject describe failed: ${err?.message}`);
+    return null;
+  }
+}
+
+// Focused beard / facial-hair detector. Runs a separate Workers AI vision call
+// with a SINGLE-PURPOSE prompt — only job is to look at the lower face and
+// report facial hair (or confirm clean-shaven). Returns a short phrase like
+// "thick black beard" / "short stubble" / "goatee", or null if nothing extra
+// was detected (in which case we leave the original "clean-shaven" alone).
+async function detectBeardOnly(env, bytes) {
+  if (!env.AI) return null;
+  try {
+    const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+      image: [...bytes],
+      max_tokens: 40,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a facial-hair detector. Look CAREFULLY at this man's " +
+            "lower face — chin, upper lip, jawline, cheeks below the eyes. " +
+            "Many photos contain stubble or beards that are easy to miss at " +
+            "a quick glance. If you see ANY darker shading, shadow, or " +
+            "hair-texture below the lip, on the chin, or along the jaw that " +
+            "could be facial hair, say so. " +
+            "Reply with ONLY one short phrase, no other words, no JSON, no " +
+            "punctuation. Use one of: \"clean-shaven\", \"short stubble\", " +
+            "\"heavy stubble\", \"short beard\", \"full beard\", \"thick " +
+            "full beard\", \"goatee\", \"moustache\", \"beard and moustache\". " +
+            "Add a colour adjective if you can see one (e.g. \"thick black " +
+            "beard\", \"trimmed grey goatee\"). If genuinely nothing, say " +
+            "\"clean-shaven\".",
+        },
+        { role: "user", content: "What facial hair does this man have? Reply with the phrase only." },
+      ],
+    });
+    const raw = String((out && (out.response ?? out.description ?? out.text)) || "").trim();
+    // Strip quotes / JSON wrappers / trailing punctuation defensively.
+    const cleaned = raw
+      .replace(/^["'`]+|["'`.,;:!?]+$/g, "")
+      .replace(/^\{.*?["']?\s*([^"'}]+)\s*["']?\s*\}$/, "$1")
+      .trim()
+      .toLowerCase();
+    if (!cleaned) return null;
+    // Only override if the re-check sees ACTUAL facial hair. If it also says
+    // clean-shaven, the original answer was probably right — don't fabricate.
+    if (/^clean[-\s]?shaven$/i.test(cleaned)) return null;
+    // Sanity guard: must contain a known facial-hair keyword.
+    if (!/\b(beard|stubble|goatee|moustache|mustache|sideburns|hair)\b/i.test(cleaned)) return null;
+    return cleaned;
+  } catch (err) {
+    console.warn(`[pipeline] beard re-check failed: ${err?.message}`);
     return null;
   }
 }
@@ -749,7 +829,13 @@ async function runPortraitPipeline(env, image, archetype) {
         num_inference_steps: 22,      // illustration benefits from a few more steps for clean line work
         guidance_scale: 7,            // pushed up hard — Flux base has a photo bias; high CFG forces the illustration prompt to win
         true_cfg: 1,
-        id_weight: 0.7,               // bumped from 0.6 — male renders were coming out with generic youthful "hero" faces that didn't resemble the subject. Pushing identity anchoring higher leans Flux harder on the actual face features (jawline, age cues, beard) instead of its training-distribution default. The cel-shaded animated-graphic-novel style still wins for the overall illustration look; this just keeps the face closer to the real person.
+        // id_weight tuned per-subject: PuLID's face embedding is trained on
+        // largely clean-shaven faces and at very high id_weight it can
+        // OVERRIDE the text-prompt's beard directive on the lower-face pixels.
+        // For bearded subjects we drop slightly (0.65) so the text prompt
+        // wins on facial-hair pixels. For everyone else we keep the higher
+        // 0.7 anchoring for closer overall likeness.
+        id_weight: subject && subject.facial && !/^clean[-\s]?shaven$/i.test(subject.facial) ? 0.65 : 0.7,
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
