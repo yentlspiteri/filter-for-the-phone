@@ -690,21 +690,24 @@ async function describeSubject(env, imageDataUrl) {
     const subject = parseSubjectJson(raw);
     if (subject) console.log(`[pipeline] subject=${JSON.stringify(subject)}`);
 
-    // Beard re-check. Llama 3.2 Vision is unreliable for facial hair: it tends
-    // to label short / medium beards as "clean-shaven," especially when the
-    // model is also juggling 10 other JSON fields. If the first pass said
-    // clean-shaven (or didn't return facial info) for a male subject, do a
-    // SECOND focused call that asks ONLY about facial hair. Single-attribute
-    // calls are noticeably more accurate than multi-attribute extraction.
-    if (
-      subject &&
-      /\b(man|male)\b/i.test(subject.gender || "") &&
-      (!subject.facial || /^clean[-\s]?shaven$/i.test(subject.facial))
-    ) {
-      const beard = await detectBeardOnly(env, bytes);
-      if (beard) {
-        console.log(`[pipeline] beard re-check overrode facial: "${subject.facial}" → "${beard}"`);
-        subject.facial = beard;
+    // Facial-hair re-check. Llama 3.2 Vision under-reports facial hair when
+    // also extracting 10 other JSON fields — it especially misses STUBBLE,
+    // thin moustaches, goatees, and short beards. We run a focused
+    // single-purpose call for ALL male subjects (not just those the first
+    // pass labelled clean-shaven) so we also CONFIRM and REFINE positive
+    // answers, not just rescue clean-shaven mislabels.
+    //
+    // Merge policy (mergeFacialHair):
+    //   focused finds hair, omnibus missed it     → take focused
+    //   focused finds clean, omnibus saw hair     → keep omnibus (don't erase)
+    //   both find hair                            → take the more specific one
+    //   both clean-shaven                         → keep clean-shaven
+    if (subject && /\b(man|male)\b/i.test(subject.gender || "")) {
+      const focused = await detectFacialHair(env, bytes);
+      const merged = mergeFacialHair(subject.facial, focused);
+      if (merged !== subject.facial) {
+        console.log(`[pipeline] facial-hair re-check: omnibus="${subject.facial}" focused="${focused}" → "${merged}"`);
+        subject.facial = merged;
       }
     }
 
@@ -715,36 +718,56 @@ async function describeSubject(env, imageDataUrl) {
   }
 }
 
-// Focused beard / facial-hair detector. Runs a separate Workers AI vision call
-// with a SINGLE-PURPOSE prompt — only job is to look at the lower face and
-// report facial hair (or confirm clean-shaven). Returns a short phrase like
-// "thick black beard" / "short stubble" / "goatee", or null if nothing extra
-// was detected (in which case we leave the original "clean-shaven" alone).
-async function detectBeardOnly(env, bytes) {
+// Focused facial-hair detector. Runs a separate Workers AI vision call with
+// a SINGLE-PURPOSE prompt — only job is to look at the lower face and report
+// facial hair across the FULL spectrum: stubble, moustaches, goatees, sideburns,
+// chin straps, full beards, etc. A broad phrase list + colour adjective lets the
+// model report a specific style instead of forcing it to choose between
+// "clean-shaven" and "beard".
+//
+// Returns the cleaned phrase (e.g. "trimmed grey goatee", "light brown stubble",
+// "handlebar black moustache") or null on parse / API failure. The caller
+// (mergeFacialHair) decides whether to override the omnibus answer.
+async function detectFacialHair(env, bytes) {
   if (!env.AI) return null;
   try {
     const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
       image: [...bytes],
-      max_tokens: 40,
+      max_tokens: 50,
       messages: [
         {
           role: "system",
           content:
-            "You are a facial-hair detector. Look CAREFULLY at this man's " +
-            "lower face — chin, upper lip, jawline, cheeks below the eyes. " +
-            "Many photos contain stubble or beards that are easy to miss at " +
-            "a quick glance. If you see ANY darker shading, shadow, or " +
-            "hair-texture below the lip, on the chin, or along the jaw that " +
-            "could be facial hair, say so. " +
+            "You are a precise facial-hair detector. Look CAREFULLY at this " +
+            "person's lower face — chin, upper lip, jawline, cheeks below the " +
+            "eyes, and sideburns. " +
+            "Detect ANY facial hair across the full spectrum — even subtle " +
+            "things like very light stubble, a 5-o'clock shadow, a thin " +
+            "moustache, or a small goatee. A darker shadow or shading on the " +
+            "lower face usually IS facial hair, not just lighting. " +
             "Reply with ONLY one short phrase, no other words, no JSON, no " +
-            "punctuation. Use one of: \"clean-shaven\", \"short stubble\", " +
-            "\"heavy stubble\", \"short beard\", \"full beard\", \"thick " +
-            "full beard\", \"goatee\", \"moustache\", \"beard and moustache\". " +
-            "Add a colour adjective if you can see one (e.g. \"thick black " +
-            "beard\", \"trimmed grey goatee\"). If genuinely nothing, say " +
-            "\"clean-shaven\".",
+            "punctuation. Pick the BEST-FITTING style from this list:\n" +
+            "  STUBBLE: \"very light stubble\", \"short stubble\", " +
+            "\"heavy stubble\", \"five o'clock shadow\"\n" +
+            "  MOUSTACHE: \"thin moustache\", \"thick moustache\", " +
+            "\"handlebar moustache\", \"walrus moustache\"\n" +
+            "  GOATEE / CHIN: \"goatee\", \"goatee with moustache\", " +
+            "\"soul patch\", \"chin strap beard\"\n" +
+            "  BEARD: \"short beard\", \"medium beard\", \"full beard\", " +
+            "\"thick full beard\", \"long beard\", \"beard and moustache\"\n" +
+            "  SIDEBURNS: \"thick sideburns\", \"mutton chops\"\n" +
+            "  NONE: \"clean-shaven\"\n" +
+            "Prefix a COLOUR adjective when visible: \"black\", \"dark brown\", " +
+            "\"brown\", \"light brown\", \"red\", \"ginger\", \"blonde\", " +
+            "\"grey\", \"salt-and-pepper\", \"white\". " +
+            "Example replies: \"short black beard\", \"trimmed grey goatee\", " +
+            "\"light brown stubble\", \"handlebar black moustache\", " +
+            "\"salt-and-pepper full beard\". " +
+            "Only say \"clean-shaven\" if you are confident there is " +
+            "genuinely no facial hair at all — when in doubt, lean toward " +
+            "reporting whatever subtle hair you can see.",
         },
-        { role: "user", content: "What facial hair does this man have? Reply with the phrase only." },
+        { role: "user", content: "What facial hair does this person have? Reply with the phrase only." },
       ],
     });
     const raw = String((out && (out.response ?? out.description ?? out.text)) || "").trim();
@@ -755,16 +778,38 @@ async function detectBeardOnly(env, bytes) {
       .trim()
       .toLowerCase();
     if (!cleaned) return null;
-    // Only override if the re-check sees ACTUAL facial hair. If it also says
-    // clean-shaven, the original answer was probably right — don't fabricate.
-    if (/^clean[-\s]?shaven$/i.test(cleaned)) return null;
-    // Sanity guard: must contain a known facial-hair keyword.
-    if (!/\b(beard|stubble|goatee|moustache|mustache|sideburns|hair)\b/i.test(cleaned)) return null;
+    // Accept either the clean-shaven sentinel OR any phrase containing a
+    // recognised facial-hair keyword. We use the merge step (mergeFacialHair)
+    // to decide whether to override the omnibus answer — this just produces
+    // a clean string for that decision.
+    if (/^clean[-\s]?shaven$/i.test(cleaned)) return "clean-shaven";
+    if (!/\b(beard|stubble|goatee|moustache|mustache|sideburns|shadow|soul patch|mutton chops|chin strap)\b/i.test(cleaned)) return null;
     return cleaned;
   } catch (err) {
-    console.warn(`[pipeline] beard re-check failed: ${err?.message}`);
+    console.warn(`[pipeline] facial-hair re-check failed: ${err?.message}`);
     return null;
   }
+}
+
+// Combine the omnibus pass's facial answer with the focused re-check. Both
+// can be missing, vague, or specific — pick the most informative non-erasing
+// answer. Asymmetric on purpose: a "saw hair" signal beats a "saw no hair"
+// signal in either direction. We never fabricate facial hair the omnibus
+// didn't see UNLESS the focused detector specifically reports it.
+function mergeFacialHair(omnibus, focused) {
+  const isClean = (s) => !s || /^clean[-\s]?shaven$/i.test(String(s).trim());
+  // Focused failed / returned null → trust whatever omnibus gave us
+  if (focused === null || focused === undefined) return omnibus || "";
+  // Both clean → clean-shaven
+  if (isClean(omnibus) && isClean(focused)) return omnibus || "clean-shaven";
+  // Only focused sees hair → trust the rescue
+  if (isClean(omnibus) && !isClean(focused)) return focused;
+  // Only omnibus sees hair → keep omnibus (don't let a single focused-call
+  // hiccup erase real facial hair the omnibus saw)
+  if (!isClean(omnibus) && isClean(focused)) return omnibus;
+  // Both see hair → prefer the more specific / longer phrase (the focused
+  // detector usually returns colour + style; the omnibus often just "beard").
+  return focused.length > omnibus.length ? focused : omnibus;
 }
 
 // Pull the first {...} block out of the model output and validate it. Vision
