@@ -334,7 +334,18 @@ function buildSubjectDirective(subject) {
     `match the GENDER, hairstyle, hair colour (or BALDNESS), facial hair and ` +
     `eye colour EXACTLY. Do NOT change the subject's gender. ` +
     (isMan
-      ? "This is a MALE figure with masculine features, jawline and build. "
+      ? "This is an UNMISTAKABLY MALE figure with strongly masculine " +
+        "anatomy — the body, face and hands must all read as a man at " +
+        "a glance: a SQUARE / ANGULAR jawline (not soft or rounded), a " +
+        "DEFINED chin, THICKER eyebrows, a STRONGER NOSE, BROAD shoulders " +
+        "(not slim or sloped), a THICKER NECK with a visible Adam's " +
+        "apple, MASCULINE HANDS (broad palm, thicker fingers, blunt " +
+        "trimmed natural nails — NEVER long, manicured, polished or " +
+        "painted nails). NO rosy/pink blush on the cheeks, NO glossy " +
+        "or coloured/pink lipstick, NO heavy curled eyelashes, NO eye " +
+        "makeup, NO dainty hand-to-face poses or feminine mannerisms. " +
+        "If the archetype's pose options include a delicate gesture, " +
+        "render it with strong masculine framing instead. "
       : "") +
     (isBald
       ? "The figure is BALD with NO hair on top of the head — a shiny clean scalp, no flowing locks. "
@@ -381,8 +392,25 @@ function buildSubjectNegative(subject) {
   const g = subject.gender.toLowerCase();
   if (/\b(man|male)\b/.test(g)) {
     parts.push(
+      // Gender + body fundamentals
       "woman, female figure, feminine features, feminine body shape, breasts, " +
-      "gown, dress, long flowing feminine robe, long feminine hair on a man"
+      "gown, dress, long flowing feminine robe, long feminine hair on a man, " +
+      // Face — the most common slip is a soft, rounded "androgynous" face
+      "soft rounded feminine face, soft jawline on a man, narrow weak chin, " +
+      "delicate feminine features, androgynous face, " +
+      // Hands — even after the body is masculine, hands keep coming out dainty
+      "slim feminine hands, dainty fingers, slender feminine fingers, " +
+      "manicured nails, polished nails, painted nails, long pink nails, " +
+      "long red nails, nail polish on a man, " +
+      // Makeup & cosmetic features
+      "glossy lips, pink lipstick, red lipstick, lipstick on a man, " +
+      "glossy pink lips, plumped lips on a man, " +
+      "long curled eyelashes, false eyelashes, heavy mascara, eye shadow, " +
+      "rosy blush on cheeks, pink feminine blush, contoured feminine cheeks, " +
+      // Pose & body language
+      "dainty pose, delicate gesture, hand touching face daintily, " +
+      "slim narrow shoulders on a man, sloped feminine shoulders, " +
+      "slim feminine neck, thin feminine collarbone"
     );
   } else if (/\b(woman|female)\b/.test(g)) {
     parts.push(
