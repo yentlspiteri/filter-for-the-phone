@@ -700,6 +700,9 @@
     margin-top: 4px;
   }
   #screenResult #emailMeBtn { flex-basis: 100%; }
+  /* "Share on LinkedIn" is the explicit user-requested CTA, so it gets its
+     own full-width row above the smaller Share + Try-again pair. */
+  #screenResult #shareLinkedinBtn { flex-basis: 100%; }
   #screenResult .ghost { flex: 1; min-width: 0; }
 
   /* Email-capture modal (slides up from the bottom) */
@@ -874,6 +877,7 @@
     </div>
     <div class="btnrow">
       <button class="btn" id="emailMeBtn">Email me my photo</button>
+      <button class="btn ghost" id="shareLinkedinBtn">Share on LinkedIn</button>
       <button class="btn ghost" id="shareBtn">Share</button>
       <button class="btn ghost" id="againBtn">Try again</button>
       <div class="hint" id="shareHint"></div>
@@ -1073,7 +1077,7 @@ const leftFill = $("leftFill"), rightFill = $("rightFill");
 const choiceLeft = $("choiceLeft"), choiceRight = $("choiceRight");
 const needle = $("needle");
 const introErr = $("introErr");
-const shareBtn = $("shareBtn"), againBtn = $("againBtn");
+const shareBtn = $("shareBtn"), againBtn = $("againBtn"), shareLinkedinBtn = $("shareLinkedinBtn");
 const shareHint = $("shareHint");
 const resultPreview = $("resultPreview");
 const wash = $("wash");
@@ -1097,7 +1101,8 @@ const emailState = $("emailState");
 
 startBtn.addEventListener("click", begin);
 againBtn.addEventListener("click", reset);
-shareBtn.addEventListener("click", () => shareSnapshot(false));
+shareBtn.addEventListener("click", () => shareSnapshot(false, "any"));
+shareLinkedinBtn.addEventListener("click", () => shareSnapshot(false, "linkedin"));
 emailMeBtn.addEventListener("click", openEmailModal);
 emailClose.addEventListener("click", closeEmailModal);
 emailModal.addEventListener("click", (e) => { if (e.target === emailModal) closeEmailModal(); });
@@ -1897,33 +1902,68 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 }
 
 // ---------- SHARE ----------
-async function shareSnapshot(forceDownload) {
+// LinkedIn's share-by-URL endpoint can't accept an image as a parameter, so
+// the email's "Share on LinkedIn" link can only carry the URL. The way to
+// share the actual portrait to LinkedIn is the Web Share API (Level 2):
+// navigator.share({ files: [...] }) opens the OS share sheet on iOS/Android
+// with the image already attached as a media item. The user picks LinkedIn,
+// LinkedIn's app opens a new post pre-populated with the photo. This works
+// in iOS Safari and modern Android Chrome.
+//
+// `target` is "linkedin" when the user clicked the LinkedIn-specific button
+// (we tailor the share text + hint copy) or "any" for the generic share.
+async function shareSnapshot(forceDownload, target = "any") {
   shareHint.textContent = "";
   const c = $("shareCanvas");
   const blob = await new Promise(res => c.toBlob(b => res(b), "image/jpeg", 0.92));
   const fileName = "von-peach-card.jpg";
   const file = new File([blob], fileName, { type: "image/jpeg" });
 
+  const archeName = ARCHETYPES[frozenArchetype].name;
+  const shareText = target === "linkedin"
+    ? `I'm ${archeName} — my Von Peach game-changer archetype. Find yours: https://tarot.vonpeach.com`
+    : `I'm ${archeName}. Find yours.`;
+
+  // Mobile path: Web Share API with file — the OS share sheet opens with the
+  // photo already attached. Picking LinkedIn from the sheet results in a new
+  // LinkedIn post with the photo as media.
   if (!forceDownload && navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({
         files: [file],
         title: "Von Peach — your card",
-        text: "I'm " + ARCHETYPES[frozenArchetype].name + ". Find yours."
+        text: shareText
       });
-      shareHint.textContent = "Pick Instagram in the share sheet → Stories or DM.";
+      shareHint.textContent = target === "linkedin"
+        ? "Pick LinkedIn in the share sheet — your photo will attach to the post."
+        : "Pick LinkedIn, Instagram or another app in the share sheet.";
       return;
     } catch (e) {
       if (e?.name === "AbortError") return;
     }
   }
 
+  // Desktop / no-files-share fallback: download the JPEG so the user has the
+  // file locally, then (for LinkedIn) also open the LinkedIn composer in a new
+  // tab so they can drag-and-drop or upload the just-downloaded image into the
+  // post. The window.open call sits inside the original user click handler so
+  // popup blockers should allow it.
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = fileName;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
-  shareHint.textContent = "Image saved. Open Instagram → Story → pick this image.";
+
+  if (target === "linkedin") {
+    window.open(
+      "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftarot.vonpeach.com",
+      "_blank",
+      "noopener"
+    );
+    shareHint.textContent = "Photo downloaded. In the LinkedIn post that just opened, attach the photo from your downloads.";
+  } else {
+    shareHint.textContent = "Image saved. Open LinkedIn or Instagram and attach this photo to your post.";
+  }
 }
 
 // ---------- EMAIL CAPTURE ----------
