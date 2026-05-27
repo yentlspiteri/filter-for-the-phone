@@ -68,19 +68,30 @@ const STYLE_LEAD =
   "SYMBOLIC BACKGROUND MOTIFS (architecture, weather, props, " +
   "creatures relevant to the archetype) — no white margins, no empty " +
   "space, no centred 'spotlight' composition with blank surroundings. " +
-  "STRICTLY LIMITED PALETTE: warm peach background / paper (#FFD6BB), " +
+  "LIMITED BRAND PALETTE — applied to the BACKGROUND, LINEWORK, " +
+  "GARMENTS and DECORATIVE MOTIFS only (NOT to the subject's face, " +
+  "skin, hair or eyes): warm peach paper (#FFD6BB) for the background, " +
   "deep wine red (#99112F) for linework, shadows and fills, brand " +
   "orange (#FD8839) for highlights and warm accents, brand red " +
-  "(#CC1C0E) for flames and bold accents. ";
+  "(#CC1C0E) for flames and bold accents. HAIR, SKIN AND EYE COLOUR " +
+  "ARE THE EXCEPTION — render them in the subject's REAL NATURAL " +
+  "colours from the reference photo: a brunette has BROWN hair, a " +
+  "blonde has BLONDE hair, blue eyes stay BLUE, green eyes stay " +
+  "GREEN, brown eyes stay BROWN, dark skin stays DARK, fair skin " +
+  "stays FAIR. DO NOT recolour hair or eyes to brand orange or wine " +
+  "red — only the wardrobe and background follow the brand palette. ";
 
 const STYLE_TRAIL =
   " The face is rendered in the SAME bold ink-illustration language as " +
   "the rest of the figure — large drawn comic-style eyes with bright " +
   "visible pupils, drawn lips with clear shape, drawn nose lines, " +
-  "cel-shaded skin in peach-wine tones with heavy outline, vivid " +
-  "animated-character expression. The hairstyle, hair length, hair " +
-  "colour, face shape and overall identity should resemble the " +
-  "reference subject — but rendered as an animated graphic-novel " +
+  "cel-shaded skin in the subject's REAL natural skin tone with heavy " +
+  "outline (do NOT recolour the skin to peach or orange — keep the " +
+  "real skin tone from the reference photo), vivid animated-character " +
+  "expression. The hairstyle, hair length, NATURAL hair colour (e.g. " +
+  "brown for a brunette, blonde for a blonde — NOT orange or wine), " +
+  "natural eye colour, face shape and overall identity should match " +
+  "the reference subject — rendered as an animated graphic-novel " +
   "character, not a photograph. The background fills every corner of " +
   "the frame with densely illustrated thematic motifs that tell the " +
   "archetype's story (buildings, weather, props, creatures, smoke or " +
@@ -334,8 +345,13 @@ function buildSubjectDirective(subject) {
       ? `Eye colour is critical: render clearly visible ${subject.eyes} — the iris colour must read unmistakably as ${subject.eyes}. `
       : "") +
     (subject.hair && !isBald
-      ? `Hair: ${subject.hair} — that exact colour and length, drawn unmistakably. `
-      : "")
+      ? `Hair: ${subject.hair} — that exact colour and length, drawn unmistakably (NOT recoloured to brand orange or wine red). `
+      : "") +
+    // The brand palette directive in STYLE_LEAD was bleeding into the
+    // subject's natural features, so call out the exception explicitly.
+    "Render the subject's hair, eyes and skin in their REAL natural " +
+    "colours from the reference photo — the brand orange/wine palette " +
+    "applies to the wardrobe and background, NOT to the body. "
   );
 }
 
@@ -351,7 +367,7 @@ function buildSubjectTail(subject) {
   if (subject.eyes)   bits.push(subject.eyes);
   if (subject.facial && !/clean-?shaven|none/i.test(subject.facial)) bits.push(subject.facial);
   if (!bits.length) return "";
-  return ` FINAL IDENTITY CHECK — the figure in this card is unmistakably a ${bits.join(", ")}. Do not deviate from these attributes.`;
+  return ` FINAL IDENTITY CHECK — the figure in this card is unmistakably a ${bits.join(", ")}. Hair, eyes and skin are rendered in their REAL natural colours from the photo (NOT brand-palette orange or wine). Do not deviate from these attributes.`;
 }
 
 // Build a small negative-prompt fragment that excludes the OPPOSITE identity
@@ -672,8 +688,16 @@ async function runPortraitPipeline(env, image, archetype) {
           "anime, manga, chibi, 3D render, CGI, sculpture, statue, " +
           "deformed face, asymmetric face, distorted face, bad anatomy, " +
           "watermark, text, caption, banner, signature, logo, " +
-          "complex gradients, rainbow colours, full colour palette, " +
-          "blue, green, purple, yellow, brown" +
+          // Broad colour-name negatives ("blue, green, purple, yellow, brown")
+          // were ALSO banning real hair and eye colours, which is why brunettes
+          // were coming out with orange hair and blue eyes turned wine red. Now
+          // we only exclude colours where they don't belong — multi-coloured /
+          // neon backgrounds — not the colour names themselves.
+          "complex gradients, rainbow colours, multi-coloured background, " +
+          "saturated neon background, off-palette background, " +
+          "orange hair, wine-red hair, brand-coloured hair, " +
+          "orange eyes, red eyes, brand-coloured eyes, " +
+          "orange skin, peach-recoloured skin, wine-tinted skin" +
           // Subject-specific exclusions (opposite gender, "full head of hair"
           // when bald, etc.). Empty string when the vision pre-pass failed.
           (subjectNegative ? ", " + subjectNegative : ""),
