@@ -327,25 +327,34 @@ function buildSubjectDirective(subject) {
   if (subject.skin)     bits.push(subject.skin);
   if (!bits.length) return "";
   const desc = bits.join(", ");
-  const isMan  = /\bman\b|male/i.test(subject.gender || "");
-  const isBald = /bald|balding|shaved head|no hair/i.test(subject.hair || "");
+  const isMan   = /\bman\b|male/i.test(subject.gender || "");
+  const isBald  = /bald|balding|shaved head|no hair/i.test(subject.hair || "");
+  // "facial" can be a beard/moustache/stubble/goatee description, OR the
+  // literal "clean-shaven". Detect any actual facial hair so we can emphasise it.
+  const hasBeard = !!subject.facial && !/^clean[-\s]?shaven$/i.test(subject.facial);
+  const hasTattoos = !!subject.tattoos;
+  const hasNotable = !!subject.notable;
   return (
     `THE SUBJECT IS ${desc.toUpperCase()}. The figure MUST be ${desc} — ` +
-    `match the GENDER, hairstyle, hair colour (or BALDNESS), facial hair and ` +
-    `eye colour EXACTLY. Do NOT change the subject's gender. ` +
+    `match the GENDER, AGE, hairstyle, hair colour (or BALDNESS), facial hair, ` +
+    `eye colour and skin tone EXACTLY. Do NOT change the subject's gender or age. ` +
     (isMan
-      ? "This is an UNMISTAKABLY MALE figure with strongly masculine " +
-        "anatomy — the body, face and hands must all read as a man at " +
-        "a glance: a SQUARE / ANGULAR jawline (not soft or rounded), a " +
-        "DEFINED chin, THICKER eyebrows, a STRONGER NOSE, BROAD shoulders " +
-        "(not slim or sloped), a THICKER NECK with a visible Adam's " +
-        "apple, MASCULINE HANDS (broad palm, thicker fingers, blunt " +
-        "trimmed natural nails — NEVER long, manicured, polished or " +
-        "painted nails). NO rosy/pink blush on the cheeks, NO glossy " +
-        "or coloured/pink lipstick, NO heavy curled eyelashes, NO eye " +
-        "makeup, NO dainty hand-to-face poses or feminine mannerisms. " +
-        "If the archetype's pose options include a delicate gesture, " +
-        "render it with strong masculine framing instead. "
+      ? "This is an UNMISTAKABLY ADULT MALE figure — NOT a child, NOT a " +
+        "teenager, NOT a boyish/babyfaced young hero. Draw an adult man " +
+        "with strongly masculine anatomy: a SQUARE / ANGULAR jawline (not " +
+        "soft or rounded), a DEFINED chin, THICKER eyebrows, a STRONGER " +
+        "NOSE, BROAD shoulders (not slim or sloped), a THICKER NECK with " +
+        "a visible Adam's apple, MASCULINE HANDS (broad palm, thicker " +
+        "fingers, blunt trimmed natural nails — NEVER long, manicured, " +
+        "polished or painted nails). NO rosy/pink blush on the cheeks, " +
+        "NO glossy or coloured/pink lipstick, NO heavy curled eyelashes, " +
+        "NO eye makeup, NO dainty hand-to-face poses or feminine mannerisms. " +
+        "Render age cues honestly — visible jaw definition, brow weight, " +
+        "any greying / salt-and-pepper hair if applicable, lines around " +
+        "the eyes if visible in the reference — do NOT smooth them away " +
+        "into a generic youthful hero face. If the archetype's pose " +
+        "options include a delicate gesture, render it with strong " +
+        "masculine framing instead. "
       : "") +
     (isBald
       ? "The figure is BALD with NO hair on top of the head — a shiny clean scalp, no flowing locks. "
@@ -357,6 +366,25 @@ function buildSubjectDirective(subject) {
       : "") +
     (subject.hair && !isBald
       ? `Hair: ${subject.hair} — that exact colour and length, drawn unmistakably (NOT recoloured to brand orange or wine red). `
+      : "") +
+    // Beard / facial hair — given the same emphasis as baldness, because
+    // animated styles aggressively default to clean-shaven and were dropping
+    // beards from male subjects.
+    (hasBeard
+      ? `FACIAL HAIR IS REQUIRED — the subject has ${subject.facial}. Draw the ${subject.facial} CLEARLY and UNMISTAKABLY covering the appropriate areas of the face. Do NOT render a clean-shaven version. `
+      : "") +
+    // Tattoos — never extracted before, so the model couldn't draw them.
+    (hasTattoos
+      ? `Visible tattoos: ${subject.tattoos}. Render these tattoos visible on the figure (on the appropriate body area — neck, chest, arms, hands or face as in the photo). `
+      : "") +
+    // Distinctive features (glasses, piercings, scars, freckles, etc.) —
+    // small details that anchor identity hard if rendered, lost if not asked.
+    (hasNotable
+      ? `Distinctive features visible in the photo: ${subject.notable}. Include these — they are part of how the subject is recognised. `
+      : "") +
+    // Face shape — quiet hint that helps the structural anatomy.
+    (subject.face_shape
+      ? `Face shape: ${subject.face_shape}. `
       : "") +
     // The brand palette directive in STYLE_LEAD was bleeding into the
     // subject's natural features, so call out the exception explicitly.
@@ -374,9 +402,12 @@ function buildSubjectTail(subject) {
   if (!subject) return "";
   const bits = [];
   if (subject.gender) bits.push(subject.gender);
+  if (subject.age && /\b(adult|middle-aged|older)\b/i.test(subject.age)) bits.push(`ADULT (${subject.age}, not a child)`);
   if (subject.hair)   bits.push(subject.hair);
   if (subject.eyes)   bits.push(subject.eyes);
-  if (subject.facial && !/clean-?shaven|none/i.test(subject.facial)) bits.push(subject.facial);
+  if (subject.facial && !/clean-?shaven|none/i.test(subject.facial)) bits.push(`WITH ${subject.facial}`);
+  if (subject.tattoos) bits.push(`with visible tattoos: ${subject.tattoos}`);
+  if (subject.notable) bits.push(`with ${subject.notable}`);
   if (!bits.length) return "";
   return ` FINAL IDENTITY CHECK — the figure in this card is unmistakably a ${bits.join(", ")}. Hair, eyes and skin are rendered in their REAL natural colours from the photo (NOT brand-palette orange or wine). Do not deviate from these attributes.`;
 }
@@ -395,6 +426,9 @@ function buildSubjectNegative(subject) {
       // Gender + body fundamentals
       "woman, female figure, feminine features, feminine body shape, breasts, " +
       "gown, dress, long flowing feminine robe, long feminine hair on a man, " +
+      // Age — male renders kept coming back as boyish/young heroes
+      "child, teenager, young boy, schoolboy, boyish face, baby face, " +
+      "babyfaced young hero, smooth childlike face, anime boy, " +
       // Face — the most common slip is a soft, rounded "androgynous" face
       "soft rounded feminine face, soft jawline on a man, narrow weak chin, " +
       "delicate feminine features, androgynous face, " +
@@ -417,6 +451,11 @@ function buildSubjectNegative(subject) {
       "man, male figure, masculine features, masculine jawline, male body shape, " +
       "thick beard on a woman, moustache on a woman"
     );
+  }
+  // When the subject has a beard/moustache/stubble, explicitly forbid a
+  // clean-shaven figure — otherwise animated styles default to no facial hair.
+  if (subject.facial && !/^clean[-\s]?shaven$/i.test(subject.facial)) {
+    parts.push("clean-shaven face on a bearded subject, beardless figure when the subject has facial hair, hairless smooth face");
   }
   if (subject.hair && /bald|shaved head|no hair/i.test(subject.hair)) {
     parts.push("full head of hair, long hair, flowing locks, thick hair on top of head, hair covering the scalp");
@@ -610,21 +649,30 @@ async function describeSubject(env, imageDataUrl) {
     const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
       // Image as a byte array per Workers AI vision input contract.
       image: [...bytes],
-      max_tokens: 256,
+      max_tokens: 384,
       messages: [
         {
           role: "system",
           content:
             "You are a precise facial-attribute extractor for an illustration " +
-            "pipeline. Look at the single most prominent face in the photo and " +
-            "report only what you can clearly see. Respond with STRICT JSON " +
-            "only — no prose, no markdown — using exactly these keys: " +
-            '{"gender":"man"|"woman", "age":"young adult"|"adult"|"middle-aged"|"older", ' +
-            '"hair":"<colour + length, e.g. short dark brown hair> OR bald OR shaved head", ' +
-            '"facial":"clean-shaven" | "<beard/moustache description>", ' +
-            '"eyes":"<eye colour> eyes", "skin":"<skin tone> skin"}. ' +
+            "pipeline. Look at the single most prominent face / upper body in " +
+            "the photo and report ONLY what you can clearly see. Respond with " +
+            "STRICT JSON only — no prose, no markdown — using exactly these " +
+            "keys (omit none — use the literal string \"none\" for absent items):\n" +
+            '{"gender":"man"|"woman",\n' +
+            ' "age":"young adult"|"adult"|"middle-aged"|"older",\n' +
+            ' "hair":"<colour + length, e.g. short dark brown hair> OR bald OR shaved head",\n' +
+            ' "facial":"clean-shaven" | "<beard/moustache description — be SPECIFIC: e.g. \\"thick full black beard\\", \\"short dark stubble\\", \\"trimmed grey goatee\\", \\"handlebar moustache\\">",\n' +
+            ' "eyes":"<eye colour> eyes",\n' +
+            ' "skin":"<skin tone> skin",\n' +
+            ' "face_shape":"round"|"oval"|"square"|"heart"|"long",\n' +
+            ' "age_cues":"<short comma-list of visible cues that fix age: facial hair, lines around eyes, greying hair, salt-and-pepper hair, fuller defined jawline, etc. — or \\"youthful smooth features\\" if none>",\n' +
+            ' "tattoos":"<short description of any visible tattoos on neck/chest/arms/face — or \\"none\\">",\n' +
+            ' "notable":"<short comma-list of distinctive features visible in the photo: glasses, piercings (ear/nose/lip), scars, freckles, prominent mole, dimples, etc. — or \\"none\\">"\n' +
+            "}\n" +
             "If the person clearly has no hair, set hair to \"bald\". " +
-            "Never omit the gender key.",
+            "Be HONEST about facial hair — if you see any beard or stubble at " +
+            "all, DO NOT say \"clean-shaven\". Never omit the gender key.",
         },
         { role: "user", content: "Describe this person's visible attributes as JSON." },
       ],
@@ -649,13 +697,22 @@ function parseSubjectJson(raw) {
   try {
     const obj = JSON.parse(match[0]);
     const clean = (v) => (typeof v === "string" ? v.trim() : "");
+    // Strip "none" sentinel — easier downstream than checking for it everywhere.
+    const cleanField = (v) => {
+      const s = clean(v);
+      return /^(none|n\/?a|null|nothing|—)$/i.test(s) ? "" : s;
+    };
     const subject = {
-      gender: clean(obj.gender),
-      age: clean(obj.age),
-      hair: clean(obj.hair),
-      facial: clean(obj.facial),
-      eyes: clean(obj.eyes),
-      skin: clean(obj.skin),
+      gender:     clean(obj.gender),
+      age:        clean(obj.age),
+      hair:       cleanField(obj.hair),
+      facial:     cleanField(obj.facial),
+      eyes:       cleanField(obj.eyes),
+      skin:       cleanField(obj.skin),
+      face_shape: cleanField(obj.face_shape),
+      age_cues:   cleanField(obj.age_cues),
+      tattoos:    cleanField(obj.tattoos),
+      notable:    cleanField(obj.notable),
     };
     // Gender is the attribute we most need; if it's missing the rest is noise.
     return subject.gender ? subject : null;
@@ -692,7 +749,7 @@ async function runPortraitPipeline(env, image, archetype) {
         num_inference_steps: 22,      // illustration benefits from a few more steps for clean line work
         guidance_scale: 7,            // pushed up hard — Flux base has a photo bias; high CFG forces the illustration prompt to win
         true_cfg: 1,
-        id_weight: 0.6,               // bumped from 0.5 — the new style envelope asks for cel-shaded volumes (not flat sticker art), which is compatible with more identity anchoring. Combined with the subject directive + dynamic negative, this preserves the subject's actual face features (jawline, hair, eyes) without turning the face photographic.
+        id_weight: 0.7,               // bumped from 0.6 — male renders were coming out with generic youthful "hero" faces that didn't resemble the subject. Pushing identity anchoring higher leans Flux harder on the actual face features (jawline, age cues, beard) instead of its training-distribution default. The cel-shaded animated-graphic-novel style still wins for the overall illustration look; this just keeps the face closer to the real person.
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
