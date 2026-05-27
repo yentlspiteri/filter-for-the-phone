@@ -25,3 +25,8 @@ binding = "AI"
 #   wrangler secret put FAL_KEY
 #   wrangler secret put RESEND_KEY
 #   wrangler secret put GALLERY_KEY     (passcode for /gallery view)
+#
+# Optional — set to upgrade the vision pre-pass from free Workers AI Llama
+# 3.2 Vision to GPT-4o-mini Vision (much more accurate at stubble, piercings,
+# freckles, glasses-subtype, tattoo content). ~$0.0005 per render.
+#   wrangler secret put OPENAI_API_KEY   (optional; falls back to Workers AI)
