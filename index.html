@@ -1427,12 +1427,68 @@ function canvasToBlob(srcCanvas, maxDim = 1024, quality = 0.86) {
   });
 }
 
+// Extract a tight, square face crop from the captured frame using the
+// already-loaded MediaPipe FaceLandmarker. The worker's vision pre-pass uses
+// this as a HIGH-DETAIL identity source — ~4× the face-pixel density of the
+// wide shot, which dramatically improves detection of subtle features
+// (stubble, moles, freckles, eye colour, small piercings). Returns a data URL
+// (512×512 JPEG) or null if no face is detected.
+function extractFaceCropDataURL(srcCanvas, sizePx = 512, paddingFraction = 0.35) {
+  if (!faceLandmarker) return null;
+  if (!srcCanvas?.width || !srcCanvas?.height) return null;
+  try {
+    // The shared FaceLandmarker is in VIDEO mode (created in begin() for the
+    // tilt-detection loop), so we can't call its still-image detect(). Use
+    // detectForVideo with the canvas + a fresh monotonic timestamp — MediaPipe
+    // accepts HTMLCanvasElement as a frame source, and this avoids racing with
+    // the live loop on a mode switch.
+    const result = faceLandmarker.detectForVideo(srcCanvas, performance.now());
+    const lm = result?.faceLandmarks?.[0];
+    if (!lm || !lm.length) return null;
+
+    // Compute the bbox in normalised [0..1] coords across all 468 landmarks,
+    // then convert to pixels.
+    let minX = 1, minY = 1, maxX = 0, maxY = 0;
+    for (const p of lm) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+    const W = srcCanvas.width, H = srcCanvas.height;
+    const bx = minX * W, by = minY * H;
+    const bw = (maxX - minX) * W, bh = (maxY - minY) * H;
+    const cx = bx + bw / 2, cy = by + bh / 2;
+    // Square crop centred on the face, with generous padding so the chin /
+    // jawline / sideburns / forehead all stay in frame.
+    const side = Math.max(bw, bh) * (1 + paddingFraction * 2);
+    const cropSide = Math.min(side, Math.min(W, H));
+    const cropX = Math.max(0, Math.min(W - cropSide, cx - cropSide / 2));
+    const cropY = Math.max(0, Math.min(H - cropSide, cy - cropSide / 2));
+
+    const out = document.createElement("canvas");
+    out.width = sizePx;
+    out.height = sizePx;
+    const ctx = out.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(srcCanvas, cropX, cropY, cropSide, cropSide, 0, 0, sizePx, sizePx);
+    return out.toDataURL("image/jpeg", 0.9);
+  } catch (err) {
+    console.warn("face crop failed", err);
+    return null;
+  }
+}
+
 async function requestAIPortrait(canvas, archetype) {
   const dataUrl = canvasToUploadDataURL(canvas);
+  // Tight face crop alongside the wide shot — server uses it as a high-detail
+  // identity source. Optional: if face detection fails, server falls back to
+  // using the wide shot for both.
+  const faceDataUrl = extractFaceCropDataURL(canvas);
+  const body = { image: dataUrl, archetype };
+  if (faceDataUrl) body.face = faceDataUrl;
   const res = await fetch(AI_PORTRAIT_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: dataUrl, archetype }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`AI endpoint returned ${res.status}`);
   const data = await res.json();

@@ -588,11 +588,16 @@ export default {
 };
 
 // ---------- /portrait — synchronous, returns the image inline ----------
+// Accepts an optional `face` field carrying a tight face crop (data URL,
+// usually 512×512 JPEG extracted client-side from the MediaPipe FaceLandmarker
+// detection). When present, the vision pre-pass uses it as a high-detail
+// source for face-level attributes. Backwards compatible — old clients that
+// only send `image` continue to work.
 async function handlePortrait(request, env, ctx, cors) {
   try {
-    const { image, archetype } = (await request.json()) || {};
+    const { image, face, archetype } = (await request.json()) || {};
     if (!image || !archetype) return jsonResp({ error: "missing_fields" }, 400, cors);
-    const dataUrl = await runPortraitPipeline(env, image, archetype);
+    const dataUrl = await runPortraitPipeline(env, image, archetype, face);
     // Detached save to R2 — don't block the client response.
     ctx.waitUntil(saveToGallery(env, archetype, dataUrl));
     return jsonResp({ image: dataUrl }, 200, cors);
@@ -613,7 +618,7 @@ async function handlePortrait(request, env, ctx, cors) {
 async function handlePortraitEmail(request, env, ctx, cors) {
   try {
     const body = await readMixedBody(request);
-    const { image, archetype, archetypeName, email } = body;
+    const { image, face, archetype, archetypeName, email } = body;
     if (!image || !archetype || !email)  return jsonResp({ error: "missing_fields" }, 400, cors);
     if (!isValidEmail(email))            return jsonResp({ error: "invalid_email" }, 400, cors);
     if (!PROMPT_TEMPLATES[archetype])    return jsonResp({ error: "unknown_archetype" }, 400, cors);
@@ -622,7 +627,7 @@ async function handlePortraitEmail(request, env, ctx, cors) {
       const bgT0 = Date.now();
       console.log(`[portrait-email] background start email=${email} archetype=${archetype}`);
       try {
-        const portraitDataUrl = await runPortraitPipeline(env, image, archetype);
+        const portraitDataUrl = await runPortraitPipeline(env, image, archetype, face);
         // Best-effort gallery save before sending the email.
         await saveToGallery(env, archetype, portraitDataUrl);
         console.log(`[portrait-email] pipeline done t+${Date.now()-bgT0}ms, sending via Resend`);
@@ -645,15 +650,40 @@ async function handlePortraitEmail(request, env, ctx, cors) {
 }
 
 // ---------- vision pre-pass: describe the subject so we can keep their identity
-// Runs the user's photo through Workers AI (Llama 3.2 Vision) and extracts the
-// few attributes that PuLID was losing: gender, hair colour/length or baldness,
-// facial hair, eye colour, skin tone. Returns a plain object the prompt builder
-// turns into a hard directive, or null if the AI binding is missing / the call
-// fails (in which case we fall back to the old identity-silent behaviour).
-async function describeSubject(env, imageDataUrl) {
+// Two-tier model selection:
+//   1. If OPENAI_API_KEY is set, prefer GPT-4o-mini Vision (much more accurate
+//      at stubble / piercings / freckles / glasses-subtype / tattoo content
+//      than Workers AI Llama 3.2 Vision). Cost: ~$0.0005-0.001 per render.
+//   2. Otherwise fall back to Workers AI Llama 3.2 Vision (free, less accurate
+//      on subtle features — the failure mode that prompted the GPT-4o swap).
+//
+// Both paths accept an optional FACE CROP image alongside the wide shot. When
+// present, the tight crop gives the vision model ~4× the face-pixel density,
+// which dramatically improves detection of fine features (stubble, moles,
+// eye colour, piercings). The wide shot is still needed for body context
+// (tattoos on neck/arms, glasses style, overall build).
+//
+// Returns a plain object the prompt builder turns into a hard directive, or
+// null if every path fails (in which case we fall back to the original
+// identity-silent behaviour).
+async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
+  // Premium path: GPT-4o-mini Vision (multi-image, JSON-mode guaranteed).
+  if (env.OPENAI_API_KEY) {
+    const subject = await describeSubjectOpenAI(env, imageDataUrl, faceImageDataUrl);
+    if (subject) return subject;
+    // fall through to Workers AI if OpenAI is configured but errored — better
+    // to degrade gracefully than to send a portrait with no identity directive
+    console.warn("[pipeline] OpenAI vision returned nothing — falling back to Workers AI");
+  }
+  // Fallback path: Workers AI Llama 3.2 Vision (single image).
   if (!env.AI) return null;
   try {
-    const b64 = String(imageDataUrl).split(",").pop();
+    // When a face crop is available, send THAT to the single-image Llama call
+    // — the face is what we mostly need for identity attributes. The wide
+    // shot's body context is lost in this fallback path, but the face crop
+    // beats the wide shot on every face-level feature.
+    const sourceDataUrl = faceImageDataUrl || imageDataUrl;
+    const b64 = String(sourceDataUrl).split(",").pop();
     const bytes = base64ToUint8Array(b64);
     const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
       // Image as a byte array per Workers AI vision input contract.
@@ -714,6 +744,98 @@ async function describeSubject(env, imageDataUrl) {
     return subject;
   } catch (err) {
     console.warn(`[pipeline] subject describe failed: ${err?.message}`);
+    return null;
+  }
+}
+
+// GPT-4o-mini Vision path. Opt-in via OPENAI_API_KEY secret. Significantly
+// more accurate than Workers AI Llama on the subtle features that drive
+// likeness: stubble vs clean-shaven, small piercings, mole/freckle positions,
+// glasses subtype, tattoo content, age cues.
+//
+// Multi-image: sends both the wide shot (low detail — body / tattoos / glasses
+// context) AND the optional tight face crop (high detail — face attributes).
+// Together this gives the model ~4× the face-pixel density of single-image
+// Workers AI while still seeing body context.
+//
+// Cost: gpt-4o-mini is $0.150 per 1M input tokens. A typical call is
+// ~600-900 input + ~250 output = ~$0.0003-0.0005. Negligible per render.
+async function describeSubjectOpenAI(env, wideDataUrl, faceDataUrl) {
+  try {
+    // Build the message content with both images when face crop available,
+    // otherwise just the wide shot at high detail.
+    const userContent = [
+      { type: "text", text: "Describe this person's visible attributes as JSON, using the supplied image(s)." },
+    ];
+    if (faceDataUrl) {
+      // Face crop gets high-detail tiling — this is the primary identity
+      // signal source.
+      userContent.push({ type: "image_url", image_url: { url: faceDataUrl, detail: "high" } });
+      // Wide shot at low detail — fixed ~85 tokens, gives body / tattoo /
+      // glasses context without exploding cost.
+      userContent.push({ type: "image_url", image_url: { url: wideDataUrl, detail: "low" } });
+    } else {
+      // No face crop — give the wide shot the high-detail treatment so the
+      // model can still resolve face-level features as best it can.
+      userContent.push({ type: "image_url", image_url: { url: wideDataUrl, detail: "high" } });
+    }
+
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a precise facial-attribute extractor for an illustration " +
+              "pipeline. You will be shown ONE OR TWO photos of the same person " +
+              "(usually a tight face crop AND a wider shot). Use BOTH to extract " +
+              "the most accurate description possible. " +
+              "Respond with a single JSON object — no prose, no markdown — using " +
+              "EXACTLY these keys (use the literal string \"none\" for absent items):\n" +
+              '{"gender":"man"|"woman",\n' +
+              ' "age":"young adult"|"adult"|"middle-aged"|"older",\n' +
+              ' "hair":"<colour + length, e.g. \\"short dark brown hair\\", \\"long wavy black hair\\"> OR \\"bald\\" OR \\"shaved head\\"",\n' +
+              ' "facial":"<one of: clean-shaven, very light stubble, short stubble, heavy stubble, five o\'clock shadow, thin moustache, thick moustache, handlebar moustache, walrus moustache, goatee, goatee with moustache, soul patch, chin strap beard, short beard, medium beard, full beard, thick full beard, long beard, beard and moustache, thick sideburns, mutton chops — prefix with a colour adjective when visible: black, dark brown, brown, light brown, red, ginger, blonde, grey, salt-and-pepper, white. Be honest: even very light stubble or a 5-o-clock shadow counts.>",\n' +
+              ' "eyes":"<eye colour> eyes",\n' +
+              ' "skin":"<skin tone description, e.g. fair, light, olive, medium, tan, brown, dark brown, dark> skin",\n' +
+              ' "face_shape":"round"|"oval"|"square"|"heart"|"long",\n' +
+              ' "age_cues":"<short comma-list of visible cues that fix age: facial hair, fine lines around eyes, crow\'s feet, smile lines, greying hair, salt-and-pepper hair, fuller defined jawline, receding hairline, etc. — or \\"youthful smooth features\\" if none>",\n' +
+              ' "tattoos":"<specific description of any visible tattoos, including content (\\"floral sleeve on right arm\\", \\"script lettering on inner forearm\\", \\"small star behind ear\\") — or \\"none\\">",\n' +
+              ' "notable":"<short comma-list of distinctive features visible in the photo: glasses (and their style — round wire, thick black acetate, aviator, frameless), piercings (location: ear, septum, nose, lip, eyebrow, monroe), scars, freckles, prominent mole + location, dimples, beauty mark — or \\"none\\">"\n' +
+              "}\n" +
+              "Important: report what you can SEE. Do not infer attributes from " +
+              "clothing or background. Never omit the gender key. When in doubt " +
+              "about facial hair, lean toward reporting whatever subtle hair is " +
+              "visible rather than calling it clean-shaven.",
+          },
+          { role: "user", content: userContent },
+        ],
+        max_tokens: 500,
+        temperature: 0.1,
+        // Guarantees valid JSON in the response — no defensive regex needed
+        // for OpenAI (Workers AI path still uses the regex extractor).
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text();
+      console.warn(`[pipeline] OpenAI vision failed: status=${res.status} detail=${detail.slice(0, 200)}`);
+      return null;
+    }
+    const data = await res.json();
+    const raw = data?.choices?.[0]?.message?.content || "";
+    const subject = parseSubjectJson(raw);
+    if (subject) console.log(`[pipeline] subject(openai)=${JSON.stringify(subject)}`);
+    return subject;
+  } catch (err) {
+    console.warn(`[pipeline] OpenAI vision threw: ${err?.message}`);
     return null;
   }
 }
@@ -847,16 +969,18 @@ function parseSubjectJson(raw) {
 }
 
 // ---------- pipeline: runs all four AI stages, returns a data URL ----------
-async function runPortraitPipeline(env, image, archetype) {
+async function runPortraitPipeline(env, image, archetype, faceImage) {
   if (!PROMPT_TEMPLATES[archetype]) throw new Error("unknown_archetype");
   if (!env.FAL_KEY) throw new Error("no_fal_key");
 
   const t0 = Date.now();
-  console.log(`[pipeline] start archetype=${archetype}`);
+  console.log(`[pipeline] start archetype=${archetype} hasFaceCrop=${!!faceImage}`);
 
   // Vision pre-pass first so the descriptor can be baked into the prompt
-  // (and the negative prompt — see buildSubjectNegative below).
-  const subject = await describeSubject(env, image);
+  // (and the negative prompt — see buildSubjectNegative below). When the
+  // client sent a tight face crop alongside the wide shot, it dramatically
+  // improves identity extraction (~4× face-pixel density to the vision model).
+  const subject = await describeSubject(env, image, faceImage);
   const prompt = getPromptFor(archetype, subject);
   const subjectNegative = buildSubjectNegative(subject);
   console.log(`[pipeline] subject pre-pass done t+${Date.now()-t0}ms hasSubject=${!!subject}`);
@@ -1086,27 +1210,33 @@ function isValidEmail(s) {
 }
 
 // Read JSON or multipart/form-data into a uniform { email, archetype,
-// archetypeName, image } object. multipart is the preferred form for the
-// /portrait-email upload because it skips the CORS preflight that some
+// archetypeName, image, face } object. multipart is the preferred form for
+// the /portrait-email upload because it skips the CORS preflight that some
 // mobile Safari builds were silently failing after.
 async function readMixedBody(request) {
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
     const fd = await request.formData();
-    let image = null;
-    const imageField = fd.get("image");
-    if (imageField && typeof imageField !== "string") {
-      const buf = await imageField.arrayBuffer();
-      const mime = imageField.type || "image/jpeg";
-      image = `data:${mime};base64,${arrayBufferToBase64(buf)}`;
-    } else if (typeof imageField === "string") {
-      image = imageField;
-    }
+    // Coerces either a File field (binary upload) or a string field (data URL)
+    // into a data URL string so the rest of the pipeline doesn't care which.
+    const readImageField = async (name) => {
+      const field = fd.get(name);
+      if (!field) return null;
+      if (typeof field === "string") return field;
+      const buf = await field.arrayBuffer();
+      const mime = field.type || "image/jpeg";
+      return `data:${mime};base64,${arrayBufferToBase64(buf)}`;
+    };
+    const [image, face] = await Promise.all([
+      readImageField("image"),
+      readImageField("face"),
+    ]);
     return {
       email:         fd.get("email") || null,
       archetype:     fd.get("archetype") || null,
       archetypeName: fd.get("archetypeName") || null,
       image,
+      face,
     };
   }
   return (await request.json()) || {};
