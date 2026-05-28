@@ -79,7 +79,23 @@ const STYLE_LEAD =
   "blonde has BLONDE hair, blue eyes stay BLUE, green eyes stay " +
   "GREEN, brown eyes stay BROWN, dark skin stays DARK, fair skin " +
   "stays FAIR. DO NOT recolour hair or eyes to brand orange or wine " +
-  "red — only the wardrobe and background follow the brand palette. ";
+  "red — only the wardrobe and background follow the brand palette. " +
+  "WARDROBE — MODERN EXECUTIVE / PROFESSIONAL attire: tailored blazers, " +
+  "structured coats, crisp shirts, sharp open-collar pieces, fitted " +
+  "leather jackets, professional dress (gender-appropriate to the " +
+  "subject) — NOT full fantasy robes, NOT hooded medieval cloaks, NOT " +
+  "dressing gowns. The archetype's thematic symbolism appears as " +
+  "ACCENTS on the modern attire (rune-embroidered lapels or cuffs, " +
+  "decorative trim along the collar or coat-line, a thematic pocket " +
+  "square, an emblem on the shoulder) and in the BACKGROUND — not as " +
+  "the literal garment shape. These figures are modern game-changers " +
+  "in tarot symbolism, not medieval mystics. Wardrobe palette stays " +
+  "on brand: deep wine red, peach, brand orange, near-black. " +
+  "PROPORTIONS — render the subject's face and body with NATURAL, " +
+  "FAITHFUL proportions. Do NOT exaggerate or caricature any feature " +
+  "(ears, nose, chin, eyes, mouth). The animated illustration style " +
+  "is NOT a license for comic caricature — features stay proportional " +
+  "to the real subject. ";
 
 const STYLE_TRAIL =
   " The face is rendered in the SAME bold ink-illustration language as " +
@@ -140,10 +156,11 @@ const PROMPT_TEMPLATES = {
   magician: {
     base:
       "Illustrated tarot card: 'The Magician'. Three-quarter-body " +
-      "figure in a flowing hooded robe with rune-embroidered edges, " +
-      "one hand raised commanding the elements, sharp determined " +
-      "gaze. Background swirling with abstract flame patterns and " +
-      "runic glyphs. ",
+      "figure in a sharp tailored dark blazer or structured overcoat " +
+      "with rune-embroidered lapels and cuffs, crisp shirt visible " +
+      "underneath, one hand raised commanding the elements, sharp " +
+      "determined gaze. Background swirling with abstract flame " +
+      "patterns and runic glyphs. ",
     props: [
       "Variant: one arm raised high holding a slim wand or staff, " +
         "flames and rune symbols swirling in a halo around the upper " +
@@ -165,10 +182,12 @@ const PROMPT_TEMPLATES = {
   alchemist: {
     base:
       "Illustrated tarot card: 'The Alchemist'. Three-quarter-body " +
-      "figure in a heavy rune-embroidered robe in deep wine red with " +
-      "orange accents, focused determined expression, one hand " +
-      "gesturing over a steaming vessel. Background swirling with " +
-      "smoke and runic transformation symbols. ",
+      "figure in a structured deep-wine-red blazer with sleeves " +
+      "rolled to the forearms over a tailored vest and crisp shirt, " +
+      "rune-embroidered pocket square and lapel detail in brand " +
+      "orange, focused determined expression, one hand gesturing " +
+      "over a steaming vessel. Background swirling with smoke and " +
+      "runic transformation symbols. ",
     props: [
       "Variant: leaning over a bubbling cauldron with one hand " +
         "stirring above it, billowing smoke rising into runic glyphs " +
@@ -190,9 +209,11 @@ const PROMPT_TEMPLATES = {
   oracle: {
     base:
       "Illustrated tarot card: 'The Oracle'. Three-quarter-body " +
-      "figure in flowing layered robes catching peach and wine " +
-      "highlights, a serene knowing expression with eyes that seem " +
-      "to look past the viewer. Background filled with stars, " +
+      "figure in a sharp tailored layered look — a structured " +
+      "wine-red blazer or open overcoat over a silky shirt or " +
+      "blouse, with celestial-embroidered trim along the collar and " +
+      "lapels — a serene knowing expression with eyes that seem to " +
+      "look past the viewer. Background filled with stars, " +
       "celestial swirls, and abstract eye motifs. ",
     props: [
       "Variant: both hands cradling a glowing crystal orb at chest " +
@@ -240,10 +261,12 @@ const PROMPT_TEMPLATES = {
   monk: {
     base:
       "Illustrated tarot card: 'The Monk'. Full-body figure seated in " +
-      "a meditative cross-legged pose or standing serenely, wearing a " +
-      "simple draped robe in peach and wine tones, eyes gently " +
-      "closed or open with quiet directness. Background of radiating " +
-      "lines, lotus petals, and abstract mountain silhouettes. ",
+      "a meditative cross-legged pose or standing serenely, wearing " +
+      "minimalist tailored attire — a clean unbuttoned linen-style " +
+      "shirt under an open structured peach-and-wine coat, " +
+      "understated but high-quality — eyes gently closed or open " +
+      "with quiet directness. Background of radiating lines, lotus " +
+      "petals, and abstract mountain silhouettes. ",
     props: [
       "Variant: seated in lotus position with palms upward in the " +
         "lap, halo of concentric circles radiating outward, lotus " +
@@ -290,10 +313,12 @@ const PROMPT_TEMPLATES = {
   luminary: {
     base:
       "Illustrated tarot card: 'The Luminary'. Commanding full-body " +
-      "figure in a regal robe or sharp ceremonial coat with " +
-      "ornamental trim, open confident smile, radiant presence. " +
-      "Background of radial sun-rays, decorative halo motifs, and " +
-      "abstract throne silhouettes. ",
+      "figure in a sharp tailored ceremonial blazer or executive " +
+      "long coat with ornamental gold-and-wine trim along the " +
+      "lapels and cuffs, crisp shirt visible underneath, open " +
+      "confident smile, radiant presence. Background of radial " +
+      "sun-rays, decorative halo motifs, and abstract throne " +
+      "silhouettes. ",
     props: [
       "Variant: standing tall with one hand raised in greeting, the " +
         "other holding a tall slim staff, halo of radial sun-rays " +
@@ -391,9 +416,14 @@ function buildSubjectDirective(subject) {
       : "") +
     // Distinctive features (glasses, piercings, scars, freckles, etc.) —
     // small details that anchor identity hard if rendered, lost if not asked.
+    // Critical: include them WITHOUT exaggerating. Flux + animated style is
+    // prone to caricature when a feature is named explicitly.
     (hasNotable
-      ? `Distinctive features visible in the photo: ${subject.notable}. Include these — they are part of how the subject is recognised. `
+      ? `Distinctive features visible in the photo: ${subject.notable}. Include these — they are part of how the subject is recognised — but render them with NATURAL, FAITHFUL proportions. Do NOT exaggerate, enlarge or caricature these features. They should appear on the figure exactly as proportional to the real subject. `
       : "") +
+    // Even when no specific feature was extracted, forbid caricature
+    // globally — ears, nose, chin, eyes are all common exaggeration targets.
+    "Render the face and body with NATURAL, FAITHFUL proportions throughout — do NOT exaggerate ears, nose, chin, eyes, mouth or any other feature into a comic caricature. The animated illustration style is for the rendering language, NOT for distorting proportions. " +
     // Face shape — quiet hint that helps the structural anatomy.
     (subject.face_shape
       ? `Face shape: ${subject.face_shape}. `
@@ -1035,6 +1065,20 @@ async function runPortraitPipeline(env, image, archetype, faceImage) {
           "misaligned gaze, one eye higher than the other, " +
           "uneven eye sizes, mismatched eye shape, googly eyes, " +
           "pupil drift, off-centre pupils, " +
+          // Caricature failure modes — the animated style was being read as
+          // license to enlarge specific facial features when the directive
+          // named them (especially ears, nose, chin).
+          "caricature, exaggerated features, oversized ears, " +
+          "enormous ears, dumbo ears, comically large ears, " +
+          "oversized nose, enormous nose, exaggerated nose, " +
+          "oversized chin, enormous chin, exaggerated jawline, " +
+          "exaggerated facial proportions, distorted facial features, " +
+          "feature caricature, comic book caricature, " +
+          // Wardrobe failure modes — global STYLE_LEAD asks for modern
+          // executive attire; exclude fantasy-robe outputs explicitly.
+          "fantasy robe, medieval robe, hooded medieval cloak, " +
+          "wizard robe, monk robe, mage robe, druidic robe, " +
+          "dressing gown, bathrobe, fairy-tale robe, " +
           "thin sparse linework, faint outlines, washed-out colours, " +
           "flat poster art, sticker-like figure, low-detail background, " +
           "anime, manga, chibi, 3D render, CGI, sculpture, statue, " +
