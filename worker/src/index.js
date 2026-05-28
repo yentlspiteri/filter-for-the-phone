@@ -38,7 +38,22 @@
 // portrait (the vision pre-pass adds ~2-3s; Workers AI is free-tier cheap).
 //   docs: https://fal.ai/models/fal-ai/flux-pulid
 //         https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/
-const FAL_URL = "https://fal.run/fal-ai/flux-pulid";
+// Two pipelines available. The legacy PuLID pipeline generates the styled
+// character + scene from scratch with a face embedding (text-to-image with
+// identity guidance). The Snapchat-style pipeline starts FROM the user's
+// actual photo, cartoonifies it (preserving face structure / glasses /
+// beard / hair pixel-by-pixel), then enriches with the tarot scene around
+// them. The Snapchat pipeline is dramatically better at identity preservation
+// but costs ~$0.06-0.08 per render (vs ~$0.04 for PuLID) and takes ~16-20s
+// (vs ~12s). Toggle via PIPELINE env var: "snapchat" (default) or "pulid".
+//   docs: https://fal.ai/models/fal-ai/face-to-many
+//         https://fal.ai/models/fal-ai/flux/dev/image-to-image
+//         https://fal.ai/models/fal-ai/flux-pulid
+const FAL_PULID_URL          = "https://fal.run/fal-ai/flux-pulid";
+const FAL_FACE_TO_MANY_URL   = "https://fal.run/fal-ai/face-to-many";
+const FAL_FLUX_I2I_URL       = "https://fal.run/fal-ai/flux/dev/image-to-image";
+// Back-compat alias (used by older log lines + may be referenced elsewhere)
+const FAL_URL = FAL_PULID_URL;
 const RESEND_URL = "https://api.resend.com/emails";
 
 // Universal illustrated-tarot-card layer — placed at the FRONT of every
@@ -119,6 +134,50 @@ const STYLE_TRAIL =
   "texture, no photographic eyes, no skin pores, no real hair strands, " +
   "no off-palette hues, no white empty margins, no stiff frontal " +
   "beauty-pose composition, no flat blank background.";
+
+// Static negative-prompt — shared by both the PuLID pipeline (text-to-image
+// generation) and the Snapchat-style pipeline's Stage 2 (image-to-image
+// scene enrichment). Per-subject negatives (opposite-gender, beardless-when-
+// bearded, etc.) are appended at the call site via buildSubjectNegative.
+const BASE_NEGATIVE_PROMPT =
+  "photograph, photo, photorealistic, realistic face, real photo, " +
+  "photographic face on illustrated body, photo composite, " +
+  "mixed media photo-illustration, real human face, " +
+  "DSLR photo, photographic skin texture, skin pores, fine pores, " +
+  "individual hair strands, photographic eyes, eye reflections, " +
+  "catchlights, real eyelashes, " +
+  "blurry, shallow depth of field, bokeh, lens flare, film grain, " +
+  "studio photo, headshot photo, portrait photo, " +
+  "white empty margin, white border, blank space, centred " +
+  "spotlight composition, isolated subject on plain background, " +
+  "incomplete background, vignette, dark margins, " +
+  "stiff frontal pose, beauty shot, expressionless face, " +
+  "neutral closed-mouth expression, flat affect, lifeless eyes, " +
+  "small beady eyes, dead-eyed stare, " +
+  "cross-eyed, walleyed, lazy eye, strabismus, wandering eye, " +
+  "asymmetric pupils, pupils pointing different directions, " +
+  "misaligned gaze, one eye higher than the other, " +
+  "uneven eye sizes, mismatched eye shape, googly eyes, " +
+  "pupil drift, off-centre pupils, " +
+  "caricature, exaggerated features, oversized ears, " +
+  "enormous ears, dumbo ears, comically large ears, " +
+  "oversized nose, enormous nose, exaggerated nose, " +
+  "oversized chin, enormous chin, exaggerated jawline, " +
+  "exaggerated facial proportions, distorted facial features, " +
+  "feature caricature, comic book caricature, " +
+  "fantasy robe, medieval robe, hooded medieval cloak, " +
+  "wizard robe, monk robe, mage robe, druidic robe, " +
+  "dressing gown, bathrobe, fairy-tale robe, " +
+  "thin sparse linework, faint outlines, washed-out colours, " +
+  "flat poster art, sticker-like figure, low-detail background, " +
+  "anime, manga, chibi, 3D render, CGI, sculpture, statue, " +
+  "deformed face, asymmetric face, distorted face, bad anatomy, " +
+  "watermark, text, caption, banner, signature, logo, " +
+  "complex gradients, rainbow colours, multi-coloured background, " +
+  "saturated neon background, off-palette background, " +
+  "orange hair, wine-red hair, brand-coloured hair, " +
+  "orange eyes, red eyes, brand-coloured eyes, " +
+  "orange skin, peach-recoloured skin, wine-tinted skin";
 
 // Illustrated tarot card scenes — each archetype is a dramatic
 // vector-poster scene with the figure mid-action and a symbolic
@@ -630,7 +689,7 @@ async function handlePortrait(request, env, ctx, cors) {
   try {
     const { image, face, archetype } = (await request.json()) || {};
     if (!image || !archetype) return jsonResp({ error: "missing_fields" }, 400, cors);
-    const dataUrl = await runPortraitPipeline(env, image, archetype, face);
+    const dataUrl = await runSelectedPipeline(env, image, archetype, face);
     // Detached save to R2 — don't block the client response.
     ctx.waitUntil(saveToGallery(env, archetype, dataUrl));
     return jsonResp({ image: dataUrl }, 200, cors);
@@ -660,7 +719,7 @@ async function handlePortraitEmail(request, env, ctx, cors) {
       const bgT0 = Date.now();
       console.log(`[portrait-email] background start email=${email} archetype=${archetype}`);
       try {
-        const portraitDataUrl = await runPortraitPipeline(env, image, archetype, face);
+        const portraitDataUrl = await runSelectedPipeline(env, image, archetype, face);
         // Best-effort gallery save before sending the email.
         await saveToGallery(env, archetype, portraitDataUrl);
         console.log(`[portrait-email] pipeline done t+${Date.now()-bgT0}ms, sending via Resend`);
@@ -1167,6 +1226,144 @@ function parseSubjectJson(raw) {
   }
 }
 
+// Dispatcher — picks the active pipeline based on the PIPELINE env var.
+//   PIPELINE="snapchat"  (default) — runSnapchatPipeline (face-to-many + flux i2i)
+//   PIPELINE="pulid"               — runPortraitPipeline (legacy text-to-image)
+// Set with `wrangler secret put PIPELINE` or in wrangler.toml [vars]. Easy
+// rollback if the new pipeline misbehaves: flip the var and redeploy.
+async function runSelectedPipeline(env, image, archetype, faceImage) {
+  const choice = (env.PIPELINE || "snapchat").toLowerCase();
+  if (choice === "pulid") {
+    return runPortraitPipeline(env, image, archetype, faceImage);
+  }
+  return runSnapchatPipeline(env, image, archetype, faceImage);
+}
+
+// ---------- Snapchat-style pipeline: photo-translation + scene enrichment ----------
+// Mimics how Snapchat / Lensa / Toonify achieve "looks uncannily like me" —
+// the algorithm STARTS from the user's actual photo and TRANSFORMS pixels
+// rather than generating a stylised character from a face embedding. Two stages:
+//
+//   Stage 1: fal-ai/face-to-many
+//     Snapchat-style image-to-image translation. Takes the user's photo and
+//     produces a cartoonified version that PRESERVES face structure, glasses,
+//     beard, hair, jaw, skin tone — because it operates pixel-by-pixel rather
+//     than generating from scratch. Output: cartoon character on a simple
+//     background.
+//
+//   Stage 2: fal-ai/flux/dev/image-to-image
+//     Takes Stage 1's cartoonified character as the init image and applies the
+//     full archetype tarot prompt at MODERATE strength (~0.55). This preserves
+//     the character (low enough strength) while filling the background with
+//     archetype-specific motifs (high enough strength to add the tarot scene
+//     around them). Output: cartoonified character INSIDE a rich tarot scene.
+//
+// Cost: ~$0.06-0.08 per render (vs ~$0.04 for PuLID). Latency: ~16-20s
+// (vs ~12s). The likeness gain is large enough to justify both.
+async function runSnapchatPipeline(env, image, archetype, faceImage) {
+  if (!PROMPT_TEMPLATES[archetype]) throw new Error("unknown_archetype");
+  if (!env.FAL_KEY) throw new Error("no_fal_key");
+
+  const t0 = Date.now();
+  console.log(`[snap-pipeline] start archetype=${archetype} hasFaceCrop=${!!faceImage}`);
+
+  // Vision pre-pass — still useful for the per-subject directive that goes
+  // into Stage 2's prompt, and for building the dynamic negative prompt.
+  const subject = await describeSubject(env, image, faceImage);
+  const subjectNegative = buildSubjectNegative(subject);
+  console.log(`[snap-pipeline] subject pre-pass done t+${Date.now()-t0}ms hasSubject=${!!subject}`);
+
+  // ----- STAGE 1: cartoonify the user's photo (Snapchat-style translation) -----
+  // face-to-many supports several preset styles. "Comic" is closest to our
+  // brand cel-shaded animated-graphic-novel aesthetic; "pixar" is the
+  // fallback if "comic" produces something too flat. The prompt parameter
+  // provides additional tone guidance.
+  const stage1ReqBody = {
+    image_url: image,
+    style: "comic",                     // brand-aligned cartoon style
+    prompt:
+      "bold cel-shaded comic-book character portrait, animated " +
+      "graphic-novel illustration, vivid expressive face, large lively " +
+      "eyes with clearly drawn pupils, heavy deep-wine or near-black " +
+      "linework, smooth solid colour fills with cel-shaded volumes",
+    num_inference_steps: 30,
+    guidance_scale: 7,
+    image_size: "portrait_4_3",
+    output_format: "jpeg",
+    num_images: 1,
+    negative_prompt: BASE_NEGATIVE_PROMPT + (subjectNegative ? ", " + subjectNegative : ""),
+  };
+  const stage1Res = await fetch(FAL_FACE_TO_MANY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${env.FAL_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(stage1ReqBody),
+  });
+  if (!stage1Res.ok) {
+    const detail = await stage1Res.text();
+    console.error(`[snap-pipeline] STAGE 1 (face-to-many) FAILED status=${stage1Res.status} detail=${detail.slice(0,300)}`);
+    throw new Error(`face_to_many_upstream:${stage1Res.status}:${detail}`);
+  }
+  const stage1Data = await stage1Res.json();
+  const cartoonifiedUrl = stage1Data?.images?.[0]?.url || stage1Data?.image?.url;
+  if (!cartoonifiedUrl) {
+    console.error(`[snap-pipeline] STAGE 1 returned no image, data=${JSON.stringify(stage1Data).slice(0,300)}`);
+    throw new Error("face_to_many_no_image");
+  }
+  console.log(`[snap-pipeline] STAGE 1 (face-to-many) ok t+${Date.now()-t0}ms`);
+
+  // ----- STAGE 2: enrich the cartoonified character with the tarot scene -----
+  // Image-to-image at moderate strength (0.55) — preserves the cartoonified
+  // character's face / pose / wardrobe (the identity-preserving work Stage 1
+  // did) while transforming the empty background into the dense symbolic
+  // tarot scene the archetype prompts describe.
+  const prompt = getPromptFor(archetype, subject);
+  const stage2ReqBody = {
+    image_url: cartoonifiedUrl,
+    prompt,
+    strength: 0.55,                    // moderate — keep character, transform background
+    num_inference_steps: 28,
+    guidance_scale: 7,
+    image_size: "portrait_4_3",
+    output_format: "jpeg",
+    num_images: 1,
+    enable_safety_checker: true,
+    negative_prompt: BASE_NEGATIVE_PROMPT + (subjectNegative ? ", " + subjectNegative : ""),
+  };
+  const stage2Res = await fetch(FAL_FLUX_I2I_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${env.FAL_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(stage2ReqBody),
+  });
+  if (!stage2Res.ok) {
+    const detail = await stage2Res.text();
+    console.error(`[snap-pipeline] STAGE 2 (flux i2i) FAILED status=${stage2Res.status} detail=${detail.slice(0,300)}`);
+    throw new Error(`flux_i2i_upstream:${stage2Res.status}:${detail}`);
+  }
+  const stage2Data = await stage2Res.json();
+  const finalUrl = stage2Data?.images?.[0]?.url || stage2Data?.image?.url;
+  if (!finalUrl) {
+    console.error(`[snap-pipeline] STAGE 2 returned no image, data=${JSON.stringify(stage2Data).slice(0,300)}`);
+    throw new Error("flux_i2i_no_image");
+  }
+  console.log(`[snap-pipeline] STAGE 2 (flux i2i) ok t+${Date.now()-t0}ms`);
+
+  // Proxy the final image as inline base64 so we don't leak fal's transient
+  // CDN URLs to the client and don't tangle with cross-origin canvas taint.
+  console.log(`[snap-pipeline] fetching final image t+${Date.now()-t0}ms`);
+  const imgRes = await fetch(finalUrl);
+  if (!imgRes.ok) throw new Error(`image_fetch_failed:${imgRes.status}`);
+  const buf = await imgRes.arrayBuffer();
+  const result = `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
+  console.log(`[snap-pipeline] done t+${Date.now()-t0}ms size=${buf.byteLength}b`);
+  return result;
+}
+
 // ---------- pipeline: runs all four AI stages, returns a data URL ----------
 async function runPortraitPipeline(env, image, archetype, faceImage) {
   if (!PROMPT_TEMPLATES[archetype]) throw new Error("unknown_archetype");
@@ -1184,7 +1381,7 @@ async function runPortraitPipeline(env, image, archetype, faceImage) {
   const subjectNegative = buildSubjectNegative(subject);
   console.log(`[pipeline] subject pre-pass done t+${Date.now()-t0}ms hasSubject=${!!subject}`);
 
-  const falRes = await fetch(FAL_URL, {
+  const falRes = await fetch(FAL_PULID_URL, {
       method: "POST",
       headers: {
         Authorization: `Key ${env.FAL_KEY}`,
@@ -1207,62 +1404,7 @@ async function runPortraitPipeline(env, image, archetype, faceImage) {
         num_images: 1,
         output_format: "jpeg",
         enable_safety_checker: true,
-        negative_prompt:
-          "photograph, photo, photorealistic, realistic face, real photo, " +
-          "photographic face on illustrated body, photo composite, " +
-          "mixed media photo-illustration, real human face, " +
-          "DSLR photo, photographic skin texture, skin pores, fine pores, " +
-          "individual hair strands, photographic eyes, eye reflections, " +
-          "catchlights, real eyelashes, " +
-          "blurry, shallow depth of field, bokeh, lens flare, film grain, " +
-          "studio photo, headshot photo, portrait photo, " +
-          "white empty margin, white border, blank space, centred " +
-          "spotlight composition, isolated subject on plain background, " +
-          "incomplete background, vignette, dark margins, " +
-          "stiff frontal pose, beauty shot, expressionless face, " +
-          "neutral closed-mouth expression, flat affect, lifeless eyes, " +
-          "small beady eyes, dead-eyed stare, " +
-          // Eye-alignment failure modes — Flux + PuLID at our id_weight
-          // routinely produces cross-eyed / lazy-eye / asymmetric-gaze faces
-          // because the model generates each eye region independently. These
-          // negatives explicitly forbid that.
-          "cross-eyed, walleyed, lazy eye, strabismus, wandering eye, " +
-          "asymmetric pupils, pupils pointing different directions, " +
-          "misaligned gaze, one eye higher than the other, " +
-          "uneven eye sizes, mismatched eye shape, googly eyes, " +
-          "pupil drift, off-centre pupils, " +
-          // Caricature failure modes — the animated style was being read as
-          // license to enlarge specific facial features when the directive
-          // named them (especially ears, nose, chin).
-          "caricature, exaggerated features, oversized ears, " +
-          "enormous ears, dumbo ears, comically large ears, " +
-          "oversized nose, enormous nose, exaggerated nose, " +
-          "oversized chin, enormous chin, exaggerated jawline, " +
-          "exaggerated facial proportions, distorted facial features, " +
-          "feature caricature, comic book caricature, " +
-          // Wardrobe failure modes — global STYLE_LEAD asks for modern
-          // executive attire; exclude fantasy-robe outputs explicitly.
-          "fantasy robe, medieval robe, hooded medieval cloak, " +
-          "wizard robe, monk robe, mage robe, druidic robe, " +
-          "dressing gown, bathrobe, fairy-tale robe, " +
-          "thin sparse linework, faint outlines, washed-out colours, " +
-          "flat poster art, sticker-like figure, low-detail background, " +
-          "anime, manga, chibi, 3D render, CGI, sculpture, statue, " +
-          "deformed face, asymmetric face, distorted face, bad anatomy, " +
-          "watermark, text, caption, banner, signature, logo, " +
-          // Broad colour-name negatives ("blue, green, purple, yellow, brown")
-          // were ALSO banning real hair and eye colours, which is why brunettes
-          // were coming out with orange hair and blue eyes turned wine red. Now
-          // we only exclude colours where they don't belong — multi-coloured /
-          // neon backgrounds — not the colour names themselves.
-          "complex gradients, rainbow colours, multi-coloured background, " +
-          "saturated neon background, off-palette background, " +
-          "orange hair, wine-red hair, brand-coloured hair, " +
-          "orange eyes, red eyes, brand-coloured eyes, " +
-          "orange skin, peach-recoloured skin, wine-tinted skin" +
-          // Subject-specific exclusions (opposite gender, "full head of hair"
-          // when bald, etc.). Empty string when the vision pre-pass failed.
-          (subjectNegative ? ", " + subjectNegative : ""),
+        negative_prompt: BASE_NEGATIVE_PROMPT + (subjectNegative ? ", " + subjectNegative : ""),
       }),
     });
 
