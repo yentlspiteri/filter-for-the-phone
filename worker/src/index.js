@@ -774,6 +774,34 @@ async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
       }
     }
 
+    // Hair-colour re-check. The omnibus call frequently swings between similar
+    // colours (brown ↔ blonde ↔ dark-blonde, black ↔ very dark brown) because
+    // lighting / highlights confuse a multi-attribute pass. Focused detector
+    // looks at hair specifically and reports a confident colour + length.
+    if (subject && !/bald|shaved head|no hair/i.test(subject.hair || "")) {
+      const focusedHair = await detectHairColor(env, bytes);
+      const mergedHair = mergeHair(subject.hair, focusedHair);
+      if (mergedHair !== subject.hair) {
+        console.log(`[pipeline] hair re-check: omnibus="${subject.hair}" focused="${focusedHair}" → "${mergedHair}"`);
+        subject.hair = mergedHair;
+      }
+    }
+
+    // Glasses re-check. The omnibus call buries glasses inside the "notable"
+    // free-text field, where it's often dropped entirely. Glasses are a major
+    // identity feature — when missed, the model invents random stylised eyes
+    // in the empty space where the frames should be. Focused detector
+    // confirms presence + style, and we merge it into `notable` so the
+    // downstream directive (buildSubjectDirective) picks it up.
+    if (subject) {
+      const focusedGlasses = await detectGlasses(env, bytes);
+      const mergedNotable = mergeGlassesIntoNotable(subject.notable, focusedGlasses);
+      if (mergedNotable !== subject.notable) {
+        console.log(`[pipeline] glasses re-check: notable was="${subject.notable}" focused="${focusedGlasses}" → "${mergedNotable}"`);
+        subject.notable = mergedNotable;
+      }
+    }
+
     return subject;
   } catch (err) {
     console.warn(`[pipeline] subject describe failed: ${err?.message}`);
@@ -965,6 +993,144 @@ function mergeFacialHair(omnibus, focused) {
   // Both see hair → prefer the more specific / longer phrase (the focused
   // detector usually returns colour + style; the omnibus often just "beard").
   return focused.length > omnibus.length ? focused : omnibus;
+}
+
+// Focused hair-colour + length detector. Runs a single-purpose vision call
+// that ONLY asks about head hair — colour, shade and length. Multi-attribute
+// extraction frequently swings between similar colours (brown ↔ blonde
+// ↔ dark blonde, black ↔ very dark brown) under different lighting; a
+// dedicated pass with a tight phrase list is much more stable.
+async function detectHairColor(env, bytes) {
+  if (!env.AI) return null;
+  try {
+    const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+      image: [...bytes],
+      max_tokens: 40,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise hair-colour and length detector. Look at the " +
+            "head hair only — ignore facial hair. Reply with ONLY one short " +
+            "phrase, no other words, no JSON, no punctuation, in this format:\n" +
+            "  \"<length> <colour> hair\"\n" +
+            "Length options: \"very short\", \"short\", \"medium-length\", \"shoulder-length\", " +
+            "\"long\", \"very long\" (or describe a style if more accurate: \"buzzcut\", " +
+            "\"crew cut\", \"pixie cut\", \"bob\").\n" +
+            "Colour options — be precise: \"black\", \"jet black\", \"dark brown\", " +
+            "\"brown\", \"chestnut brown\", \"light brown\", \"auburn\", " +
+            "\"red\", \"ginger\", \"strawberry blonde\", \"dark blonde\", " +
+            "\"blonde\", \"platinum blonde\", \"ash blonde\", \"grey\", " +
+            "\"salt-and-pepper\", \"silver\", \"white\".\n" +
+            "Add a texture descriptor when visible: \"straight\", \"wavy\", " +
+            "\"curly\", \"coily\".\n" +
+            "Examples: \"short dark brown hair\", \"long wavy chestnut brown hair\", " +
+            "\"medium-length curly black hair\", \"shoulder-length blonde hair\", " +
+            "\"buzzcut grey hair\". " +
+            "If the person is bald or has a fully shaved head, reply \"bald\".",
+        },
+        { role: "user", content: "What hair does this person have? Reply with the phrase only." },
+      ],
+    });
+    const raw = String((out && (out.response ?? out.description ?? out.text)) || "").trim();
+    const cleaned = raw
+      .replace(/^["'`]+|["'`.,;:!?]+$/g, "")
+      .trim()
+      .toLowerCase();
+    if (!cleaned) return null;
+    if (/^bald$/i.test(cleaned)) return "bald";
+    // Must look like a hair phrase (contains "hair" OR a haircut keyword)
+    if (!/\b(hair|cut|bob|crew|pixie|buzzcut|undercut|fade)\b/i.test(cleaned)) return null;
+    return cleaned;
+  } catch (err) {
+    console.warn(`[pipeline] hair re-check failed: ${err?.message}`);
+    return null;
+  }
+}
+
+// Merge omnibus hair value with focused hair-detector value. Symmetric:
+// neither is the "rescue" version (unlike facial hair where clean-shaven is
+// special). We prefer the more specific / longer phrase because the focused
+// detector usually returns texture + length + colour while omnibus may give
+// just "blonde hair".
+function mergeHair(omnibus, focused) {
+  if (!focused) return omnibus || "";
+  if (!omnibus) return focused;
+  // If one is "bald" and the other isn't, that's a disagreement we don't
+  // want to silently resolve — bias toward NOT bald (assume hair exists if
+  // either detector reports it) so we don't erase a real hairstyle.
+  const omnibusBald = /^bald$/i.test(omnibus) || /shaved head|no hair/i.test(omnibus);
+  const focusedBald = /^bald$/i.test(focused);
+  if (omnibusBald && !focusedBald) return focused;     // focused sees hair → keep it
+  if (!omnibusBald && focusedBald) return omnibus;     // omnibus sees hair → keep it
+  if (omnibusBald && focusedBald) return "bald";
+  // Both describe hair — take whichever is more specific (longer phrase usually
+  // means colour + length + texture all present).
+  return focused.length > omnibus.length ? focused : omnibus;
+}
+
+// Focused glasses detector. Glasses are a major identity feature — when they
+// go missing, the model invents random stylised eyes in the empty frame
+// space. The omnibus extractor buries glasses inside the free-text "notable"
+// field where it's often dropped entirely. This single-purpose call asks
+// ONLY about glasses (presence + style).
+async function detectGlasses(env, bytes) {
+  if (!env.AI) return null;
+  try {
+    const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+      image: [...bytes],
+      max_tokens: 30,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a glasses / eyewear detector. Look CAREFULLY at the " +
+            "person's eyes and the area around them — are they wearing " +
+            "prescription glasses, sunglasses, or any eyewear? Reply with " +
+            "ONLY one short phrase, no other words, no JSON. " +
+            "If WEARING glasses, describe the frame style — choose from: " +
+            "\"round wire-frame glasses\", \"round thick-frame glasses\", " +
+            "\"square wire-frame glasses\", \"square thick-frame glasses\", " +
+            "\"rectangular glasses\", \"thick black acetate glasses\", " +
+            "\"thin metal-frame glasses\", \"aviator glasses\", " +
+            "\"frameless rimless glasses\", \"half-rim glasses\", " +
+            "\"cat-eye glasses\", \"sunglasses\", \"reading glasses\". " +
+            "If NO glasses visible, reply exactly \"no glasses\".",
+        },
+        { role: "user", content: "Are they wearing glasses? Reply with the phrase only." },
+      ],
+    });
+    const raw = String((out && (out.response ?? out.description ?? out.text)) || "").trim();
+    const cleaned = raw
+      .replace(/^["'`]+|["'`.,;:!?]+$/g, "")
+      .trim()
+      .toLowerCase();
+    if (!cleaned) return null;
+    if (/^no\s+glasses$|^none$/i.test(cleaned)) return "no glasses";
+    if (!/\b(glasses|spectacles|eyewear|sunglasses|frames?)\b/i.test(cleaned)) return null;
+    return cleaned;
+  } catch (err) {
+    console.warn(`[pipeline] glasses re-check failed: ${err?.message}`);
+    return null;
+  }
+}
+
+// Merge focused glasses detection into the omnibus `notable` field.
+//   focused says glasses + notable doesn't mention them → prepend to notable
+//   focused says glasses + notable already mentions them → leave (don't dup)
+//   focused says no glasses → leave notable alone (don't try to remove)
+//   focused failed/null → leave notable alone
+function mergeGlassesIntoNotable(notable, focused) {
+  if (!focused) return notable || "";
+  if (/^no\s+glasses$/i.test(focused)) return notable || "";
+  // Focused saw glasses. Does notable already mention them?
+  const notableStr = String(notable || "").toLowerCase();
+  if (/\b(glasses|spectacles|sunglasses|eyewear|frame)\b/i.test(notableStr)) {
+    // Already in notable — leave as-is (omnibus may have a better description)
+    return notable || "";
+  }
+  // Not in notable — prepend the focused detector's description.
+  return notable ? `${focused}, ${notable}` : focused;
 }
 
 // Pull the first {...} block out of the model output and validate it. Vision
