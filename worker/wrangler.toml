@@ -7,6 +7,11 @@ compatibility_date = "2025-05-01"
 # below works for tests-to-yourself only.
 [vars]
 FROM_EMAIL = "Von Peach <hello@vonpeach.com>"
+# Generation pipeline. "snapchat" (default) uses face-to-many + flux i2i for
+# dramatic identity preservation (Snapchat / Lensa / Toonify-style). "pulid"
+# uses the legacy flux-pulid text-to-image pipeline with face anchor. Easy
+# rollback if the new pipeline misbehaves — set to "pulid" and redeploy.
+PIPELINE = "snapchat"
 
 # R2 bucket for the admin portrait gallery — every successful generation is
 # written here. Create the bucket once with:
