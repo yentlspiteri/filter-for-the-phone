@@ -1463,6 +1463,11 @@ async function runKontextPipeline(env, image, archetype, faceImage) {
   // — without it Kontext may treat the prompt as a regenerate instruction
   // and lose identity on heavy stylisation.
   const archetypePrompt = getPromptFor(archetype, subject);
+  // Kontext doesn't accept a negative_prompt — anti-text guidance has to
+  // be baked into the positive prompt instead. We sandwich the archetype
+  // scene between a START directive (preserve identity, no text) and an
+  // END directive (NO TEXT, NO PILL, NO LABEL) so Flux gets the no-text
+  // signal at both high-weight ends of the prompt.
   const kontextPrompt =
     "TRANSFORM this portrait photo into an illustrated tarot card while " +
     "PRESERVING THE PERSON'S EXACT identity from this photo — same face " +
@@ -1470,7 +1475,16 @@ async function runKontextPipeline(env, image, archetype, faceImage) {
     "beard / stubble / glasses / distinctive features if present. Do NOT " +
     "change who they are. Only transform the rendering STYLE and add the " +
     "SCENE around them. " +
-    archetypePrompt;
+    "ABSOLUTELY NO TEXT in the image — no letters, no words, no labels, " +
+    "no name banners, no pill at the bottom with an archetype name, no " +
+    "scrolls with writing, no watermarks, no signatures, no captions. " +
+    "The bottom strip of the image is CLEAN illustration only — labels " +
+    "are added separately by the application, the AI must NOT draw them. " +
+    archetypePrompt +
+    " FINAL CHECK: the rendered image contains ZERO text characters. " +
+    "No letters anywhere. No name pill. No archetype label. No banner. " +
+    "No scroll text. Just illustration — pure visual scene with the " +
+    "subject and their tarot setting, no written language anywhere.";
 
   const reqBody = {
     image_url: image,
