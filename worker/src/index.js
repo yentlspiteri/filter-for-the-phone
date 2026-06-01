@@ -2272,7 +2272,7 @@ function renderWallHtml(win) {
 <html><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Von Peach — Live Wall</title>
+  <title>Von Peach — The Game Changer Gallery</title>
   <!-- Public URL but not meant to be indexed; the wall is event-display
        ephemera, not a SEO target. -->
   <meta name="robots" content="noindex, nofollow" />
@@ -2299,24 +2299,37 @@ function renderWallHtml(win) {
       overflow-x: hidden;
     }
     header {
-      padding: 28px 48px;
+      padding: 24px 48px;
       display: flex; align-items: center; justify-content: space-between; gap: 24px;
       border-bottom: 1px solid rgba(255,214,187,0.10);
       background: linear-gradient(180deg, rgba(13,3,8,0.92), rgba(13,3,8,0.72));
       position: sticky; top: 0; z-index: 10;
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
+      flex-wrap: wrap;
+    }
+    .header-left { display: flex; align-items: center; gap: 22px; min-width: 0; }
+    /* Von Peach logo — same CSS-mask trick as the admin /gallery so we
+       don't ship a separate tinted PNG. */
+    .brand-logo {
+      display: block;
+      width: 200px; height: 44px;
+      background-color: var(--peach);
+      -webkit-mask: url('https://tarot.vonpeach.com/vonpeach-logo.png') no-repeat left center / contain;
+              mask: url('https://tarot.vonpeach.com/vonpeach-logo.png') no-repeat left center / contain;
+      flex-shrink: 0;
     }
     h1 {
       margin: 0;
-      font-size: 30px;
+      font-size: 26px;
       font-weight: 900;
-      letter-spacing: 0.10em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       background: linear-gradient(135deg, var(--orange) 0%, var(--red) 55%, var(--wine) 100%);
       -webkit-background-clip: text;
               background-clip: text;
       -webkit-text-fill-color: transparent;
+      line-height: 1.1;
     }
     .meta {
       font-size: 14px;
@@ -2652,7 +2665,10 @@ function renderWallHtml(win) {
 </head>
 <body>
   <header>
-    <h1>Von Peach — Tonight's Archetypes</h1>
+    <div class="header-left">
+      <span class="brand-logo" aria-label="Von Peach"></span>
+      <h1>The Game Changer Gallery</h1>
+    </div>
     <div class="meta">
       <span class="window-label">${win === "all" ? "All time" : win === "hour" ? "Last hour" : "Today"}</span>
       <span class="count"><span id="count">—</span> revealed</span>
