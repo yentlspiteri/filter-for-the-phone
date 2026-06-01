@@ -385,11 +385,15 @@
   .btnrow { display: flex; flex-direction: column; gap: 10px; align-items: center; }
   .hint {
     font-family: "General Sans", sans-serif;
-    font-size: 13px;
-    color: rgba(255,214,187,0.65);
-    margin-top: 10px;
-    max-width: 360px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255,214,187,0.60);
+    margin-top: 12px;
+    max-width: 420px;
+    padding: 0 16px;
+    text-align: center;
   }
+  .hint strong { color: rgba(255,214,187,0.85); font-weight: 600; }
   .footer-mark {
     position: absolute;
     bottom: 18px;
@@ -913,6 +917,23 @@
     text-decoration-color: rgba(255,214,187,0.25);
   }
   .painting-email-skip:hover { color: rgba(255,214,187,0.80); }
+  /* Tiny consent reinforcement under the painting-screen email form — the
+     point of collection for the email itself. Keeps GDPR consent informed
+     AT the moment the personal data is submitted, not just at the start
+     screen 3 minutes earlier. Prefixed with `.painting-loading` to outrank
+     the global `.screen p` rule (specificity 0,1,1) — same pattern used by
+     the `.painting-hint` rule on line 819. */
+  .painting-loading .painting-email-fine {
+    width: 100%;
+    max-width: 360px;
+    margin: 6px auto 0;
+    font-family: "General Sans", sans-serif;
+    font-size: 11px;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: rgba(255,214,187,0.55);
+    text-align: center;
+  }
   /* Acknowledgement shown after submit during the wait */
   .painting-email-ack {
     width: 100%;
@@ -1067,7 +1088,13 @@
     <p class="lede">Tilt your head to answer.</p>
     <div class="btnrow">
       <button class="btn" id="startBtn">Start camera</button>
-      <div class="hint">Your camera stays private — nothing is stored or uploaded.</div>
+      <!-- Camera-consent + email-consent disclosure. Replaces the old
+           "nothing is stored or uploaded" copy which was inaccurate — we DO
+           upload the photo for AI processing, save it to our gallery, and
+           email anyone who shares an address (with Mailchimp adding them to
+           ongoing Von Peach drops). GDPR requires consent be informed and
+           specific, so the disclosure names each downstream use. -->
+      <div class="hint">By tapping <strong>Start camera</strong>, you agree to your portrait being processed by AI and shown on our live event gallery. If you share your email, we'll send your card and add you to Von Peach updates — unsubscribe any time.</div>
     </div>
     <div id="introErr" style="margin-top:14px; display:none;" class="err"></div>
   </div>
@@ -1159,7 +1186,10 @@
         <button type="submit" class="btn" id="emailSubmit">Send it</button>
       </form>
       <div class="modal-state" id="emailState" aria-live="polite"></div>
-      <div class="modal-fine">No spam. One email — then we'll only reach out if there's something genuinely good.</div>
+      <!-- Honest disclosure — submitting adds the address to Mailchimp +
+           sends the card. Old copy said "one email" which understated the
+           ongoing Von Peach drops the audience receives. -->
+      <div class="modal-fine">We'll send your card and add you to Von Peach updates. Unsubscribe any time — every email has a link.</div>
     </div>
   </div>
 
@@ -1193,6 +1223,7 @@
             <input type="email" id="paintingEmailInput" placeholder="you@example.com" autocomplete="email" inputmode="email" required />
             <button type="submit" class="painting-email-submit">Send</button>
           </div>
+          <p class="painting-email-fine">Sending also subscribes you to Von Peach updates. Unsubscribe any time.</p>
           <button type="button" class="painting-email-skip" id="paintingEmailSkip">No thanks, just show me the card</button>
         </form>
         <div class="painting-email-ack" id="paintingEmailAck" hidden>
