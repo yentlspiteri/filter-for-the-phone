@@ -1,0 +1,79 @@
+# Auto-deploys the Cloudflare Worker (worker/) on every push to main that
+# touches worker code or this workflow itself. Static-site changes
+# (index.html, CSS, JS) are NOT deployed here — those go out via GitHub
+# Pages on the same push, no Action needed.
+#
+# Authentication uses two GitHub Secrets (Settings → Secrets and variables
+# → Actions → New repository secret):
+#
+#   CLOUDFLARE_API_TOKEN  — create at https://dash.cloudflare.com/profile/api-tokens
+#                           with the "Edit Cloudflare Workers" template.
+#                           Add "Workers AI: Read" + "Workers R2 Storage: Edit"
+#                           permissions so the deploy can attach the [ai]
+#                           binding and the PORTRAITS R2 bucket.
+#
+#   CLOUDFLARE_ACCOUNT_ID — your Cloudflare account ID. Find it in the
+#                           Cloudflare dashboard URL or via wrangler whoami.
+#
+# Once those two secrets are saved, every merge to main that changes the
+# worker auto-deploys — no more local `wrangler deploy`.
+
+name: Deploy Worker
+
+on:
+  # Auto-trigger on push to main that touches worker files
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/deploy-worker.yml'
+  # Also allow manual triggering from the Actions tab in GitHub
+  # (useful for redeploying after rotating a fal/openai/resend secret on
+  # Cloudflare without touching the worker code)
+  workflow_dispatch:
+
+# Cancel in-flight deploys when a newer commit lands — last-write-wins
+# semantics, no point shipping a stale build right before the newer one.
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare
+    runs-on: ubuntu-latest
+    # Minimum permissions — the workflow only needs to read the repo.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # Cache npm based on the worker's lockfile so the runner doesn't
+          # re-download wrangler every deploy.
+          cache: 'npm'
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm ci
+
+      - name: Deploy with wrangler
+        # Cloudflare's official action — auths with the API token, runs
+        # `wrangler deploy` in the working directory, surfaces deploy output
+        # back to the GitHub Actions log.
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          # Use the worker's locally-pinned wrangler (devDependency) rather
+          # than the action's bundled version, so deploys match what
+          # `npx wrangler deploy` would do locally.
+          packageManager: npm
+          wranglerVersion: '4.92.0'
