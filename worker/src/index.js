@@ -1985,12 +1985,13 @@ async function handleGallery(_request, env, url) {
   });
 }
 
-// GET /portrait-image/<key>?key=<GALLERY_KEY>
-//   Streams the underlying JPEG from R2. Passcode-gated.
+// GET /portrait-image/<key>
+//   Streams the underlying JPEG from R2. PUBLIC — used by both the gated
+//   admin /gallery view AND the public /wall view. The portrait keys
+//   themselves aren't trivially guessable (timestamp + random id), and
+//   the wall publishes the full list anyway, so gating individual images
+//   would only block the wall from rendering its own tiles.
 async function handlePortraitImage(_request, env, url) {
-  if (!env.GALLERY_KEY) return new Response("Gallery key not configured.", { status: 500 });
-  const auth = url.searchParams.get("key") || "";
-  if (auth !== env.GALLERY_KEY) return new Response("Forbidden.", { status: 403 });
   if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
 
   // pathname is /portrait-image/<key>
@@ -2004,7 +2005,7 @@ async function handlePortraitImage(_request, env, url) {
     status: 200,
     headers: {
       "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
-      "Cache-Control": "private, max-age=300",
+      "Cache-Control": "public, max-age=300",
     },
   });
 }
@@ -2014,24 +2015,23 @@ async function handlePortraitImage(_request, env, url) {
 // auto-refreshing grid; new portraits "pop" in at the top of the wall with
 // a "NEW" badge for 30 seconds, older portraits flow down.
 //
-// Two endpoints:
-//   GET /wall?key=<GALLERY_KEY>[&window=today|hour|all]
+// Two endpoints — both PUBLIC, no passcode required:
+//   GET /wall[?window=today|hour|all]
 //       Returns the HTML page. The page polls /gallery.json every 5s.
-//   GET /gallery.json?key=<GALLERY_KEY>[&window=today|hour|all]
+//   GET /gallery.json[?window=today|hour|all]
 //       Returns the current list of portrait items (most recent first)
 //       as JSON. Cheap; used by the wall's polling loop.
 //
-// Both endpoints are passcode-gated by the existing GALLERY_KEY secret,
-// the same one that gates /gallery and /portrait-image — no extra secret
-// to provision.
+// Admin curation lives on /gallery which IS still GALLERY_KEY-gated.
+//
+// The wall is PUBLIC — no passcode required, so anyone with the URL can pull
+// it up on a phone / projector during the event. Admin curation stays on
+// /gallery which is still gated by GALLERY_KEY.
 async function handleWall(_request, env, url) {
-  if (!env.GALLERY_KEY) return new Response("Gallery key not configured.", { status: 500 });
-  const key = url.searchParams.get("key") || "";
-  if (key !== env.GALLERY_KEY) return new Response("Forbidden.", { status: 403 });
   if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
 
   const win = url.searchParams.get("window") || "today";
-  const html = renderWallHtml(key, win);
+  const html = renderWallHtml(win);
   return new Response(html, {
     status: 200,
     headers: {
@@ -2041,11 +2041,11 @@ async function handleWall(_request, env, url) {
   });
 }
 
+// PUBLIC polling endpoint used by the wall. Returns the list of portrait
+// keys + metadata as JSON, filtered by the time window. No auth — admin
+// curation lives on /gallery which is still gated.
 async function handleGalleryJson(_request, env, url) {
   const headers = { "Content-Type": "application/json", "Cache-Control": "no-cache" };
-  if (!env.GALLERY_KEY) return new Response(JSON.stringify({ error: "no_key_config" }), { status: 500, headers });
-  const key = url.searchParams.get("key") || "";
-  if (key !== env.GALLERY_KEY) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers });
   if (!env.PORTRAITS) return new Response(JSON.stringify({ error: "no_r2" }), { status: 500, headers });
 
   const win = url.searchParams.get("window") || "today";
@@ -2091,8 +2091,7 @@ function computeCutoffMs(win) {
 // config into a small bit of vanilla JS that polls /gallery.json every 5s
 // and animates new tiles in. No build step, no external deps beyond the
 // JPEGs served by /portrait-image/.
-function renderWallHtml(authKey, win) {
-  const safeKey = JSON.stringify(authKey);   // safely embed into JS
+function renderWallHtml(win) {
   const safeWin = JSON.stringify(win);
   // Pretty archetype names — mirrors READS[k].name. Hard-coded so the
   // client doesn't need a second API call to look them up.
@@ -2112,6 +2111,10 @@ function renderWallHtml(authKey, win) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Von Peach — Live Wall</title>
+  <!-- Public URL but not meant to be indexed; the wall is event-display
+       ephemera, not a SEO target. -->
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="referrer" content="no-referrer" />
   <style>
     :root {
       --wine:#99112F; --red:#CC1C0E; --orange:#FD8839; --peach:#FFD6BB;
@@ -2262,7 +2265,6 @@ function renderWallHtml(authKey, win) {
   <div class="wall" id="wall"></div>
 
   <script>
-    const KEY = ${safeKey};
     const WIN = ${safeWin};
     const NAMES = ${JSON.stringify(NAMES)};
     const POLL_MS = 5000;
@@ -2272,7 +2274,7 @@ function renderWallHtml(authKey, win) {
     let firstLoad = true;
 
     function tileUrl(item) {
-      return "/portrait-image/" + encodeURIComponent(item.key) + "?key=" + encodeURIComponent(KEY);
+      return "/portrait-image/" + encodeURIComponent(item.key);
     }
 
     function makeTile(item, isNew) {
@@ -2297,7 +2299,7 @@ function renderWallHtml(authKey, win) {
 
     async function refresh() {
       try {
-        const res = await fetch("/gallery.json?key=" + encodeURIComponent(KEY) + "&window=" + encodeURIComponent(WIN), { cache: "no-store" });
+        const res = await fetch("/gallery.json?window=" + encodeURIComponent(WIN), { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         const items = data.items || [];
