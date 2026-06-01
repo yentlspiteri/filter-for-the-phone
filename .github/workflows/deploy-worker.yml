@@ -53,7 +53,9 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Wrangler 4.92+ requires Node 22+ (engines.node check). 20 was
+          # the previous default; bumping fixes EBADENGINE deploy failures.
+          node-version: '22'
           # Cache npm based on the worker's lockfile so the runner doesn't
           # re-download wrangler every deploy.
           cache: 'npm'
