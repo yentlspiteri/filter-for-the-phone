@@ -2764,6 +2764,16 @@ function renderWallHtml(win) {
        ephemera, not a SEO target. -->
   <meta name="robots" content="noindex, nofollow" />
   <meta name="referrer" content="no-referrer" />
+  <!-- Brand fonts — same loaders as the static site (Aileron primary,
+       General Sans secondary, Playfair Display for serif display moments).
+       preconnect first so the actual stylesheet GETs warm up faster. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.cdnfonts.com" crossorigin>
+  <link href="https://fonts.cdnfonts.com/css/aileron" rel="stylesheet">
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;1,700&display=swap" rel="stylesheet">
   <!-- QR generator for the "scan to try" card in the corner. ~5KB, lazy
        loaded; the wall script retries the QR draw if the lib hasn't
        finished loading by first attempt. -->
@@ -2945,22 +2955,29 @@ function renderWallHtml(win) {
       max-width: 220px;
     }
     .qr-prize {
-      font-family: Georgia, "Times New Roman", serif;
+      /* Brand serif display — same family used for editorial moments on the
+         static site. Georgia stays as a fallback so the wall still renders
+         if the font CDN is blocked at an event venue. */
+      font-family: "Playfair Display", Georgia, "Times New Roman", serif;
       font-weight: 800;
       font-size: 18px;
       color: var(--wine);
       line-height: 1.15;
       margin-bottom: 14px;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.01em;
     }
     .qr-prize .accent {
       display: block;
+      /* Italic Playfair on the accent line for typographic motion — same
+         editorial pattern the brand uses for emphasis. */
+      font-style: italic;
+      font-weight: 700;
       background: linear-gradient(135deg, var(--orange), var(--red) 60%, var(--wine));
       -webkit-background-clip: text;
               background-clip: text;
       -webkit-text-fill-color: transparent;
-      font-size: 22px;
-      letter-spacing: 0.04em;
+      font-size: 24px;
+      letter-spacing: 0.02em;
     }
     .qr-frame {
       width: 172px; height: 172px;
@@ -2974,7 +2991,9 @@ function renderWallHtml(win) {
     .qr-eyebrow {
       margin-top: 12px;
       color: var(--wine);
-      font-family: Georgia, "Times New Roman", serif;
+      /* Brand sans for eyebrow / caps label — Aileron matches the rest of
+         the app's small-caps moments. */
+      font-family: "Aileron", "General Sans", -apple-system, BlinkMacSystemFont, sans-serif;
       font-weight: 700;
       font-size: 12px;
       letter-spacing: 0.22em;
