@@ -2246,6 +2246,7 @@ function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downlo
       margin: 0;
     }
     .card-frame {
+      position: relative;
       width: 100%;
       max-width: 360px;
       border-radius: 18px;
@@ -2259,6 +2260,34 @@ function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downlo
       display: block;
       width: 100%;
       height: auto;
+    }
+    /* Brand pill — overlays the bottom of the AI image to cover the
+       AI-generated tarot label (Kontext tends to write garbled text there
+       like "TENNIA DAI CESH" / "THE STAIUCTUE" for archetype names it
+       doesn't know). Same trick the live result screen uses. The pill sits
+       INSIDE the AI's tarot frame area, not below it. */
+    .card-pill {
+      position: absolute;
+      left: 6.5%;
+      right: 6.5%;
+      bottom: 4.2%;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, #FFE4CB 0%, #FFD0A9 100%);
+      color: #3a0812;
+      font-family: "Georgia", "Times New Roman", serif;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      text-align: center;
+      border-radius: 6px;
+      box-shadow: 0 2px 0 rgba(58,8,18,0.18), 0 0 0 1px rgba(58,8,18,0.12) inset;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    @media (max-width: 380px) {
+      .card-pill { font-size: 13px; padding: 8px 10px; letter-spacing: 0.14em; }
     }
     .meta {
       text-align: center;
@@ -2382,6 +2411,8 @@ function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downlo
 
     <div class="card-frame">
       <img src="${esc(imageUrl)}" alt="${esc(archetypeName)} — Von Peach card" />
+      <!-- Cover the AI's bottom auto-text with the actual archetype name -->
+      <div class="card-pill" aria-hidden="true">${esc(archetypeName)}</div>
     </div>
 
     <div class="meta">
