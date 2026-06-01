@@ -722,9 +722,11 @@ export default {
 
     const url = new URL(request.url);
 
-    // GET routes for the admin gallery
+    // GET routes for the admin gallery + the live event wall
     if (request.method === "GET") {
-      if (url.pathname === "/gallery")               return handleGallery(request, env, url);
+      if (url.pathname === "/gallery")                 return handleGallery(request, env, url);
+      if (url.pathname === "/wall")                    return handleWall(request, env, url);
+      if (url.pathname === "/gallery.json")            return handleGalleryJson(request, env, url);
       if (url.pathname.startsWith("/portrait-image/")) return handlePortraitImage(request, env, url);
       return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
     }
@@ -2005,6 +2007,347 @@ async function handlePortraitImage(_request, env, url) {
       "Cache-Control": "private, max-age=300",
     },
   });
+}
+
+// ---------- LIVE EVENT WALL ----------
+// Designed for projection / TV display during an in-person event. Big-tile
+// auto-refreshing grid; new portraits "pop" in at the top of the wall with
+// a "NEW" badge for 30 seconds, older portraits flow down.
+//
+// Two endpoints:
+//   GET /wall?key=<GALLERY_KEY>[&window=today|hour|all]
+//       Returns the HTML page. The page polls /gallery.json every 5s.
+//   GET /gallery.json?key=<GALLERY_KEY>[&window=today|hour|all]
+//       Returns the current list of portrait items (most recent first)
+//       as JSON. Cheap; used by the wall's polling loop.
+//
+// Both endpoints are passcode-gated by the existing GALLERY_KEY secret,
+// the same one that gates /gallery and /portrait-image — no extra secret
+// to provision.
+async function handleWall(_request, env, url) {
+  if (!env.GALLERY_KEY) return new Response("Gallery key not configured.", { status: 500 });
+  const key = url.searchParams.get("key") || "";
+  if (key !== env.GALLERY_KEY) return new Response("Forbidden.", { status: 403 });
+  if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
+
+  const win = url.searchParams.get("window") || "today";
+  const html = renderWallHtml(key, win);
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-cache",
+    },
+  });
+}
+
+async function handleGalleryJson(_request, env, url) {
+  const headers = { "Content-Type": "application/json", "Cache-Control": "no-cache" };
+  if (!env.GALLERY_KEY) return new Response(JSON.stringify({ error: "no_key_config" }), { status: 500, headers });
+  const key = url.searchParams.get("key") || "";
+  if (key !== env.GALLERY_KEY) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers });
+  if (!env.PORTRAITS) return new Response(JSON.stringify({ error: "no_r2" }), { status: 500, headers });
+
+  const win = url.searchParams.get("window") || "today";
+  const cutoffMs = computeCutoffMs(win);
+
+  // List up to 500 most recent objects from the bucket. R2 list orders
+  // alphabetically by key, and our key scheme is YYYY/MM/DD/archetype-ts-id
+  // — so chronological-ish but not perfect, so we sort by metadata.ts below.
+  const list = await env.PORTRAITS.list({ limit: 500 });
+  const items = await Promise.all((list.objects || []).map(async (obj) => {
+    const head = await env.PORTRAITS.head(obj.key);
+    const meta = head?.customMetadata || {};
+    const ts = meta.ts ? Number(meta.ts) : (obj.uploaded?.getTime?.() || 0);
+    return {
+      key: obj.key,
+      archetype: meta.archetype || "—",
+      ts,
+    };
+  }));
+
+  const filtered = items
+    .filter((x) => x.ts >= cutoffMs)
+    .sort((a, b) => b.ts - a.ts);
+
+  return new Response(JSON.stringify({ items: filtered, now: Date.now(), window: win }), { status: 200, headers });
+}
+
+// Maps the `window` query param to a Unix-ms cutoff. Anything with a
+// timestamp >= cutoff is included; everything older is filtered out.
+//   "all"    → no cutoff (include everything in the bucket)
+//   "today"  → start of today (UTC), 00:00:00.000
+//   "hour"   → last 60 minutes
+//   <unknown>→ treated as "today" (safe default for event use)
+function computeCutoffMs(win) {
+  if (win === "all") return 0;
+  if (win === "hour") return Date.now() - 60 * 60 * 1000;
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// Render the live wall HTML. Self-contained: inlines the auth key + window
+// config into a small bit of vanilla JS that polls /gallery.json every 5s
+// and animates new tiles in. No build step, no external deps beyond the
+// JPEGs served by /portrait-image/.
+function renderWallHtml(authKey, win) {
+  const safeKey = JSON.stringify(authKey);   // safely embed into JS
+  const safeWin = JSON.stringify(win);
+  // Pretty archetype names — mirrors READS[k].name. Hard-coded so the
+  // client doesn't need a second API call to look them up.
+  const NAMES = {
+    charmer:   "The Charmer",
+    magician:  "The Magician",
+    alchemist: "The Alchemist",
+    oracle:    "The Oracle",
+    rebel:     "The Rebel",
+    monk:      "The Monk",
+    architect: "The Architect",
+    luminary:  "The Luminary",
+  };
+
+  return `<!doctype html>
+<html><head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Von Peach — Live Wall</title>
+  <style>
+    :root {
+      --wine:#99112F; --red:#CC1C0E; --orange:#FD8839; --peach:#FFD6BB;
+      --bg:#0d0308; --card-bg:#1a0610;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background:
+        radial-gradient(60% 50% at 15% 10%, rgba(253,136,57,0.18) 0%, transparent 60%),
+        radial-gradient(70% 60% at 95% 100%, rgba(153,17,47,0.30) 0%, transparent 60%),
+        var(--bg);
+      color: var(--peach);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    header {
+      padding: 28px 48px;
+      display: flex; align-items: center; justify-content: space-between; gap: 24px;
+      border-bottom: 1px solid rgba(255,214,187,0.10);
+      background: linear-gradient(180deg, rgba(13,3,8,0.92), rgba(13,3,8,0.72));
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, var(--orange) 0%, var(--red) 55%, var(--wine) 100%);
+      -webkit-background-clip: text;
+              background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .meta {
+      font-size: 14px;
+      color: rgba(255,214,187,0.55);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 700;
+      display: flex; gap: 22px; align-items: center;
+    }
+    .meta .count {
+      color: var(--peach);
+      background: rgba(255,214,187,0.10);
+      border: 1px solid rgba(255,214,187,0.18);
+      padding: 6px 14px;
+      border-radius: 999px;
+    }
+    .wall {
+      padding: 28px 40px 80px;
+      display: grid;
+      gap: 22px;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    }
+    .tile {
+      position: relative;
+      background: var(--card-bg);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,214,187,0.06);
+      aspect-ratio: 3 / 4;
+      animation: tile-in 720ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tile img {
+      display: block;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .tile .pill {
+      position: absolute;
+      bottom: 18px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--peach);
+      color: var(--wine);
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 8px 18px;
+      border-radius: 999px;
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    }
+    .tile.new::before {
+      content: "JUST IN";
+      position: absolute;
+      top: 14px; right: 14px;
+      background: linear-gradient(135deg, var(--orange), var(--red), var(--wine));
+      color: #fff;
+      font-size: 11px;
+      letter-spacing: 0.20em;
+      text-transform: uppercase;
+      font-weight: 800;
+      padding: 7px 12px;
+      border-radius: 999px;
+      box-shadow: 0 6px 18px rgba(204,28,14,0.55);
+      animation: badge-pulse 1.4s ease-in-out infinite;
+      z-index: 2;
+    }
+    @keyframes tile-in {
+      from { opacity: 0; transform: scale(0.85) translateY(28px); }
+      to   { opacity: 1; transform: scale(1)    translateY(0); }
+    }
+    @keyframes badge-pulse {
+      0%, 100% { transform: scale(1);    box-shadow: 0 6px 18px rgba(204,28,14,0.55); }
+      50%      { transform: scale(1.10); box-shadow: 0 10px 28px rgba(204,28,14,0.85); }
+    }
+    .empty {
+      padding: 120px 40px;
+      text-align: center;
+      color: rgba(255,214,187,0.55);
+      font-size: 22px;
+      letter-spacing: 0.10em;
+    }
+    .empty .blink {
+      display: inline-block;
+      width: 10px; height: 10px;
+      background: var(--orange);
+      border-radius: 50%;
+      margin: 0 10px -1px 0;
+      box-shadow: 0 0 18px rgba(253,136,57,0.7);
+      animation: blink 1.4s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 0.35; transform: scale(0.85); }
+      50%      { opacity: 1;    transform: scale(1.10); }
+    }
+    .err {
+      padding: 40px;
+      text-align: center;
+      color: rgba(255,214,187,0.55);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Von Peach — Tonight's Archetypes</h1>
+    <div class="meta">
+      <span class="window-label">${win === "all" ? "All time" : win === "hour" ? "Last hour" : "Today"}</span>
+      <span class="count"><span id="count">—</span> revealed</span>
+    </div>
+  </header>
+  <div class="wall" id="wall"></div>
+
+  <script>
+    const KEY = ${safeKey};
+    const WIN = ${safeWin};
+    const NAMES = ${JSON.stringify(NAMES)};
+    const POLL_MS = 5000;
+    const NEW_BADGE_MS = 30000;   // tiles wear the "JUST IN" badge for 30s
+    const MAX_TILES = 100;        // soft cap so the DOM doesn't grow unbounded
+    const seenKeys = new Set();
+    let firstLoad = true;
+
+    function tileUrl(item) {
+      return "/portrait-image/" + encodeURIComponent(item.key) + "?key=" + encodeURIComponent(KEY);
+    }
+
+    function makeTile(item, isNew) {
+      const tile = document.createElement("div");
+      tile.className = "tile" + (isNew ? " new" : "");
+      tile.dataset.key = item.key;
+      const name = NAMES[item.archetype] || ("The " + item.archetype);
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.alt = name;
+      img.src = tileUrl(item);
+      const pill = document.createElement("div");
+      pill.className = "pill";
+      pill.textContent = name;
+      tile.appendChild(img);
+      tile.appendChild(pill);
+      if (isNew) {
+        setTimeout(() => tile.classList.remove("new"), NEW_BADGE_MS);
+      }
+      return tile;
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch("/gallery.json?key=" + encodeURIComponent(KEY) + "&window=" + encodeURIComponent(WIN), { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const items = data.items || [];
+        const wall = document.getElementById("wall");
+        const count = document.getElementById("count");
+        count.textContent = items.length;
+
+        if (!items.length) {
+          wall.innerHTML = '<div class="empty"><span class="blink"></span>Waiting for the first reveal…</div>';
+          seenKeys.clear();
+          firstLoad = true;
+          return;
+        }
+
+        if (firstLoad) {
+          // Initial paint — render all items in order, no NEW badge.
+          wall.innerHTML = "";
+          items.forEach((item) => {
+            wall.appendChild(makeTile(item, false));
+            seenKeys.add(item.key);
+          });
+          firstLoad = false;
+          return;
+        }
+
+        // Subsequent polls — find items we haven't seen yet, prepend them
+        // to the wall (newest first) with the JUST IN badge. They slide
+        // existing tiles down via the CSS grid auto-flow.
+        const newItems = items.filter((it) => !seenKeys.has(it.key));
+        newItems.reverse().forEach((it) => {
+          const tile = makeTile(it, true);
+          wall.insertBefore(tile, wall.firstChild);
+          seenKeys.add(it.key);
+        });
+
+        // Soft cap — keep DOM lean for long events.
+        while (wall.children.length > MAX_TILES) {
+          const last = wall.lastChild;
+          if (last && last.dataset.key) seenKeys.delete(last.dataset.key);
+          wall.removeChild(last);
+        }
+      } catch (err) {
+        console.warn("wall refresh failed", err);
+      }
+    }
+
+    refresh();
+    setInterval(refresh, POLL_MS);
+  </script>
+</body></html>`;
 }
 
 function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
