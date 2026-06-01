@@ -727,6 +727,8 @@ export default {
       if (url.pathname === "/gallery")                 return handleGallery(request, env, url);
       if (url.pathname === "/wall")                    return handleWall(request, env, url);
       if (url.pathname === "/gallery.json")            return handleGalleryJson(request, env, url);
+      if (url.pathname === "/scan")                    return handleScan(request, env);
+      if (url.pathname === "/stats")                   return handleStats(request, env, url);
       if (url.pathname.startsWith("/portrait-image/")) return handlePortraitImage(request, env, url);
       return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
     }
@@ -2046,6 +2048,60 @@ async function handlePortraitDelete(_request, env, url, cors) {
   }
 }
 
+// GET /scan — the QR-code target. Counts the scan (best-effort) then
+// 302-redirects to the live site with ?src=wall so any further analytics
+// can distinguish QR-sourced traffic. Public — no auth.
+//
+// Counter is kept in a single small R2 object "gallery-stats.json" — a
+// read-modify-write loop. Race conditions in a busy event can lose the
+// occasional count, which is acceptable for an event-display counter.
+// View the count at /stats?key=<GALLERY_KEY>.
+async function handleScan(_request, env) {
+  if (env.PORTRAITS) {
+    try {
+      const existing = await env.PORTRAITS.get("gallery-stats.json");
+      let stats = { scans: 0 };
+      if (existing) {
+        try { stats = JSON.parse(await existing.text()) || stats; } catch { /* corrupt -> reset */ }
+      }
+      stats.scans = (Number(stats.scans) || 0) + 1;
+      stats.lastScanIso = new Date().toISOString();
+      stats.lastScanTs = Date.now();
+      await env.PORTRAITS.put("gallery-stats.json", JSON.stringify(stats), {
+        httpMetadata: { contentType: "application/json" },
+      });
+      console.log(`[scan] count=${stats.scans} ts=${stats.lastScanIso}`);
+    } catch (err) {
+      console.warn(`[scan] counter update failed: ${err?.message}`);
+    }
+  }
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: "https://tarot.vonpeach.com/?src=wall",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+// GET /stats?key=<GALLERY_KEY> — JSON {scans, lastScanIso, lastScanTs}.
+// Passcode-gated. Used by the admin /gallery header to display a live
+// scan counter alongside the portrait total.
+async function handleStats(_request, env, url) {
+  const jsonHeaders = { "Content-Type": "application/json", "Cache-Control": "no-cache" };
+  if (!env.GALLERY_KEY) return new Response(JSON.stringify({ error: "no_key_config" }), { status: 500, headers: jsonHeaders });
+  const key = url.searchParams.get("key") || "";
+  if (key !== env.GALLERY_KEY) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: jsonHeaders });
+  if (!env.PORTRAITS) return new Response(JSON.stringify({ error: "no_r2" }), { status: 500, headers: jsonHeaders });
+
+  const obj = await env.PORTRAITS.get("gallery-stats.json");
+  let stats = { scans: 0 };
+  if (obj) {
+    try { stats = JSON.parse(await obj.text()) || stats; } catch { /* corrupt */ }
+  }
+  return new Response(JSON.stringify(stats), { status: 200, headers: jsonHeaders });
+}
+
 // ---------- LIVE EVENT WALL ----------
 // Designed for projection / TV display during an in-person event. Big-tile
 // auto-refreshing grid; new portraits "pop" in at the top of the wall with
@@ -2151,6 +2207,10 @@ function renderWallHtml(win) {
        ephemera, not a SEO target. -->
   <meta name="robots" content="noindex, nofollow" />
   <meta name="referrer" content="no-referrer" />
+  <!-- QR generator for the "scan to try" card in the corner. ~5KB, lazy
+       loaded; the wall script retries the QR draw if the lib hasn't
+       finished loading by first attempt. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <style>
     :root {
       --wine:#99112F; --red:#CC1C0E; --orange:#FD8839; --peach:#FFD6BB;
@@ -2288,6 +2348,44 @@ function renderWallHtml(win) {
       text-align: center;
       color: rgba(255,214,187,0.55);
     }
+    /* "Scan to try" QR card — fixed in the bottom-right of the wall on a
+       16:9 event screen. Points at /scan which counts the scan in R2 then
+       302-redirects to the live site. */
+    .qr-card {
+      position: fixed;
+      bottom: 28px; right: 28px;
+      background: var(--peach);
+      padding: 18px 18px 14px;
+      border-radius: 22px;
+      box-shadow: 0 18px 44px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.15);
+      z-index: 5;
+      text-align: center;
+    }
+    .qr-frame {
+      width: 168px; height: 168px;
+      line-height: 0;
+      background: #fff;
+      border-radius: 10px;
+      padding: 6px;
+    }
+    .qr-frame img, .qr-frame svg { width: 100%; height: 100%; display: block; }
+    .qr-eyebrow {
+      margin-top: 12px;
+      color: var(--wine);
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+    }
+    .qr-url {
+      margin-top: 4px;
+      color: var(--wine);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      opacity: 0.78;
+    }
   </style>
 </head>
 <body>
@@ -2299,6 +2397,12 @@ function renderWallHtml(win) {
     </div>
   </header>
   <div class="wall" id="wall"></div>
+
+  <aside class="qr-card" aria-label="Scan with your phone to try the experience">
+    <div class="qr-frame" id="qrFrame"></div>
+    <div class="qr-eyebrow">Scan to try</div>
+    <div class="qr-url">tarot.vonpeach.com</div>
+  </aside>
 
   <script>
     const WIN = ${safeWin};
@@ -2384,6 +2488,32 @@ function renderWallHtml(win) {
 
     refresh();
     setInterval(refresh, POLL_MS);
+
+    // ---------- Scan-to-try QR ----------
+    // Points at the worker's /scan endpoint (same origin as this wall) so
+    // each scan is counted in R2 before the 302-redirect to tarot.vonpeach.com.
+    // The QR library is loaded with defer; retry once if it isn't ready yet.
+    function renderQR() {
+      if (typeof window.qrcode !== "function") {
+        return void setTimeout(renderQR, 200);
+      }
+      try {
+        const qr = window.qrcode(0, "M");
+        qr.addData(window.location.origin + "/scan");
+        qr.make();
+        const frame = document.getElementById("qrFrame");
+        frame.innerHTML = qr.createImgTag(5, 0);
+        const img = frame.querySelector("img");
+        if (img) {
+          img.removeAttribute("width");
+          img.removeAttribute("height");
+          img.setAttribute("alt", "Scan to try the Von Peach experience");
+        }
+      } catch (err) {
+        console.warn("QR render failed", err);
+      }
+    }
+    renderQR();
   </script>
 </body></html>`;
 }
@@ -2506,7 +2636,8 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
 </head><body>
   <header>
     <h1>Portrait Gallery</h1>
-    <span class="total">${totalCount} total</span>
+    <span class="total" id="portraitTotal">${totalCount} total</span>
+    <span class="total" id="scanTotal" title="QR scans on the event wall">— scans</span>
   </header>
   <div class="filters">
     ${filterLink("", "All")}
@@ -2524,13 +2655,26 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
     // that gates this page, so it always matches.
     (function () {
       const KEY = ${JSON.stringify(safeKey)};
-      const totalEl = document.querySelector("header .total");
+      const totalEl = document.getElementById("portraitTotal");
+      const scanEl  = document.getElementById("scanTotal");
       function decTotal() {
         if (!totalEl) return;
         const m = totalEl.textContent.match(/(\\d+)/);
         if (!m) return;
         totalEl.textContent = (parseInt(m[1], 10) - 1) + " total";
       }
+      // Live scan-count from /stats. Updates every 5s so the admin sees
+      // QR-scan growth in real time during the event.
+      async function refreshScanCount() {
+        try {
+          const res = await fetch("/stats?key=" + KEY, { cache: "no-store" });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (scanEl) scanEl.textContent = (data.scans || 0) + " scans";
+        } catch (e) { /* swallow */ }
+      }
+      refreshScanCount();
+      setInterval(refreshScanCount, 5000);
       document.querySelectorAll(".del-btn").forEach(function (btn) {
         btn.addEventListener("click", async function (e) {
           e.preventDefault(); e.stopPropagation();
