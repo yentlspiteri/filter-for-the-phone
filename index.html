@@ -313,6 +313,53 @@
     color: rgba(255,214,187,0.88);
     margin: 0 0 32px 0;
   }
+
+  /* Archetype picker — shown when user uploaded a photo instead of using
+     the camera. Two-column grid of clickable buttons (one per archetype),
+     each showing the name + tagline. */
+  .archetype-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    width: 100%;
+    max-width: 480px;
+    margin: 12px auto 0;
+  }
+  .archetype-btn {
+    appearance: none;
+    background: rgba(255, 214, 187, 0.06);
+    border: 1px solid rgba(255, 214, 187, 0.18);
+    border-radius: 18px;
+    padding: 16px 14px;
+    text-align: center;
+    color: var(--peach);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: inherit;
+    transition: background 120ms, border-color 120ms, transform 120ms, box-shadow 120ms;
+  }
+  .archetype-btn:hover {
+    background: rgba(253, 136, 57, 0.16);
+    border-color: var(--orange);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(204, 28, 14, 0.22);
+  }
+  .archetype-btn:active { transform: translateY(0); }
+  .archetype-name {
+    font-family: "Aileron", "General Sans", sans-serif;
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .archetype-tagline {
+    font-size: 11px;
+    color: rgba(255, 214, 187, 0.65);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
   .btn {
     appearance: none;
     border: 0;
@@ -820,9 +867,53 @@
     <p class="lede">Tilt your head to answer.</p>
     <div class="btnrow">
       <button class="btn" id="startBtn">Start camera</button>
+      <button class="btn ghost" id="uploadBtn">Upload a photo instead</button>
+      <input type="file" id="uploadInput" accept="image/jpeg,image/png,image/webp" style="display:none" />
       <div class="hint">Your camera stays private — nothing is stored or uploaded.</div>
     </div>
     <div id="introErr" style="margin-top:14px; display:none;" class="err"></div>
+  </div>
+
+  <!-- archetype picker — shown when the user uploads a photo instead of
+       using the camera (skips the tilt quiz, lets them choose directly) -->
+  <div class="screen" id="screenArchetype">
+    <span class="brand-logo sm intro-logo" aria-label="Von Peach"></span>
+    <h1>Pick your archetype</h1>
+    <p class="lede">Which game changer fits you?</p>
+    <div class="archetype-grid" id="archetypeGrid">
+      <button class="archetype-btn" data-archetype="charmer">
+        <span class="archetype-name">The Charmer</span>
+        <span class="archetype-tagline">Magnetism &amp; connection</span>
+      </button>
+      <button class="archetype-btn" data-archetype="magician">
+        <span class="archetype-name">The Magician</span>
+        <span class="archetype-tagline">Skill &amp; manifestation</span>
+      </button>
+      <button class="archetype-btn" data-archetype="alchemist">
+        <span class="archetype-name">The Alchemist</span>
+        <span class="archetype-tagline">Transformation &amp; wisdom</span>
+      </button>
+      <button class="archetype-btn" data-archetype="oracle">
+        <span class="archetype-name">The Oracle</span>
+        <span class="archetype-tagline">Intuition &amp; foresight</span>
+      </button>
+      <button class="archetype-btn" data-archetype="rebel">
+        <span class="archetype-name">The Rebel</span>
+        <span class="archetype-tagline">Disruption &amp; freedom</span>
+      </button>
+      <button class="archetype-btn" data-archetype="monk">
+        <span class="archetype-name">The Monk</span>
+        <span class="archetype-tagline">Solitude &amp; inner truth</span>
+      </button>
+      <button class="archetype-btn" data-archetype="architect">
+        <span class="archetype-name">The Architect</span>
+        <span class="archetype-tagline">Creativity &amp; vision</span>
+      </button>
+      <button class="archetype-btn" data-archetype="luminary">
+        <span class="archetype-name">The Luminary</span>
+        <span class="archetype-tagline">Leadership &amp; power</span>
+      </button>
+    </div>
   </div>
 
   <!-- gameplay overlay -->
@@ -1078,6 +1169,8 @@ const choiceLeft = $("choiceLeft"), choiceRight = $("choiceRight");
 const needle = $("needle");
 const introErr = $("introErr");
 const shareBtn = $("shareBtn"), againBtn = $("againBtn"), shareLinkedinBtn = $("shareLinkedinBtn");
+const uploadBtn = $("uploadBtn"), uploadInput = $("uploadInput");
+const archetypeScreen = $("screenArchetype");
 const shareHint = $("shareHint");
 const resultPreview = $("resultPreview");
 const wash = $("wash");
@@ -1101,6 +1194,11 @@ const emailState = $("emailState");
 
 startBtn.addEventListener("click", begin);
 againBtn.addEventListener("click", reset);
+uploadBtn.addEventListener("click", () => uploadInput.click());
+uploadInput.addEventListener("change", handleUpload);
+document.querySelectorAll(".archetype-btn").forEach((btn) =>
+  btn.addEventListener("click", () => onArchetypeChosen(btn.dataset.archetype))
+);
 shareBtn.addEventListener("click", () => shareSnapshot(false, "any"));
 shareLinkedinBtn.addEventListener("click", () => shareSnapshot(false, "linkedin"));
 emailMeBtn.addEventListener("click", openEmailModal);
@@ -1477,6 +1575,67 @@ function extractFaceCropDataURL(srcCanvas, sizePx = 512, paddingFraction = 0.35)
   }
 }
 
+// ---------- UPLOAD-A-PHOTO FALLBACK ----------
+// Desktop browsers (and any mobile context without an HTTPS secure context)
+// can't open the camera via getUserMedia, so we let the user pick a photo
+// from disk instead. The flow:
+//   1. user clicks "Upload a photo instead" → file picker
+//   2. user picks a face photo
+//   3. we load it into a canvas (frozenFrame — same role as the captured
+//      camera frame)
+//   4. we show the archetype picker grid (no tilt quiz, no camera)
+//   5. user picks an archetype → onArchetypeChosen → paintPortrait →
+//      renderTarotCard → result screen, same as the camera path
+//
+// reset() already handles upload mode via its `else` branch (no faceLandmarker
+// + no stream → returns to intro), so "Try again" works.
+async function handleUpload(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  introErr.style.display = "none";
+  try {
+    const img = await loadImageFromFile(file);
+    // Build a canvas the size of the loaded image. This is what the rest of
+    // the pipeline expects (paintPortrait, renderTarotCard, requestAIPortrait
+    // all read from `frozenFrame`).
+    frozenFrame = document.createElement("canvas");
+    frozenFrame.width = img.naturalWidth;
+    frozenFrame.height = img.naturalHeight;
+    frozenFrame.getContext("2d").drawImage(img, 0, 0);
+    // Reset the file input so picking the same file twice still fires `change`.
+    uploadInput.value = "";
+    introScreen.classList.remove("show");
+    archetypeScreen.classList.add("show");
+  } catch (err) {
+    console.error(err);
+    introErr.textContent = "Couldn't read that image: " + (err?.message || err);
+    introErr.style.display = "block";
+  }
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { resolve(img); URL.revokeObjectURL(url); };
+    img.onerror = () => { reject(new Error("Image failed to decode")); URL.revokeObjectURL(url); };
+    img.src = url;
+  });
+}
+
+async function onArchetypeChosen(archetypeKey) {
+  if (!ARCHETYPES[archetypeKey] || !frozenFrame) return;
+  frozenArchetype = archetypeKey;
+  archetypeScreen.classList.remove("show");
+  // paintPortrait shows the loading screen, calls the worker, and either
+  // replaces frozenFrame with the AI portrait or falls through. Then we
+  // render the framed tarot card onto shareCanvas and show the result.
+  await paintPortrait();
+  await renderTarotCard();
+  paintingScreen.classList.remove("show");
+  resultScreen.classList.add("show");
+}
+
 async function requestAIPortrait(canvas, archetype) {
   const dataUrl = canvasToUploadDataURL(canvas);
   // Tight face crop alongside the wide shot — server uses it as a high-detail
@@ -1546,6 +1705,9 @@ function renderQuestion() {
 function reset() {
   resultScreen.classList.remove("show");
   paintingScreen.classList.remove("show");
+  // Make sure the upload-mode archetype picker is also dismissed — otherwise
+  // "Try again" from an upload-mode result would leave a stale layer behind.
+  archetypeScreen.classList.remove("show");
   shareHint.textContent = "";
   qIndex = 0;
   answers = [];
