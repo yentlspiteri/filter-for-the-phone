@@ -1315,22 +1315,49 @@ async function runSnapchatPipeline(env, image, archetype, faceImage) {
   console.log(`[snap-pipeline] STAGE 1 (face-to-many) ok t+${Date.now()-t0}ms`);
 
   // ----- STAGE 2: enrich the cartoonified character with the tarot scene -----
-  // Image-to-image at moderate strength (0.55) — preserves the cartoonified
-  // character's face / pose / wardrobe (the identity-preserving work Stage 1
-  // did) while transforming the empty background into the dense symbolic
-  // tarot scene the archetype prompts describe.
-  const prompt = getPromptFor(archetype, subject);
+  // Image-to-image at LOW strength (0.40) — Stage 1 already produced a
+  // cartoonified version of the user's actual face. Stage 2's only job is to
+  // ADD the tarot scene around them, NOT to re-render the character. At
+  // strength 0.55 we were seeing colour drift (brunettes → black hair, brown
+  // eyes → green eyes) because flux had license to flip ~half the pixels
+  // when applying the scene prompt. Dropping to 0.40 lets the scene paint
+  // around the character while the character's hair/eye/skin pigment from
+  // Stage 1 survives intact.
+  //
+  // The prompt is prepended with a "PRESERVE THE CHARACTER" directive that
+  // tells flux explicitly: the figure in the init image is correct; do not
+  // change their hair colour, eye colour, skin tone or face. Only add the
+  // background scene around them.
+  const archetypePrompt = getPromptFor(archetype, subject);
+  const stage2Prompt =
+    "PRESERVE THE CHARACTER in the input image EXACTLY — same face, same " +
+    "hair colour, same eye colour, same skin tone, same wardrobe, same " +
+    "pose. The figure in the input image is already correct; do NOT " +
+    "recolour their hair, eyes or skin under any circumstances. Your only " +
+    "job is to ADD the surrounding tarot scene around them. " +
+    archetypePrompt;
+  const stage2Negative =
+    BASE_NEGATIVE_PROMPT +
+    // Hard exclusions against colour drift — the failure modes we keep
+    // seeing on Stage 2 specifically.
+    ", recoloured hair, hair colour changed from input, black hair " +
+    "replacing brown hair, brown hair replacing black hair, " +
+    "recoloured eyes, eye colour changed from input, green eyes " +
+    "replacing brown eyes, blue eyes replacing brown eyes, " +
+    "different face from input image, different facial structure " +
+    "from input, swapped identity" +
+    (subjectNegative ? ", " + subjectNegative : "");
   const stage2ReqBody = {
     image_url: cartoonifiedUrl,
-    prompt,
-    strength: 0.55,                    // moderate — keep character, transform background
+    prompt: stage2Prompt,
+    strength: 0.40,                    // LOW — keep character intact, add scene around them only
     num_inference_steps: 28,
     guidance_scale: 7,
     image_size: "portrait_4_3",
     output_format: "jpeg",
     num_images: 1,
     enable_safety_checker: true,
-    negative_prompt: BASE_NEGATIVE_PROMPT + (subjectNegative ? ", " + subjectNegative : ""),
+    negative_prompt: stage2Negative,
   };
   const stage2Res = await fetch(FAL_FLUX_I2I_URL, {
     method: "POST",
