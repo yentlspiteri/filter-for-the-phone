@@ -11,11 +11,15 @@ FROM_EMAIL = "Von Peach <hello@vonpeach.com>"
 # identity preservation (Snapchat / Lensa / Toonify-style). "pulid" uses the
 # legacy flux-pulid text-to-image pipeline with face anchor.
 #
-# ROLLED BACK to "pulid" — the Snapchat pipeline's face-to-many call body
-# doesn't match the live API schema, so requests were 4xx-ing and clients
-# were falling back to "original-photo-with-duotone." We'll re-enable
-# "snapchat" once the face-to-many call is corrected (separate PR).
-PIPELINE = "pulid"
+# Default = "kontext" (FLUX.1 Kontext, image-to-image with prompt-guided
+# style transfer). The legacy text-to-image PuLID pipeline kept producing
+# subtle identity drift — brunettes coming back with green/black eyes,
+# brown hair coming back blonde — because PuLID generates the face from a
+# face embedding that doesn't perfectly preserve subtle pigments under
+# heavy stylisation. Kontext starts from the user's actual photo and
+# only TRANSFORMS pixels, so identity attributes survive by construction.
+# Rollback if Kontext misbehaves: flip back to "pulid" and redeploy.
+PIPELINE = "kontext"
 
 # R2 bucket for the admin portrait gallery — every successful generation is
 # written here. Create the bucket once with:
