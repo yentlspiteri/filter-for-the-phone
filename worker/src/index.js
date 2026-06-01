@@ -710,7 +710,7 @@ export default {
     //   "Access-Control-Allow-Origin": "https://tarot.vonpeach.com"
     const cors = {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "POST, OPTIONS, DELETE",
       "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "86400",
       "Vary": "Origin",
@@ -728,6 +728,14 @@ export default {
       if (url.pathname === "/wall")                    return handleWall(request, env, url);
       if (url.pathname === "/gallery.json")            return handleGalleryJson(request, env, url);
       if (url.pathname.startsWith("/portrait-image/")) return handlePortraitImage(request, env, url);
+      return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
+    }
+
+    // DELETE for admin cleanup. Passcode-gated by GALLERY_KEY — only the
+    // admin /gallery view exposes the UI, but the endpoint itself can also
+    // be curled by anyone with the key (useful for bulk-cleanup scripts).
+    if (request.method === "DELETE") {
+      if (url.pathname.startsWith("/portrait-image/")) return handlePortraitDelete(request, env, url, cors);
       return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
     }
 
@@ -2010,6 +2018,34 @@ async function handlePortraitImage(_request, env, url) {
   });
 }
 
+// DELETE /portrait-image/<key>?key=<GALLERY_KEY>
+//   Removes a portrait from the R2 bucket. Passcode-gated — only the admin
+//   /gallery view exposes the UI, but the endpoint can also be hit via curl
+//   for bulk-cleanup scripts.
+//
+// Used by the per-tile "×" button on the admin gallery to clear out test
+// renders / unwanted portraits before an event. The corresponding tile is
+// removed from the wall on its next 5-second poll automatically.
+async function handlePortraitDelete(_request, env, url, cors) {
+  const jsonHeaders = { ...cors, "Content-Type": "application/json" };
+  if (!env.GALLERY_KEY) return new Response(JSON.stringify({ error: "no_key_config" }), { status: 500, headers: jsonHeaders });
+  const auth = url.searchParams.get("key") || "";
+  if (auth !== env.GALLERY_KEY) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: jsonHeaders });
+  if (!env.PORTRAITS) return new Response(JSON.stringify({ error: "no_r2" }), { status: 500, headers: jsonHeaders });
+
+  const objectKey = decodeURIComponent(url.pathname.slice("/portrait-image/".length));
+  if (!objectKey) return new Response(JSON.stringify({ error: "bad_request" }), { status: 400, headers: jsonHeaders });
+
+  try {
+    await env.PORTRAITS.delete(objectKey);
+    console.log(`[gallery] deleted ${objectKey}`);
+    return new Response(JSON.stringify({ ok: true, key: objectKey }), { status: 200, headers: jsonHeaders });
+  } catch (err) {
+    console.warn(`[gallery] delete failed for ${objectKey}: ${err?.message}`);
+    return new Response(JSON.stringify({ error: "delete_failed", message: err?.message }), { status: 500, headers: jsonHeaders });
+  }
+}
+
 // ---------- LIVE EVENT WALL ----------
 // Designed for projection / TV display during an in-person event. Big-tile
 // auto-refreshing grid; new portraits "pop" in at the top of the wall with
@@ -2367,13 +2403,19 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
   const cards = items.map((x) => {
     const src = `/portrait-image/${encodeURIComponent(x.key)}?key=${safeKey}`;
     const date = x.iso ? new Date(x.iso).toLocaleString() : "";
-    return `<a class="card" href="${src}" target="_blank" rel="noopener">
-      <img loading="lazy" src="${src}" alt="${x.archetype}" />
-      <div class="meta">
-        <span class="archetype">${x.archetype}</span>
-        <span class="ts">${date}</span>
-      </div>
-    </a>`;
+    // Card is a wrapper div (for relative positioning) containing the
+    // existing image-link AND a delete button. Button stops propagation so
+    // clicking it doesn't open the image link.
+    return `<div class="card" data-key="${encodeURIComponent(x.key)}">
+      <a class="card-link" href="${src}" target="_blank" rel="noopener">
+        <img loading="lazy" src="${src}" alt="${x.archetype}" />
+        <div class="meta">
+          <span class="archetype">${x.archetype}</span>
+          <span class="ts">${date}</span>
+        </div>
+      </a>
+      <button class="del-btn" data-key="${encodeURIComponent(x.key)}" title="Delete this portrait" aria-label="Delete this portrait">×</button>
+    </div>`;
   }).join("");
 
   return `<!doctype html>
@@ -2421,18 +2463,45 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
       grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
     }
     .card {
+      position:relative;
       background:var(--card-bg); border-radius:14px; overflow:hidden;
-      text-decoration:none; color:var(--peach);
       box-shadow:0 8px 22px rgba(0,0,0,0.4);
-      transition:transform 140ms ease, box-shadow 140ms ease;
+      transition:transform 140ms ease, box-shadow 140ms ease, opacity 200ms ease;
       display:flex; flex-direction:column;
     }
     .card:hover { transform:translateY(-2px); box-shadow:0 12px 30px rgba(204,28,14,0.30); }
+    .card-link {
+      text-decoration:none; color:var(--peach);
+      display:flex; flex-direction:column;
+    }
     .card img { display:block; width:100%; aspect-ratio:3/4; object-fit:cover; background:#1a0610; }
     .meta { padding:10px 14px; display:flex; justify-content:space-between; align-items:center; font-size:12px; gap:8px; }
     .archetype { font-weight:700; text-transform:capitalize; letter-spacing:0.04em; color:var(--orange); }
     .ts { color:rgba(255,214,187,0.55); font-size:11px; }
     .empty { padding:60px 24px; text-align:center; color:rgba(255,214,187,0.55); }
+
+    /* Per-tile delete button — visible on hover, click confirms then DELETEs
+       the R2 object via the /portrait-image/<key> endpoint. */
+    .del-btn {
+      position:absolute; top:10px; right:10px;
+      width:34px; height:34px;
+      border:0; border-radius:50%;
+      background:rgba(204,28,14,0.92);
+      color:#fff; font-size:22px; font-weight:800; line-height:1;
+      cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      opacity:0;
+      transition:opacity 140ms ease, transform 140ms ease, background 140ms ease;
+      box-shadow:0 6px 16px rgba(0,0,0,0.45);
+      z-index:2;
+      padding-bottom:3px;  /* visual centering of the × glyph */
+      font-family:inherit;
+    }
+    .card:hover .del-btn { opacity:1; }
+    .del-btn:hover  { transform:scale(1.10); background:rgba(204,28,14,1); }
+    .del-btn:focus  { opacity:1; outline:2px solid var(--peach); outline-offset:2px; }
+    .del-btn:disabled { opacity:0.6; cursor:wait; transform:none; }
+    .card.deleting { opacity:0; transform:scale(0.92); pointer-events:none; }
   </style>
 </head><body>
   <header>
@@ -2448,6 +2517,48 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
   ${items.length === 0
     ? `<div class="empty">No portraits yet.${currentFilter ? " Try removing the filter." : ""}</div>`
     : `<div class="grid">${cards}</div>`}
+  <script>
+    // Per-tile delete. Sends DELETE /portrait-image/<key>?key=<GALLERY_KEY>,
+    // animates the card out on success, updates the header total count.
+    // The encoded gallery key is interpolated from the server — same key
+    // that gates this page, so it always matches.
+    (function () {
+      const KEY = ${JSON.stringify(safeKey)};
+      const totalEl = document.querySelector("header .total");
+      function decTotal() {
+        if (!totalEl) return;
+        const m = totalEl.textContent.match(/(\\d+)/);
+        if (!m) return;
+        totalEl.textContent = (parseInt(m[1], 10) - 1) + " total";
+      }
+      document.querySelectorAll(".del-btn").forEach(function (btn) {
+        btn.addEventListener("click", async function (e) {
+          e.preventDefault(); e.stopPropagation();
+          const key = btn.dataset.key;  // already encodeURIComponent'd at render time
+          if (!confirm("Delete this portrait? This can't be undone.")) return;
+          btn.disabled = true;
+          btn.textContent = "…";
+          try {
+            const res = await fetch("/portrait-image/" + key + "?key=" + KEY, { method: "DELETE" });
+            if (!res.ok) {
+              const detail = await res.text().catch(function(){return "";});
+              throw new Error("HTTP " + res.status + (detail ? " — " + detail.slice(0,120) : ""));
+            }
+            const card = btn.closest(".card");
+            if (card) {
+              card.classList.add("deleting");
+              setTimeout(function () { card.remove(); }, 220);
+            }
+            decTotal();
+          } catch (err) {
+            alert("Delete failed: " + (err && err.message ? err.message : err));
+            btn.disabled = false;
+            btn.textContent = "×";
+          }
+        });
+      });
+    })();
+  </script>
 </body></html>`;
 }
 
