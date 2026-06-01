@@ -868,7 +868,12 @@ async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
             "}\n" +
             "If the person clearly has no hair, set hair to \"bald\". " +
             "Be HONEST about facial hair — if you see any beard or stubble at " +
-            "all, DO NOT say \"clean-shaven\". Never omit the gender key.",
+            "all, DO NOT say \"clean-shaven\". Never omit the gender key. " +
+            "GENDER — CRITICAL: hair length is NOT a reliable gender signal. " +
+            "Many women have short hair (pixie cuts, bobs, buzz cuts, " +
+            "undercuts). Many men have long hair. Determine gender from " +
+            "facial bone structure, jawline, brow, lip shape — NOT from " +
+            "hair length. A short-haired woman is still a woman.",
         },
         { role: "user", content: "Describe this person's visible attributes as JSON." },
       ],
@@ -901,14 +906,27 @@ async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
       const isMale = /\b(man|male)\b/i.test(subject.gender || "");
       const isBald = /bald|shaved head|no hair/i.test(subject.hair || "");
 
-      const [focusedFacial, focusedHair, focusedGlasses] = await Promise.all([
+      const [focusedFacial, focusedHair, focusedGlasses, focusedGender] = await Promise.all([
         isMale  ? detectFacialHair(env, bytes).catch(() => null) : Promise.resolve(null),
         !isBald ? detectHairColor(env, bytes).catch(() => null) : Promise.resolve(null),
         detectGlasses(env, bytes).catch(() => null),
+        detectGender(env, bytes).catch(() => null),
       ]);
 
       // Merge policy is unchanged from the sequential version — focused
       // overrides only when more specific / when omnibus missed something.
+      //
+      // Gender first — if it flips, the downstream subject directive
+      // (buildSubjectDirective) reads the new value and applies the
+      // correct preservation language. Short-haired-woman → "woman"
+      // is the most consequential override here.
+      if (focusedGender !== null) {
+        const mergedGender = mergeGender(subject.gender, focusedGender);
+        if (mergedGender !== subject.gender) {
+          console.log(`[pipeline] gender re-check: omnibus="${subject.gender}" focused="${focusedGender}" → "${mergedGender}"`);
+          subject.gender = mergedGender;
+        }
+      }
       if (focusedFacial !== null) {
         const merged = mergeFacialHair(subject.facial, focusedFacial);
         if (merged !== subject.facial) {
@@ -1003,7 +1021,13 @@ async function describeSubjectOpenAI(env, wideDataUrl, faceDataUrl) {
               "Important: report what you can SEE. Do not infer attributes from " +
               "clothing or background. Never omit the gender key. When in doubt " +
               "about facial hair, lean toward reporting whatever subtle hair is " +
-              "visible rather than calling it clean-shaven.",
+              "visible rather than calling it clean-shaven. " +
+              "GENDER — CRITICAL: hair length is NOT a reliable signal. Many " +
+              "women have short hair (pixie cuts, bobs, buzz cuts, undercuts, " +
+              "shaved sides). Many men have long hair. Determine gender from " +
+              "FACIAL BONE STRUCTURE (jawline, brow ridge, cheekbones), lip " +
+              "shape, eye shape, neck width, and body proportions — NOT from " +
+              "hair length or hairstyle. A short-haired woman is still a woman.",
           },
           { role: "user", content: userContent },
         ],
@@ -1261,6 +1285,65 @@ function mergeGlassesIntoNotable(notable, focused) {
   }
   // Not in notable — prepend the focused detector's description.
   return notable ? `${focused}, ${notable}` : focused;
+}
+
+// Focused gender detector. The omnibus extractor uses hair length as a
+// strong (but unreliable) gender signal — short-haired women routinely get
+// labelled as men, and long-haired men sometimes get labelled as women.
+// This focused call explicitly DE-EMPHASISES hair length and asks the model
+// to look at facial bone structure instead.
+async function detectGender(env, bytes) {
+  if (!env.AI) return null;
+  try {
+    const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+      image: [...bytes],
+      max_tokens: 20,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise gender detector. Look at this person's " +
+            "FACE — facial bone structure, jaw line, brow ridge, cheekbones, " +
+            "lip shape, eye shape, neck width. " +
+            "CRITICAL: hair length is NOT a reliable gender signal. Many " +
+            "women have short hair (pixie cuts, bobs, buzz cuts, undercuts, " +
+            "shaved sides). Many men have long hair (man-buns, shoulder- " +
+            "length, ponytails). A short-haired woman is still a woman. " +
+            "Determine gender from the face, not the hair. " +
+            "Reply with ONLY one word, no punctuation, no other text: " +
+            "\"man\", \"woman\", or \"unsure\" (use \"unsure\" only if the " +
+            "face is genuinely ambiguous from facial structure).",
+        },
+        { role: "user", content: "Is this person a man or a woman? Look at the face — not the hair. Reply with one word only." },
+      ],
+    });
+    const raw = String((out && (out.response ?? out.description ?? out.text)) || "").trim();
+    const cleaned = raw.replace(/^["'`]+|["'`.,;:!?]+$/g, "").trim().toLowerCase();
+    if (/^(man|male)$/i.test(cleaned))   return "man";
+    if (/^(woman|female)$/i.test(cleaned)) return "woman";
+    return null; // unsure / unparseable → keep omnibus answer
+  } catch (err) {
+    console.warn(`[pipeline] gender re-check failed: ${err?.message}`);
+    return null;
+  }
+}
+
+// Combine the omnibus gender value with the focused detector's answer.
+//   focused null/unsure       → keep omnibus
+//   they agree                → no change
+//   they disagree             → trust focused (it was told to ignore hair length;
+//                              omnibus often uses hair length as a tiebreaker)
+function mergeGender(omnibus, focused) {
+  if (!focused) return omnibus || "";
+  if (!omnibus) return focused;
+  const omnibusIsMan   = /\b(man|male)\b/i.test(omnibus);
+  const omnibusIsWoman = /\b(woman|female)\b/i.test(omnibus);
+  // Agree → keep omnibus phrasing (might be "young man", "adult woman", etc.)
+  if (omnibusIsMan   && focused === "man")   return omnibus;
+  if (omnibusIsWoman && focused === "woman") return omnibus;
+  // Disagree → trust the focused detector (single-purpose call with explicit
+  // anti-hair-length-bias guidance beats the omnibus default).
+  return focused;
 }
 
 // Pull the first {...} block out of the model output and validate it. Vision
