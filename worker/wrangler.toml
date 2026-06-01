@@ -7,11 +7,15 @@ compatibility_date = "2025-05-01"
 # below works for tests-to-yourself only.
 [vars]
 FROM_EMAIL = "Von Peach <hello@vonpeach.com>"
-# Generation pipeline. "snapchat" (default) uses face-to-many + flux i2i for
-# dramatic identity preservation (Snapchat / Lensa / Toonify-style). "pulid"
-# uses the legacy flux-pulid text-to-image pipeline with face anchor. Easy
-# rollback if the new pipeline misbehaves — set to "pulid" and redeploy.
-PIPELINE = "snapchat"
+# Generation pipeline. "snapchat" uses face-to-many + flux i2i for dramatic
+# identity preservation (Snapchat / Lensa / Toonify-style). "pulid" uses the
+# legacy flux-pulid text-to-image pipeline with face anchor.
+#
+# ROLLED BACK to "pulid" — the Snapchat pipeline's face-to-many call body
+# doesn't match the live API schema, so requests were 4xx-ing and clients
+# were falling back to "original-photo-with-duotone." We'll re-enable
+# "snapchat" once the face-to-many call is corrected (separate PR).
+PIPELINE = "pulid"
 
 # R2 bucket for the admin portrait gallery — every successful generation is
 # written here. Create the bucket once with:
