@@ -704,6 +704,50 @@
   @media (prefers-reduced-motion: reduce) {
     .painting-skeleton-shimmer { animation: none; opacity: 0.25; }
   }
+  /* "Revealed" state — used when the user submitted their email during
+     the wait. The painting screen stays visible; the skeleton becomes
+     the rendered card instead of switching to the result screen. The
+     shimmer is silenced, the breathing animation stops, and a subtle
+     scale-up gives the reveal moment its punch. */
+  #screenPainting.revealed .painting-skeleton-img {
+    filter: none;
+    transform: scale(1);
+    animation: none;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-color: var(--card-bg);
+    transition: filter 600ms ease, transform 600ms ease;
+  }
+  #screenPainting.revealed .painting-skeleton-shimmer { display: none; }
+  #screenPainting.revealed .painting-skeleton {
+    box-shadow: 0 26px 60px rgba(204,28,14,0.30), 0 0 0 1px rgba(255,214,187,0.10);
+    animation: reveal-pop 720ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes reveal-pop {
+    0%   { transform: scale(0.96); }
+    60%  { transform: scale(1.02); }
+    100% { transform: scale(1); }
+  }
+  /* "Take another" — only visible once the card has been revealed. */
+  .painting-again {
+    margin-top: 22px;
+    appearance: none; border: 0; cursor: pointer;
+    background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
+    color: #fff;
+    padding: 12px 28px;
+    border-radius: 999px;
+    font-family: "Aileron", sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    box-shadow: 0 10px 24px rgba(204,28,14,0.35);
+    transition: transform 140ms ease, filter 140ms ease, opacity 200ms ease;
+    display: none;  /* shown only in reveal mode */
+  }
+  .painting-again:hover { filter: brightness(1.08); transform: translateY(-1px); }
+  #screenPainting.revealed .painting-again { display: inline-block; }
   /* Fixed-height slot for the rotating hint. The slot reserves the space; the
      hint is absolutely positioned inside and cross-fades IN PLACE. This means a
      one-line vs two-line message can never change the block's height — so the
@@ -1106,6 +1150,10 @@
         <div class="painting-email-ack" id="paintingEmailAck" hidden>
           <span class="painting-email-tick">✓</span> Got it — we'll send it as soon as your card is ready.
         </div>
+        <!-- Only visible when the painting screen has entered .revealed mode
+             (user submitted email + AI finished). Lets them start over without
+             ever transitioning to the full result screen. -->
+        <button class="painting-again" id="paintingAgain" type="button">Take another</button>
       </div>
     </div>
   </div>
@@ -1296,6 +1344,7 @@ const paintingEmailForm   = $("paintingEmailForm");
 const paintingEmailInput  = $("paintingEmailInput");
 const paintingEmailSkip   = $("paintingEmailSkip");
 const paintingEmailAck    = $("paintingEmailAck");
+const paintingAgain       = $("paintingAgain");
 let prefilledEmail = null;
 
 startBtn.addEventListener("click", begin);
@@ -1312,6 +1361,9 @@ paintingEmailSkip.addEventListener("click", function () {
   paintingEmailForm.classList.add("fading");
   setTimeout(function () { paintingEmailForm.hidden = true; }, 220);
 });
+// "Take another" on the revealed painting screen — start over without
+// ever passing through the full result screen.
+paintingAgain.addEventListener("click", function () { reset(); });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && emailModal.classList.contains("show")) closeEmailModal();
 });
@@ -1604,15 +1656,55 @@ async function beginPose() {
 
   await renderTarotCard();
 
-  paintingScreen.classList.remove("show");
-  playOverlay.style.display = "none";
-  wash.style.display = "none";
-  resultScreen.classList.add("show");
+  // Branch: did the user submit their email during the loading wait?
+  if (prefilledEmail) {
+    // YES — keep them on the painting screen, reveal the rendered card
+    // in place of the skeleton, fire the email send in the background.
+    // No transition to the result screen (they don't need its action
+    // buttons; they already have the card going to their inbox).
+    revealOnPaintingScreen();
+    autoSendPrefilledEmail();
+  } else {
+    // NO — existing behaviour: transition to the full result screen
+    // where the email button + share + try again live.
+    paintingScreen.classList.remove("show");
+    playOverlay.style.display = "none";
+    wash.style.display = "none";
+    resultScreen.classList.add("show");
+  }
+}
 
-  // If the user submitted their email during the painting wait, send the
-  // card now (shareCanvas was just populated by renderTarotCard). Runs in
-  // the background; the result screen stays interactive either way.
-  autoSendPrefilledEmail();
+// Morphs the painting screen into a "reveal" state. The skeleton's
+// blurred-selfie placeholder becomes the actual rendered tarot card; the
+// shimmer stops; the eyebrow + hint change to celebrate the moment + name
+// the archetype. The "Take another" button appears below — only way out
+// is to start a new round (or close the tab).
+function revealOnPaintingScreen() {
+  paintingScreen.classList.add("revealed");
+  // Swap the skeleton image background from blurred-selfie to the rendered
+  // tarot card. shareCanvas was just populated by renderTarotCard.
+  try {
+    const dataUrl = $("shareCanvas").toDataURL("image/jpeg", 0.92);
+    paintingSkeletonImg.style.backgroundImage = `url(${dataUrl})`;
+  } catch (e) {
+    // Tainted canvas or other issue — fall back to leaving the placeholder.
+    console.warn("Couldn't swap skeleton to rendered card:", e);
+  }
+  // Update eyebrow + hint to celebrate.
+  const eyebrowEl = document.querySelector(".painting-eyebrow");
+  if (eyebrowEl) eyebrowEl.textContent = "Your card has arrived";
+  const archetypeName = ARCHETYPES[frozenArchetype]?.name || "Your card";
+  if (paintingHint) {
+    paintingHint.textContent = archetypeName;
+    paintingHint.style.opacity = "1";
+    paintingHint.style.fontStyle = "normal";
+    paintingHint.style.fontWeight = "700";
+    paintingHint.style.letterSpacing = "0.18em";
+    paintingHint.style.textTransform = "uppercase";
+  }
+  // Stop the rotating hint messages — we've replaced the hint with the
+  // archetype name and we don't want it cycling away.
+  stopPaintingMessages();
 }
 
 function runPoseCountdown() {
@@ -1878,13 +1970,30 @@ function reset() {
   frozenFrame = null;
   frozenArchetype = null;
   // Reset the painting-screen email-capture state for the next round —
-  // form goes back to its untouched state, ack hidden, prefilled cleared.
+  // form goes back to its untouched state, ack hidden, prefilled cleared,
+  // revealed state torn down so the next AI run shows the loader again.
   prefilledEmail = null;
+  paintingScreen.classList.remove("revealed");
   paintingEmailForm.classList.remove("fading");
   paintingEmailForm.hidden = false;
   paintingEmailInput.value = "";
   paintingEmailInput.style.borderColor = "";
   paintingEmailAck.hidden = true;
+  paintingEmailAck.innerHTML = "<span class=\"painting-email-tick\">✓</span> Got it — we'll send it as soon as your card is ready.";
+  // Restore eyebrow + hint to their pre-reveal styling (revealOnPaintingScreen
+  // mutates them inline; CSS class can't reset the inline styles).
+  const eyebrowEl = document.querySelector(".painting-eyebrow");
+  if (eyebrowEl) eyebrowEl.textContent = "Reading your cards";
+  if (paintingHint) {
+    paintingHint.textContent = "Sit tall and look into the lens.";
+    paintingHint.style.fontStyle = "";
+    paintingHint.style.fontWeight = "";
+    paintingHint.style.letterSpacing = "";
+    paintingHint.style.textTransform = "";
+  }
+  // Clear the swapped skeleton background — paintPortrait will re-set it
+  // from the next frozen frame on the next round.
+  paintingSkeletonImg.style.backgroundImage = "";
   // Restore the email button to its default state (the autoSend handler
   // mutated text + style on success)
   emailMeBtn.disabled = false;
@@ -2480,21 +2589,23 @@ function submitPaintingEmail(e) {
 async function autoSendPrefilledEmail() {
   if (!prefilledEmail || !EMAIL_ENDPOINT) return;
   const email = prefilledEmail;
-  // Optimistically update the button to "Sent ✓ {email}" — if the send
-  // fails we revert.
-  const originalText = emailMeBtn.textContent;
-  emailMeBtn.disabled = true;
-  emailMeBtn.textContent = "Sending to " + email + "…";
+  // Update the email-ack copy on the painting screen so the user sees
+  // "Sending…" then "✓ Sent" in the same spot they submitted from.
+  if (paintingEmailAck) {
+    paintingEmailAck.innerHTML = '<span class="painting-email-tick">↗</span> Sending to ' + email + '…';
+  }
   try {
     const res = await sendPortraitEmail(email);
     if (!res.ok) throw new Error("HTTP " + res.status);
-    emailMeBtn.textContent = "✓ Sent to " + email;
-    emailMeBtn.style.background = "rgba(253,136,57,0.20)";
-    emailMeBtn.style.border = "1px solid rgba(253,136,57,0.45)";
+    if (paintingEmailAck) {
+      paintingEmailAck.innerHTML = '<span class="painting-email-tick">✓</span> Sent to ' + email;
+    }
   } catch (err) {
-    console.warn("Pre-captured email send failed; user can retry from modal:", err);
-    emailMeBtn.disabled = false;
-    emailMeBtn.textContent = originalText;
+    console.warn("Pre-captured email send failed:", err);
+    if (paintingEmailAck) {
+      paintingEmailAck.innerHTML =
+        "Couldn't send right now — your card is still on this screen.";
+    }
   }
 }
 
