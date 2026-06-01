@@ -1300,6 +1300,43 @@ const ARCHETYPES = {
     duotone: { dark: [80, 12, 30],   light: [253, 200, 100] },
     accents: ["#FD8839", "#99112F", "#FFD6BB"]
   },
+  // ---- RARE: Witch ----
+  // Fires only on a specific answer pattern AND a probability roll — see
+  // RARE_RULES below. `rare: true` is read by the result-screen UI so we
+  // can layer in a small "rare draw" treatment (subtle gold dust around
+  // the card, ack text on the email screen, etc.) on a follow-up PR.
+  witch: {
+    name: "The Witch",
+    tagline: "A rare draw · Magic & quiet power",
+    rare: true,
+    duotone: { dark: [50, 8, 60],    light: [255, 214, 187] },
+    accents: ["#99112F", "#FD8839", "#FFD6BB"]
+  },
+};
+
+// ---- RARE-CARD FRAMEWORK ----
+// Rare archetypes don't sit in ARCHETYPE_MAP — instead they OVERRIDE the
+// common archetype when both conditions hold for the user's answer string:
+//
+//   1. `triggers(code)` returns true — a specific answer pattern matches
+//   2. `Math.random() < probability` — a probability roll succeeds
+//
+// Most users in the "witch zone" still get the common card; only a small
+// minority (probability * 1/total-patterns) ever draws the rare. Designed
+// to be the talked-about-at-the-event card.
+//
+// PR B will populate this with the rest of the Major Arcana rare cards
+// (Death, Devil, Tower, etc.) once the framework is proven.
+const RARE_RULES = {
+  // Witch fires on patterns where Q2 = Instinct (L) AND Q3 = Keeper-of-
+  // secrets (R) — the natural "intuitive secret-keeper" profile that maps
+  // best to the witch archetype. Codes: LLR (currently rebel) and RLR
+  // (currently monk). 20% probability — about 1 in 5 users who land in
+  // the zone will draw the witch instead.
+  witch: {
+    triggers: (code) => code.length >= 3 && code[1] === "L" && code[2] === "R",
+    probability: 0.20,
+  },
 };
 
 const QUESTIONS = [
@@ -1810,7 +1847,20 @@ function runPoseCountdown() {
 
 function pickArchetype() {
   const code = answers.join("");
-  return ARCHETYPE_MAP[code] || "charmer";
+  const common = ARCHETYPE_MAP[code] || "charmer";
+  // Rare-card overrides — first matching rule with a successful probability
+  // roll wins. Patterns are designed to be non-overlapping in PR B; for now
+  // there's only the witch rule so first-match is trivially fine. The roll
+  // is per-pickArchetype call, so the same user replaying the quiz with the
+  // same answers can flip between common and rare across attempts (which is
+  // the intended feel — "try again, see if the witch comes out").
+  for (const [rareKey, rule] of Object.entries(RARE_RULES)) {
+    if (rule.triggers(code) && Math.random() < rule.probability) {
+      console.log(`[archetype] rare draw: ${rareKey} (pattern=${code} matched, roll succeeded)`);
+      return rareKey;
+    }
+  }
+  return common;
 }
 
 function captureFrozenFrame() {
@@ -2187,6 +2237,20 @@ async function renderTarotCard() {
   roundRect(ctx, photoX, photoY, photoW, photoH, photoR);
   ctx.stroke();
 
+  // ----- Per-archetype crest sigil at TOP of card -----
+  // Overlays whatever heraldic emblem the AI drew at the top of the
+  // illustration (Kontext loves to add abstract shield/badge shapes there
+  // even when told not to). The disc + sigil reads as the official "this
+  // is what this archetype is" mark — a clean per-card emblem the user
+  // can recognise without having to read the bottom pill.
+  const crestSize = cardW * 0.13;
+  const crestCX = cardX + cardW / 2;
+  // Sit the disc so its top edge aligns with the top inner edge of the
+  // photo area + a small drop (looks more anchored than centred on the
+  // photo top edge, where Kontext's emblem usually starts).
+  const crestCY = photoY + crestSize * 0.55;
+  drawCrest(ctx, frozenArchetype, crestCX, crestCY, crestSize);
+
   // ----- White pill banner with archetype name (serif, overlapping
   // the bottom of the illustration like in the reference cards).
   //
@@ -2254,6 +2318,195 @@ async function renderTarotCard() {
   // Push into preview <img>
   const dataUrl = c.toDataURL("image/jpeg", 0.92);
   resultPreview.src = dataUrl;
+}
+
+// ---------- CREST SIGILS ----------
+// Per-archetype crest emblem rendered as a peach disc with a wine-red
+// glyph inside, drawn at the TOP of the card to cover whatever abstract
+// fortress/badge shape the AI invented in that area (Kontext likes to put
+// heraldic crests at the top of every card; we now tell it not to via the
+// prompt + negative, but the overlay is the belt-and-braces backstop).
+//
+// Each SIGILS entry is a drawing function that paints a 1.0-unit-sized
+// glyph centred at (x, y) in the requested colour. drawCrest() handles the
+// disc background, ring outline, and shadow — the sigil function only
+// needs to draw the figure inside the disc.
+const SIGILS = {
+  charmer: (ctx, x, y, s, color) => {
+    // Heart — notch at top, point at bottom. Canvas Y is down-positive, so
+    // "above origin" is `y - n`. Two symmetric cubic beziers form the lobes:
+    //   Notch (top) ──curve out & up & down──> Bottom point
+    //   Bottom point ──curve up & out & down──> Notch
+    ctx.fillStyle = color;
+    const notchY  = y - s * 0.12;   // dip between the two lobes
+    const pointY  = y + s * 0.45;   // bottom point
+    const lobeX   = s * 0.50;       // how far the lobes bulge sideways
+    const lobeTop = s * 0.38;       // how far above the notch the lobe tops rise
+    ctx.beginPath();
+    ctx.moveTo(x, notchY);
+    // Right lobe → bottom point
+    ctx.bezierCurveTo(
+      x + lobeX, notchY - lobeTop,   // control 1: outer-upper-right
+      x + lobeX, notchY + s * 0.15,  // control 2: outer-middle-right
+      x, pointY                      // end: bottom point
+    );
+    // Bottom point → left lobe → back to notch
+    ctx.bezierCurveTo(
+      x - lobeX, notchY + s * 0.15,  // control 1: outer-middle-left
+      x - lobeX, notchY - lobeTop,   // control 2: outer-upper-left
+      x, notchY                      // end: notch (close)
+    );
+    ctx.closePath();
+    ctx.fill();
+  },
+  magician: (ctx, x, y, s, color) => {
+    // Infinity ∞ — two horizontal loops, the magician's traditional lemniscate.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.10;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.ellipse(x - s * 0.20, y, s * 0.22, s * 0.18, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(x + s * 0.20, y, s * 0.22, s * 0.18, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  },
+  alchemist: (ctx, x, y, s, color) => {
+    // Alchemical fire — upward triangle, point top.
+    ctx.fillStyle = color;
+    const r = s * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r * 0.95, y + r * 0.65);
+    ctx.lineTo(x - r * 0.95, y + r * 0.65);
+    ctx.closePath();
+    ctx.fill();
+  },
+  oracle: (ctx, x, y, s, color) => {
+    // Crescent moon — full circle minus an offset circle (destination-out).
+    const r = s * 0.42;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x - s * 0.05, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(x + s * 0.12, y - s * 0.04, r * 0.92, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  },
+  rebel: (ctx, x, y, s, color) => {
+    // Lightning bolt — 6-point zigzag polygon.
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.05, y - s * 0.42);
+    ctx.lineTo(x + s * 0.22, y - s * 0.05);
+    ctx.lineTo(x + s * 0.04, y - s * 0.02);
+    ctx.lineTo(x + s * 0.15, y + s * 0.42);
+    ctx.lineTo(x - s * 0.22, y + s * 0.05);
+    ctx.lineTo(x - s * 0.04, y + s * 0.02);
+    ctx.closePath();
+    ctx.fill();
+  },
+  monk: (ctx, x, y, s, color) => {
+    // Halo + centre dot — minimalist "hermit lamp / inner light" shorthand.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.09;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.36, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+  },
+  architect: (ctx, x, y, s, color) => {
+    // Compass triangle on a baseline — set-square / drafting triangle.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.10;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.38, y + s * 0.30);
+    ctx.lineTo(x, y - s * 0.38);
+    ctx.lineTo(x + s * 0.38, y + s * 0.30);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.32, y + s * 0.30);
+    ctx.lineTo(x + s * 0.32, y + s * 0.30);
+    ctx.stroke();
+  },
+  luminary: (ctx, x, y, s, color) => {
+    // 8-point compass star — radiant leader / guiding light.
+    ctx.fillStyle = color;
+    const r = s * 0.42;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 - Math.PI / 2;
+      const radius = i % 2 === 0 ? r : r * 0.42;
+      const px = x + Math.cos(a) * radius;
+      const py = y + Math.sin(a) * radius;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  },
+  witch: (ctx, x, y, s, color) => {
+    // Pentacle — pentagram inside a circle, classic witch sigil.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.07;
+    ctx.lineJoin = "round";
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.40, 0, Math.PI * 2);
+    ctx.stroke();
+    // 5-point star, drawn by connecting every other vertex (0→2→4→1→3→0)
+    const r = s * 0.32;
+    const pts = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      pts.push([x + Math.cos(a) * r, y + Math.sin(a) * r]);
+    }
+    const order = [0, 2, 4, 1, 3, 0];
+    ctx.beginPath();
+    for (let i = 0; i < order.length; i++) {
+      const [qx, qy] = pts[order[i]];
+      i === 0 ? ctx.moveTo(qx, qy) : ctx.lineTo(qx, qy);
+    }
+    ctx.stroke();
+  },
+};
+
+// Draw the crest disc with the per-archetype sigil inside. Called from
+// renderTarotCard at the top of the photo area.
+function drawCrest(ctx, archetype, cx, cy, diameter) {
+  const r = diameter / 2;
+  // Peach disc with soft drop-shadow
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.30)";
+  ctx.shadowBlur = 16;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = "#FFD6BB";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Outer dark ring (matches the card's main outline weight)
+  ctx.strokeStyle = "#1a0610";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  // Inner decorative ring
+  ctx.strokeStyle = "rgba(26,6,16,0.35)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.84, 0, Math.PI * 2);
+  ctx.stroke();
+  // The actual sigil glyph
+  const sigil = SIGILS[archetype] || SIGILS.charmer;
+  sigil(ctx, cx, cy, diameter * 0.70, "#1a0610");
 }
 
 // ---------- DECOR HELPERS ----------
