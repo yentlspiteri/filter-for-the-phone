@@ -2268,10 +2268,14 @@ function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downlo
        INSIDE the AI's tarot frame area, not below it. */
     .card-pill {
       position: absolute;
-      left: 6.5%;
-      right: 6.5%;
-      bottom: 4.2%;
-      padding: 10px 14px;
+      left: 5%;
+      right: 5%;
+      /* Sit just above the AI's own card border so we cover the AI's text
+         strip but don't bleed onto the cream border below it. Heuristic
+         tuned against real Kontext output where the AI text label occupies
+         roughly the bottom 8-10% of the inner image. */
+      bottom: 2%;
+      padding: 16px 14px;
       background: linear-gradient(180deg, #FFE4CB 0%, #FFD0A9 100%);
       color: #3a0812;
       font-family: "Georgia", "Times New Roman", serif;
@@ -2281,13 +2285,13 @@ function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downlo
       text-transform: uppercase;
       text-align: center;
       border-radius: 6px;
-      box-shadow: 0 2px 0 rgba(58,8,18,0.18), 0 0 0 1px rgba(58,8,18,0.12) inset;
+      box-shadow: 0 3px 8px rgba(58,8,18,0.22), 0 0 0 1px rgba(58,8,18,0.14) inset;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     @media (max-width: 380px) {
-      .card-pill { font-size: 13px; padding: 8px 10px; letter-spacing: 0.14em; }
+      .card-pill { font-size: 13px; padding: 12px 10px; letter-spacing: 0.14em; }
     }
     .meta {
       text-align: center;
