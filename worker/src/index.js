@@ -138,7 +138,13 @@ const STYLE_TRAIL =
   "character, not a photograph. The background fills every corner of " +
   "the frame with densely illustrated thematic motifs that tell the " +
   "archetype's story (buildings, weather, props, creatures, smoke or " +
-  "flame patterns appropriate to the scene). No text on the card, no " +
+  "flame patterns appropriate to the scene). NO heraldic crest, shield " +
+  "badge, escutcheon, coat-of-arms, fortress emblem, ornate seal or any " +
+  "central badge graphic at the TOP of the card — the upper-card area " +
+  "must be clear scene illustration (sky, atmosphere, decorative motifs " +
+  "appropriate to the archetype), NOT a heraldic emblem. The brand sigil " +
+  "is composited separately and needs the top of the card uncluttered. " +
+  "No text on the card, no " +
   "caption, no banner, no logo, no watermark. No photographic skin " +
   "texture, no photographic eyes, no skin pores, no real hair strands, " +
   "no off-palette hues, no white empty margins, no stiff frontal " +
@@ -184,6 +190,9 @@ const BASE_NEGATIVE_PROMPT =
   "watermark, text, caption, banner, signature, logo, " +
   "complex gradients, rainbow colours, multi-coloured background, " +
   "saturated neon background, off-palette background, " +
+  "heraldic crest at top of card, top-card emblem, escutcheon, " +
+  "ornate shield badge at top, coat-of-arms graphic, fortress emblem, " +
+  "central top-of-card seal, heraldic badge, top-card insignia, " +
   "orange hair, wine-red hair, brand-coloured hair, " +
   "orange eyes, red eyes, brand-coloured eyes, " +
   "orange skin, peach-recoloured skin, wine-tinted skin";
@@ -454,6 +463,55 @@ const PROMPT_TEMPLATES = {
         "the lower background looking toward the figure.",
     ],
   },
+  // ---- RARE: The Witch ----
+  // Deliberately distinct visual language from the other archetypes: moonlit
+  // and herbal rather than firelit / runic. Black cat familiar + open
+  // grimoire are the recognisable witch shorthand. Wardrobe stays modern
+  // (per the global STYLE_LEAD directive — no fantasy robes) but trim is
+  // pushed slightly more occult: pentacle clasps, embroidered moon-and-stars
+  // along the collar, crystal pendant. The face stays grounded — knowing
+  // half-smile, not theatrically wicked.
+  witch: {
+    base:
+      "Illustrated tarot card: 'The Witch'. Three-quarter-body figure " +
+      "in a structured deep-wine-red coat or layered tailored cape over " +
+      "a high-collared shirt — modern silhouette with peach-embroidered " +
+      "moon-and-stars trim along the collar and lapels, a small pentacle " +
+      "or crescent clasp at the throat, a faceted crystal pendant " +
+      "catching light. Knowing half-smile with a hint of mischief, eyes " +
+      "level and assured. Background of a moonlit witch's grove and " +
+      "study — a large crescent moon hanging in a deep starlit peach " +
+      "sky, bare moonlit branches arching overhead, an open grimoire " +
+      "floating mid-air with glowing peach script and arcane diagrams, " +
+      "a sleek black cat familiar perched nearby with golden eyes, " +
+      "bundles of dried herbs and pressed flowers hanging in the " +
+      "corners, scattered quartz crystals and bone-white candles on a " +
+      "low stone surface, swirling smoke forming sigils and runic " +
+      "patterns in the air, decorative pentacle motifs woven into the " +
+      "background ornament — mystical, grounded, distinctly nocturnal. ",
+    props: [
+      "Variant: one hand cupping a small floating orb of moonlight, the " +
+        "other turning a page of a floating grimoire, the black cat " +
+        "perched on the figure's shoulder, swirling moon-and-star " +
+        "motifs filling the background.",
+      "Variant: arms spread low and forward conjuring above a glowing " +
+        "circle inscribed with pentacles, the black cat sitting at the " +
+        "feet looking up, crescent moon haloed behind the head, herbs " +
+        "and crystals scattered in the foreground.",
+      "Variant: holding a slim wand of dark wood with a faceted crystal " +
+        "tip in one hand, the other resting on the open grimoire, " +
+        "scattered tarot cards drifting through the moonlit air, dense " +
+        "starfield filling the upper background.",
+      "Variant: one hand brought to the lips in a hushed 'shh' gesture " +
+        "with a knowing smile, the other holding a single sprig of " +
+        "wildflowers or wormwood, the black cat curled in the lower " +
+        "corner, runic glyphs glowing faintly around the figure.",
+      "Variant: leaning thoughtfully over a small cauldron at waist " +
+        "height with one hand sprinkling herbs into it, vapour rising " +
+        "into sigil patterns, the crescent moon large above, the cat " +
+        "watching from a stack of leather-bound spellbooks.",
+    ],
+  },
 };
 
 // Turn the vision pre-pass attributes into a hard identity directive. This is
@@ -702,6 +760,19 @@ const READS = {
       "People are drawn to your energy without always being able to explain why. Just make sure you also have your own Luminary — you inspire others so naturally that you can forget to seek inspiration yourself.",
     ],
   },
+  // ---- RARE ----
+  // The Witch is the deck's first rare card. She fires on a specific
+  // answer pattern (intuitive secret-keeper) AND a probability roll, so
+  // most users who land in her "zone" still get the common archetype.
+  // Designed to be the talked-about card of an event.
+  witch: {
+    name: "The Witch",
+    tagline: "A rare draw · Magic & quiet power",
+    paragraphs: [
+      "You've drawn a rare one. The Witch isn't about pointed hats and broomsticks — she's about knowing what's true before anyone else does, and not needing permission to act on it.",
+      "Most people are still consulting their checklists. You're already moving. Your instinct is the algorithm, and the people around you don't always see how much of the quiet magic is yours. Just remember: even witches have covens. Knowing when to share the spell — and when to keep it close — is the actual power.",
+    ],
+  },
 };
 
 export default {
@@ -885,7 +956,7 @@ async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
             ' "age":"young adult"|"adult"|"middle-aged"|"older",\n' +
             ' "hair":"<colour + length, e.g. short dark brown hair> OR bald OR shaved head",\n' +
             ' "facial":"clean-shaven" | "<beard/moustache description — be SPECIFIC: e.g. \\"thick full black beard\\", \\"short dark stubble\\", \\"trimmed grey goatee\\", \\"handlebar moustache\\">",\n' +
-            ' "eyes":"<eye colour> eyes",\n' +
+            ' "eyes":"<one of: brown eyes, dark brown eyes, light brown eyes, hazel eyes, amber eyes, blue eyes, light blue eyes, deep blue eyes, blue-grey eyes, green eyes, deep green eyes, light green eyes, grey eyes, grey-green eyes — be specific. Do NOT default to brown or blue if the irises are clearly green, grey, hazel or amber.>",\n' +
             ' "skin":"<skin tone> skin",\n' +
             ' "face_shape":"round"|"oval"|"square"|"heart"|"long",\n' +
             ' "age_cues":"<short comma-list of visible cues that fix age: facial hair, lines around eyes, greying hair, salt-and-pepper hair, fuller defined jawline, etc. — or \\"youthful smooth features\\" if none>",\n' +
@@ -932,11 +1003,12 @@ async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
       const isMale = /\b(man|male)\b/i.test(subject.gender || "");
       const isBald = /bald|shaved head|no hair/i.test(subject.hair || "");
 
-      const [focusedFacial, focusedHair, focusedGlasses, focusedGender] = await Promise.all([
+      const [focusedFacial, focusedHair, focusedGlasses, focusedGender, focusedEyes] = await Promise.all([
         isMale  ? detectFacialHair(env, bytes).catch(() => null) : Promise.resolve(null),
         !isBald ? detectHairColor(env, bytes).catch(() => null) : Promise.resolve(null),
         detectGlasses(env, bytes).catch(() => null),
         detectGender(env, bytes).catch(() => null),
+        detectEyeColor(env, bytes).catch(() => null),
       ]);
 
       // Merge policy is unchanged from the sequential version — focused
@@ -972,6 +1044,13 @@ async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
         if (mergedNotable !== subject.notable) {
           console.log(`[pipeline] glasses re-check: notable was="${subject.notable}" focused="${focusedGlasses}" → "${mergedNotable}"`);
           subject.notable = mergedNotable;
+        }
+      }
+      if (focusedEyes !== null) {
+        const mergedEyes = mergeEyeColor(subject.eyes, focusedEyes);
+        if (mergedEyes !== subject.eyes) {
+          console.log(`[pipeline] eye-colour re-check: omnibus="${subject.eyes}" focused="${focusedEyes}" → "${mergedEyes}"`);
+          subject.eyes = mergedEyes;
         }
       }
     }
@@ -1037,7 +1116,7 @@ async function describeSubjectOpenAI(env, wideDataUrl, faceDataUrl) {
               ' "age":"young adult"|"adult"|"middle-aged"|"older",\n' +
               ' "hair":"<colour + length, e.g. \\"short dark brown hair\\", \\"long wavy black hair\\"> OR \\"bald\\" OR \\"shaved head\\"",\n' +
               ' "facial":"<one of: clean-shaven, very light stubble, short stubble, heavy stubble, five o\'clock shadow, thin moustache, thick moustache, handlebar moustache, walrus moustache, goatee, goatee with moustache, soul patch, chin strap beard, short beard, medium beard, full beard, thick full beard, long beard, beard and moustache, thick sideburns, mutton chops — prefix with a colour adjective when visible: black, dark brown, brown, light brown, red, ginger, blonde, grey, salt-and-pepper, white. Be honest: even very light stubble or a 5-o-clock shadow counts.>",\n' +
-              ' "eyes":"<eye colour> eyes",\n' +
+              ' "eyes":"<one of: brown eyes, dark brown eyes, light brown eyes, hazel eyes, amber eyes, blue eyes, light blue eyes, deep blue eyes, blue-grey eyes, green eyes, deep green eyes, light green eyes, grey eyes, grey-green eyes — be PRECISE. Green and grey are easy to miss; look carefully. Hazel = brown with green or gold flecks. Amber = light brown with gold cast. If the iris is light but not blue, distinguish green vs grey vs hazel before defaulting to blue. NEVER default to brown if the irises are clearly light.>",\n' +
               ' "skin":"<skin tone description, e.g. fair, light, olive, medium, tan, brown, dark brown, dark> skin",\n' +
               ' "face_shape":"round"|"oval"|"square"|"heart"|"long",\n' +
               ' "age_cues":"<short comma-list of visible cues that fix age: facial hair, fine lines around eyes, crow\'s feet, smile lines, greying hair, salt-and-pepper hair, fuller defined jawline, receding hairline, etc. — or \\"youthful smooth features\\" if none>",\n' +
@@ -1246,6 +1325,77 @@ function mergeHair(omnibus, focused) {
   if (omnibusBald && focusedBald) return "bald";
   // Both describe hair — take whichever is more specific (longer phrase usually
   // means colour + length + texture all present).
+  return focused.length > omnibus.length ? focused : omnibus;
+}
+
+// Focused eye-colour detector. The omnibus extractor frequently misses
+// green / grey / hazel / amber irises and defaults to "brown" or "blue"
+// — both because those are the global modal eye colours and because under
+// most photo lighting a green or grey iris reads as a desaturated blue.
+// A single-purpose call against the tight face crop, with the option list
+// up front and an explicit "don't default" instruction, lifts detection
+// accuracy on the easy-to-miss colours dramatically.
+async function detectEyeColor(env, bytes) {
+  if (!env.AI) return null;
+  try {
+    const out = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+      image: [...bytes],
+      max_tokens: 24,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise eye-colour detector. Look at the iris of " +
+            "BOTH eyes (the coloured ring around the pupil, NOT the pupil " +
+            "itself, NOT the white of the eye). Reply with ONLY one short " +
+            "phrase, no other words, no JSON, no punctuation, in this " +
+            "format:\n" +
+            "  \"<colour> eyes\"\n" +
+            "Colour options — pick the most specific match: \"brown\", " +
+            "\"dark brown\", \"light brown\", \"hazel\" (brown with green " +
+            "or gold flecks), \"amber\" (light brown with gold cast), " +
+            "\"blue\", \"light blue\", \"deep blue\", \"blue-grey\", " +
+            "\"green\", \"deep green\", \"light green\", \"grey\", " +
+            "\"grey-green\". " +
+            "Examples: \"green eyes\", \"hazel eyes\", \"grey eyes\", " +
+            "\"deep blue eyes\". " +
+            "CRITICAL: green, grey and hazel are commonly missed because " +
+            "they read as desaturated blue under flat indoor lighting. " +
+            "If the iris is clearly NOT brown and NOT clearly saturated " +
+            "blue, look harder before defaulting — it is probably green, " +
+            "grey or hazel. Equally: if the iris IS clearly dark, do not " +
+            "invent green or grey. Be honest about what you see.",
+        },
+        { role: "user", content: "What colour are this person's eyes? Reply with the phrase only." },
+      ],
+    });
+    const raw = String((out && (out.response ?? out.description ?? out.text)) || "").trim();
+    const cleaned = raw.replace(/^["'`]+|["'`.,;:!?]+$/g, "").trim().toLowerCase();
+    if (!cleaned) return null;
+    // Must look like an eye phrase
+    if (!/\beyes?\b/.test(cleaned)) return null;
+    return cleaned;
+  } catch (err) {
+    console.warn(`[pipeline] eye re-check failed: ${err?.message}`);
+    return null;
+  }
+}
+
+// Merge omnibus eye value with focused eye-colour detector. Prefer the
+// focused result when it disagrees AND looks more specific — because the
+// focused call's explicit option list pushes it past the common
+// "default-to-brown-or-blue" failure mode that the omnibus exhibits.
+function mergeEyeColor(omnibus, focused) {
+  if (!focused) return omnibus || "";
+  if (!omnibus) return focused;
+  // Strong-signal colours that the focused detector is especially good at
+  // catching — if the focused call sees these, take it even if omnibus
+  // disagrees. Otherwise fall back to "longer / more specific phrase wins"
+  // which biases toward the more descriptive answer.
+  const strongFocused = /\b(green|hazel|amber|grey|grey-?green|blue-?grey)\b/i.test(focused);
+  if (strongFocused && !new RegExp("\\b" + focused.replace(/[^a-z\- ]/g, "").trim() + "\\b", "i").test(omnibus)) {
+    return focused;
+  }
   return focused.length > omnibus.length ? focused : omnibus;
 }
 
