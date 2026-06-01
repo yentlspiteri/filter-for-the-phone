@@ -1828,10 +1828,18 @@ async function renderTarotCard() {
 
   // ----- White pill banner with archetype name (serif, overlapping
   // the bottom of the illustration like in the reference cards).
-  const bannerW = cardW * 0.78;
-  const bannerH = 108;
+  //
+  // Sized so the pill's BOTTOM edge sits flush with the photo's bottom
+  // edge (i.e. at `photoY + photoH`). Previously the pill bottom was
+  // 14px above the photo bottom, leaving a strip where the AI's
+  // unrequested tarot-card labelling (the model loves to scribble
+  // gibberish words at the bottom of cards) would leak through under
+  // the pill. Flush placement plus a slightly wider + taller pill
+  // covers that strip completely.
+  const bannerW = cardW * 0.82;     // was 0.78 — slight horizontal safety margin
+  const bannerH = 126;              // was 108 — extra 18px absorbs more bottom-of-photo
   const bannerX = cardX + (cardW - bannerW) / 2;
-  const bannerY = cardY + cardH - bannerH - 36;
+  const bannerY = photoY + photoH - bannerH;  // flush with photo bottom (was -36 from card bottom)
   const bannerR = bannerH / 2;
 
   ctx.save();
