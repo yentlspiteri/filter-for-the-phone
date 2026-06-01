@@ -827,52 +827,58 @@ async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
     const subject = parseSubjectJson(raw);
     if (subject) console.log(`[pipeline] subject=${JSON.stringify(subject)}`);
 
-    // Facial-hair re-check. Llama 3.2 Vision under-reports facial hair when
-    // also extracting 10 other JSON fields — it especially misses STUBBLE,
-    // thin moustaches, goatees, and short beards. We run a focused
-    // single-purpose call for ALL male subjects (not just those the first
-    // pass labelled clean-shaven) so we also CONFIRM and REFINE positive
-    // answers, not just rescue clean-shaven mislabels.
+    // Focused re-checks (Workers AI path only). Three independent single-
+    // purpose vision calls that confirm / refine the omnibus answer:
     //
-    // Merge policy (mergeFacialHair):
-    //   focused finds hair, omnibus missed it     → take focused
-    //   focused finds clean, omnibus saw hair     → keep omnibus (don't erase)
-    //   both find hair                            → take the more specific one
-    //   both clean-shaven                         → keep clean-shaven
-    if (subject && /\b(man|male)\b/i.test(subject.gender || "")) {
-      const focused = await detectFacialHair(env, bytes);
-      const merged = mergeFacialHair(subject.facial, focused);
-      if (merged !== subject.facial) {
-        console.log(`[pipeline] facial-hair re-check: omnibus="${subject.facial}" focused="${focused}" → "${merged}"`);
-        subject.facial = merged;
-      }
-    }
-
-    // Hair-colour re-check. The omnibus call frequently swings between similar
-    // colours (brown ↔ blonde ↔ dark-blonde, black ↔ very dark brown) because
-    // lighting / highlights confuse a multi-attribute pass. Focused detector
-    // looks at hair specifically and reports a confident colour + length.
-    if (subject && !/bald|shaved head|no hair/i.test(subject.hair || "")) {
-      const focusedHair = await detectHairColor(env, bytes);
-      const mergedHair = mergeHair(subject.hair, focusedHair);
-      if (mergedHair !== subject.hair) {
-        console.log(`[pipeline] hair re-check: omnibus="${subject.hair}" focused="${focusedHair}" → "${mergedHair}"`);
-        subject.hair = mergedHair;
-      }
-    }
-
-    // Glasses re-check. The omnibus call buries glasses inside the "notable"
-    // free-text field, where it's often dropped entirely. Glasses are a major
-    // identity feature — when missed, the model invents random stylised eyes
-    // in the empty space where the frames should be. Focused detector
-    // confirms presence + style, and we merge it into `notable` so the
-    // downstream directive (buildSubjectDirective) picks it up.
+    //   - detectFacialHair (males only)  — catches stubble / moustache /
+    //                                       goatee / short beards the omnibus
+    //                                       JSON pass loses across 10 fields.
+    //   - detectHairColor (non-bald)     — resolves brown↔blonde ↔ black ↔
+    //                                       dark-brown ambiguity under
+    //                                       inconsistent lighting.
+    //   - detectGlasses (everyone)       — rescues glasses dropped from the
+    //                                       free-text "notable" field.
+    //
+    // Each detector is an independent Workers AI call (~2-3s) against the
+    // same `bytes`. Previously serialized — total +6-9s per render. Now
+    // parallelized via Promise.all → wall-clock = slowest single call
+    // (~2-3s). Identity accuracy unchanged, latency dramatically lower.
+    //
+    // Per-detector .catch(()=>null) so one slow detector doesn't tank the
+    // whole pipeline — the merge step treats null exactly like "skipped"
+    // and falls back to the omnibus answer.
     if (subject) {
-      const focusedGlasses = await detectGlasses(env, bytes);
-      const mergedNotable = mergeGlassesIntoNotable(subject.notable, focusedGlasses);
-      if (mergedNotable !== subject.notable) {
-        console.log(`[pipeline] glasses re-check: notable was="${subject.notable}" focused="${focusedGlasses}" → "${mergedNotable}"`);
-        subject.notable = mergedNotable;
+      const isMale = /\b(man|male)\b/i.test(subject.gender || "");
+      const isBald = /bald|shaved head|no hair/i.test(subject.hair || "");
+
+      const [focusedFacial, focusedHair, focusedGlasses] = await Promise.all([
+        isMale  ? detectFacialHair(env, bytes).catch(() => null) : Promise.resolve(null),
+        !isBald ? detectHairColor(env, bytes).catch(() => null) : Promise.resolve(null),
+        detectGlasses(env, bytes).catch(() => null),
+      ]);
+
+      // Merge policy is unchanged from the sequential version — focused
+      // overrides only when more specific / when omnibus missed something.
+      if (focusedFacial !== null) {
+        const merged = mergeFacialHair(subject.facial, focusedFacial);
+        if (merged !== subject.facial) {
+          console.log(`[pipeline] facial-hair re-check: omnibus="${subject.facial}" focused="${focusedFacial}" → "${merged}"`);
+          subject.facial = merged;
+        }
+      }
+      if (focusedHair !== null) {
+        const mergedHair = mergeHair(subject.hair, focusedHair);
+        if (mergedHair !== subject.hair) {
+          console.log(`[pipeline] hair re-check: omnibus="${subject.hair}" focused="${focusedHair}" → "${mergedHair}"`);
+          subject.hair = mergedHair;
+        }
+      }
+      if (focusedGlasses !== null) {
+        const mergedNotable = mergeGlassesIntoNotable(subject.notable, focusedGlasses);
+        if (mergedNotable !== subject.notable) {
+          console.log(`[pipeline] glasses re-check: notable was="${subject.notable}" focused="${focusedGlasses}" → "${mergedNotable}"`);
+          subject.notable = mergedNotable;
+        }
       }
     }
 
@@ -1541,7 +1547,7 @@ async function runPortraitPipeline(env, image, archetype, faceImage) {
         prompt,
         reference_image_url: image,   // user's face — PuLID anchors on this
         image_size: "portrait_4_3",   // editorial portrait crop
-        num_inference_steps: 28,      // bumped from 22 — fine facial detail (especially pupil alignment / eye symmetry) crystallises with more sampling steps. Adds ~3s to render time and ~$0.01 per render but materially reduces cross-eyed / lazy-eye artifacts.
+        num_inference_steps: 22,      // dropped from 28 (which was bumped originally for cross-eye fix in #13). Eye alignment is now also enforced via STYLE_TRAIL ("BOTH PUPILS ALIGNED…") + dedicated negative-prompt block (cross-eyed, walleyed, lazy eye…) — the prompt-side directives carry the eye-alignment work, freeing the step count to drop back. Saves ~3s/render.
         guidance_scale: 7,            // pushed up hard — Flux base has a photo bias; high CFG forces the illustration prompt to win
         true_cfg: 1,
         // id_weight tuned per-subject: PuLID's face embedding is trained on
