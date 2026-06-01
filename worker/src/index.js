@@ -2353,6 +2353,17 @@ function renderWallHtml(win) {
       width: 100%; height: 100%;
       object-fit: cover;
     }
+    /* Bottom-of-tile fade — hides any gibberish text/labels the AI tries
+       to draw at the bottom of the image. Fades the bottom strip into the
+       card background so the brand pill sits on a clean gradient. */
+    .tile .tile-fade {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 18%;
+      background: linear-gradient(to top, var(--card-bg) 0%, var(--card-bg) 45%, rgba(26,6,16,0) 100%);
+      pointer-events: none;
+      z-index: 1;
+    }
     .tile .pill {
       position: absolute;
       bottom: 18px; left: 50%;
@@ -2368,6 +2379,7 @@ function renderWallHtml(win) {
       border-radius: 999px;
       white-space: nowrap;
       box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+      z-index: 2;
     }
     .tile.new::before {
       content: "JUST IN";
@@ -2468,6 +2480,174 @@ function renderWallHtml(win) {
       letter-spacing: 0.22em;
       text-transform: uppercase;
     }
+
+    /* ------- Live archetype tally (small strip below the header) ------- */
+    .tally {
+      padding: 14px 48px 18px;
+      display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+      border-bottom: 1px solid rgba(255,214,187,0.08);
+      font-family: "General Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .tally-chip {
+      display: inline-flex; align-items: baseline; gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(255,214,187,0.06);
+      border: 1px solid rgba(255,214,187,0.14);
+      font-size: 13px; letter-spacing: 0.10em; text-transform: uppercase;
+      color: rgba(255,214,187,0.80);
+      transition: background 200ms, border-color 200ms, color 200ms, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tally-chip strong { color: var(--peach); font-weight: 800; font-size: 14px; letter-spacing: 0; }
+    .tally-chip.top {
+      background: linear-gradient(135deg, rgba(253,136,57,0.30), rgba(204,28,14,0.20));
+      border-color: rgba(253,136,57,0.50);
+      color: var(--peach);
+    }
+    .tally-chip.bumped { animation: chip-bump 600ms ease-out; }
+    @keyframes chip-bump {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+
+    /* ------- Spotlight reveal overlay (new tile takes the whole screen briefly) ------- */
+    .spotlight {
+      position: fixed; inset: 0;
+      display: none;
+      align-items: center; justify-content: center;
+      z-index: 50;
+      background: radial-gradient(60% 50% at 50% 50%, rgba(13,3,8,0.85) 0%, rgba(13,3,8,0.97) 80%);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      animation: spot-fade-in 420ms ease-out;
+    }
+    .spotlight.visible { display: flex; }
+    .spotlight.closing { animation: spot-fade-out 480ms ease-in both; }
+    .spotlight-card {
+      position: relative;
+      width: min(58vh, 60vw);
+      aspect-ratio: 3 / 4;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 6px rgba(255,214,187,0.18),
+        0 0 80px 14px rgba(253,136,57,0.40),
+        0 26px 80px rgba(0,0,0,0.7);
+      transform: scale(0.6);
+      animation: spot-pop 520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .spotlight-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .spotlight-card .spotlight-fade {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 18%;
+      background: linear-gradient(to top, rgba(26,6,16,1) 0%, rgba(26,6,16,1) 40%, rgba(26,6,16,0) 100%);
+      pointer-events: none;
+    }
+    .spotlight-card .spotlight-pill {
+      position: absolute; bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--peach);
+      color: var(--wine);
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 12px 28px;
+      border-radius: 999px;
+      white-space: nowrap;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+    }
+    .spotlight-eyebrow {
+      position: absolute; top: 10vh; left: 50%;
+      transform: translateX(-50%);
+      font-family: "Aileron", "General Sans", sans-serif;
+      font-weight: 900;
+      font-size: 16px;
+      letter-spacing: 0.40em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, var(--orange), var(--red), var(--wine));
+      -webkit-background-clip: text;
+              background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    @keyframes spot-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes spot-fade-out { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes spot-pop {
+      0%   { transform: scale(0.6) translateY(40px); opacity: 0; }
+      55%  { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(1)   translateY(0);  opacity: 1; }
+    }
+
+    /* ------- Milestone celebration (confetti banner at round-number counts) ------- */
+    .milestone {
+      position: fixed;
+      top: 16vh; left: 50%;
+      transform: translateX(-50%);
+      z-index: 60;
+      display: none;
+      flex-direction: column;
+      align-items: center; text-align: center;
+      pointer-events: none;
+    }
+    .milestone.visible { display: flex; animation: milestone-in 500ms cubic-bezier(0.16, 1, 0.3, 1); }
+    .milestone.closing { animation: milestone-out 600ms ease-in both; }
+    .milestone-eyebrow {
+      font-family: "Aileron", "General Sans", sans-serif;
+      font-weight: 900;
+      font-size: 16px;
+      letter-spacing: 0.40em;
+      text-transform: uppercase;
+      color: var(--peach);
+      opacity: 0.78;
+    }
+    .milestone-count {
+      font-family: "Aileron", "General Sans", sans-serif;
+      font-weight: 900;
+      font-size: clamp(72px, 12vw, 168px);
+      line-height: 1;
+      margin-top: 6px;
+      background: linear-gradient(135deg, var(--orange), var(--red), var(--wine));
+      -webkit-background-clip: text;
+              background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+    .milestone-sub {
+      font-family: "Aileron", "General Sans", sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--peach);
+      margin-top: 8px;
+    }
+    @keyframes milestone-in {
+      0%   { opacity: 0; transform: translate(-50%, -16px) scale(0.85); }
+      100% { opacity: 1; transform: translate(-50%, 0)     scale(1); }
+    }
+    @keyframes milestone-out {
+      0%   { opacity: 1; transform: translate(-50%, 0)    scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -8px) scale(0.96); }
+    }
+    /* Confetti particles — CSS-only, falling peach/orange/wine dots */
+    .confetti {
+      position: fixed; inset: 0; pointer-events: none; z-index: 55;
+      overflow: hidden;
+    }
+    .confetti span {
+      position: absolute; top: -20px;
+      width: 12px; height: 16px;
+      border-radius: 2px;
+      animation: confetti-fall 3.6s cubic-bezier(0.55, 0, 0.42, 1) forwards;
+      opacity: 0;
+    }
+    @keyframes confetti-fall {
+      0%   { transform: translateY(-10vh) rotate(0deg);    opacity: 1; }
+      80%  { opacity: 1; }
+      100% { transform: translateY(110vh) rotate(720deg);  opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -2478,7 +2658,25 @@ function renderWallHtml(win) {
       <span class="count"><span id="count">—</span> revealed</span>
     </div>
   </header>
+  <div class="tally" id="tally" aria-label="Live archetype distribution"></div>
   <div class="wall" id="wall"></div>
+
+  <!-- Spotlight overlay (new tile fills the screen briefly on first arrival) -->
+  <div class="spotlight" id="spotlight" aria-hidden="true">
+    <div class="spotlight-eyebrow">Just revealed</div>
+    <div class="spotlight-card" id="spotlightCard">
+      <img id="spotlightImg" alt="" />
+      <div class="spotlight-fade"></div>
+      <div class="spotlight-pill" id="spotlightPill"></div>
+    </div>
+  </div>
+
+  <!-- Milestone celebration (banner + confetti at round-number counts) -->
+  <div class="milestone" id="milestone" aria-hidden="true">
+    <div class="milestone-eyebrow">Milestone</div>
+    <div class="milestone-count" id="milestoneCount">0</div>
+    <div class="milestone-sub" id="milestoneSub">archetypes revealed</div>
+  </div>
 
   <aside class="qr-card" aria-label="Scan to create yours and win a surprise prize">
     <div class="qr-prize">Win a <span class="accent">surprise prize</span></div>
@@ -2503,20 +2701,135 @@ function renderWallHtml(win) {
       const tile = document.createElement("div");
       tile.className = "tile" + (isNew ? " new" : "");
       tile.dataset.key = item.key;
+      tile.dataset.archetype = item.archetype;
       const name = NAMES[item.archetype] || ("The " + item.archetype);
       const img = document.createElement("img");
       img.loading = "lazy";
       img.alt = name;
       img.src = tileUrl(item);
+      // Bottom fade — masks any gibberish text the AI tried to put at the
+      // bottom of the image. The brand pill sits on top of this fade.
+      const fade = document.createElement("div");
+      fade.className = "tile-fade";
       const pill = document.createElement("div");
       pill.className = "pill";
       pill.textContent = name;
       tile.appendChild(img);
+      tile.appendChild(fade);
       tile.appendChild(pill);
       if (isNew) {
         setTimeout(() => tile.classList.remove("new"), NEW_BADGE_MS);
       }
       return tile;
+    }
+
+    // ------- Spotlight reveal (new tile takes the whole screen briefly) -------
+    let spotlightTimer = null;
+    function showSpotlight(item) {
+      const overlay = document.getElementById("spotlight");
+      const img = document.getElementById("spotlightImg");
+      const pill = document.getElementById("spotlightPill");
+      img.src = tileUrl(item);
+      img.alt = NAMES[item.archetype] || item.archetype;
+      pill.textContent = NAMES[item.archetype] || ("The " + item.archetype);
+      overlay.classList.remove("closing");
+      overlay.classList.add("visible");
+      overlay.setAttribute("aria-hidden", "false");
+
+      // Auto-close after ~3.6s with a fade-out, then the tile is visible
+      // in its grid position underneath.
+      if (spotlightTimer) clearTimeout(spotlightTimer);
+      spotlightTimer = setTimeout(() => {
+        overlay.classList.add("closing");
+        setTimeout(() => {
+          overlay.classList.remove("visible", "closing");
+          overlay.setAttribute("aria-hidden", "true");
+        }, 480);
+      }, 3600);
+    }
+
+    // ------- Live archetype tally (chips under header) -------
+    let prevTopArchetype = null;
+    function updateTally(items) {
+      const tally = document.getElementById("tally");
+      if (!tally) return;
+      const counts = {};
+      for (const it of items) counts[it.archetype] = (counts[it.archetype] || 0) + 1;
+      // Sort by count desc, then by archetype name (stable)
+      const entries = Object.entries(counts).sort(function (a, b) {
+        return b[1] - a[1] || a[0].localeCompare(b[0]);
+      });
+      const topArch = entries.length ? entries[0][0] : null;
+      const existing = new Map();
+      Array.from(tally.children).forEach(function (el) { existing.set(el.dataset.archetype, el); });
+      tally.innerHTML = "";
+      entries.forEach(function (entry, idx) {
+        const arch = entry[0];
+        const n = entry[1];
+        const chip = document.createElement("span");
+        chip.className = "tally-chip" + (idx === 0 ? " top" : "");
+        chip.dataset.archetype = arch;
+        const label = document.createElement("span");
+        label.textContent = (NAMES[arch] || arch).replace(/^The /, "");
+        const num = document.createElement("strong");
+        num.textContent = n;
+        chip.appendChild(label);
+        chip.appendChild(num);
+        // Bump animation when the count changed since last refresh
+        const prev = existing.get(arch);
+        const prevText = prev ? prev.querySelector("strong")?.textContent : null;
+        if (prev && prevText && Number(prevText) !== n) {
+          chip.classList.add("bumped");
+        }
+        tally.appendChild(chip);
+      });
+      prevTopArchetype = topArch;
+    }
+
+    // ------- Milestone celebrations -------
+    const MILESTONES = [5, 10, 25, 50, 75, 100, 150, 200, 300, 500, 1000];
+    let highestMilestoneShown = 0;
+    function checkMilestone(count) {
+      // Find the largest milestone we've crossed but not yet celebrated
+      let toShow = 0;
+      for (const m of MILESTONES) {
+        if (count >= m && m > highestMilestoneShown) toShow = m;
+      }
+      if (toShow > 0) {
+        highestMilestoneShown = toShow;
+        showMilestone(toShow);
+      }
+    }
+    function showMilestone(n) {
+      const banner = document.getElementById("milestone");
+      document.getElementById("milestoneCount").textContent = n;
+      banner.classList.remove("closing");
+      banner.classList.add("visible");
+      banner.setAttribute("aria-hidden", "false");
+      fireConfetti(80);
+      setTimeout(function () {
+        banner.classList.add("closing");
+        setTimeout(function () {
+          banner.classList.remove("visible", "closing");
+          banner.setAttribute("aria-hidden", "true");
+        }, 600);
+      }, 3400);
+    }
+    function fireConfetti(count) {
+      const colors = ["#FFD6BB", "#FD8839", "#CC1C0E", "#99112F"];
+      const container = document.createElement("div");
+      container.className = "confetti";
+      for (let i = 0; i < count; i++) {
+        const piece = document.createElement("span");
+        piece.style.left = Math.random() * 100 + "vw";
+        piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+        piece.style.animationDelay = (Math.random() * 0.5) + "s";
+        piece.style.animationDuration = (3 + Math.random() * 1.4) + "s";
+        piece.style.transform = "rotate(" + (Math.random() * 360) + "deg)";
+        container.appendChild(piece);
+      }
+      document.body.appendChild(container);
+      setTimeout(function () { container.remove(); }, 5000);
     }
 
     async function refresh() {
@@ -2529,33 +2842,50 @@ function renderWallHtml(win) {
         const count = document.getElementById("count");
         count.textContent = items.length;
 
+        // Always update tally (even when empty — clears stale chips)
+        updateTally(items);
+
         if (!items.length) {
           wall.innerHTML = '<div class="empty"><span class="blink"></span>Waiting for the first reveal…</div>';
           seenKeys.clear();
           firstLoad = true;
+          highestMilestoneShown = 0; // reset so milestones re-fire after a clear
           return;
         }
 
         if (firstLoad) {
-          // Initial paint — render all items in order, no NEW badge.
+          // Initial paint — render all items in order, no NEW badge, no
+          // spotlight, no milestone celebration (those are for fresh arrivals).
           wall.innerHTML = "";
           items.forEach((item) => {
             wall.appendChild(makeTile(item, false));
             seenKeys.add(item.key);
           });
           firstLoad = false;
+          // Set milestone baseline so we don't re-celebrate already-passed counts
+          for (const m of MILESTONES) {
+            if (items.length >= m) highestMilestoneShown = m;
+          }
           return;
         }
 
         // Subsequent polls — find items we haven't seen yet, prepend them
-        // to the wall (newest first) with the JUST IN badge. They slide
-        // existing tiles down via the CSS grid auto-flow.
+        // to the wall (newest first) with the JUST IN badge.
         const newItems = items.filter((it) => !seenKeys.has(it.key));
+        if (newItems.length > 0) {
+          // Spotlight reveal — only for the freshest single new tile to avoid
+          // overlapping spotlights. The other new items still fly in via the
+          // tile-in CSS animation.
+          showSpotlight(newItems[0]);
+        }
         newItems.reverse().forEach((it) => {
           const tile = makeTile(it, true);
           wall.insertBefore(tile, wall.firstChild);
           seenKeys.add(it.key);
         });
+
+        // Milestone check on the post-update total
+        checkMilestone(items.length);
 
         // Soft cap — keep DOM lean for long events.
         while (wall.children.length > MAX_TILES) {
