@@ -737,6 +737,7 @@ export default {
     // admin /gallery view exposes the UI, but the endpoint itself can also
     // be curled by anyone with the key (useful for bulk-cleanup scripts).
     if (request.method === "DELETE") {
+      if (url.pathname === "/gallery/before")          return handleGalleryBulkDelete(request, env, url, cors);
       if (url.pathname.startsWith("/portrait-image/")) return handlePortraitDelete(request, env, url, cors);
       return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
     }
@@ -2048,6 +2049,61 @@ async function handlePortraitDelete(_request, env, url, cors) {
   }
 }
 
+// DELETE /gallery/before?key=<GALLERY_KEY>&ts=<unix-ms>
+//   Bulk-deletes every portrait whose upload timestamp is < the ts cutoff.
+//   Used by the admin /gallery's "Cleanup older" panel to clear test renders
+//   in one shot rather than clicking the × on each tile.
+//
+//   Notes:
+//     - Uses obj.uploaded.getTime() from the list call rather than head()ing
+//       each object — much faster (no per-object round-trip). The customMetadata
+//       ts and obj.uploaded are within milliseconds of each other anyway since
+//       saveToGallery puts them at the same moment.
+//     - Skips "gallery-stats.json" (the scan counter file) so we don't nuke it
+//       by accident on a wide cutoff.
+//     - Uses R2's bulk delete (passes an array of keys to env.PORTRAITS.delete).
+//       R2 bulk delete supports up to 1000 keys per call; we chunk for safety.
+async function handleGalleryBulkDelete(_request, env, url, cors) {
+  const jsonHeaders = { ...cors, "Content-Type": "application/json" };
+  if (!env.GALLERY_KEY) return new Response(JSON.stringify({ error: "no_key_config" }), { status: 500, headers: jsonHeaders });
+  const auth = url.searchParams.get("key") || "";
+  if (auth !== env.GALLERY_KEY) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: jsonHeaders });
+  if (!env.PORTRAITS) return new Response(JSON.stringify({ error: "no_r2" }), { status: 500, headers: jsonHeaders });
+
+  const ts = Number(url.searchParams.get("ts"));
+  if (!Number.isFinite(ts) || ts <= 0) {
+    return new Response(JSON.stringify({ error: "bad_ts", message: "ts must be a positive unix-ms number" }), { status: 400, headers: jsonHeaders });
+  }
+
+  // Walk the bucket (paginated) and collect candidate keys.
+  const toDelete = [];
+  let cursor;
+  do {
+    const list = await env.PORTRAITS.list({ limit: 1000, cursor });
+    cursor = list.truncated ? list.cursor : undefined;
+    for (const obj of (list.objects || [])) {
+      if (obj.key === "gallery-stats.json") continue;
+      const objTs = obj.uploaded?.getTime?.() || 0;
+      if (objTs < ts) toDelete.push(obj.key);
+    }
+  } while (cursor);
+
+  // Bulk-delete in chunks of 1000 (R2's per-call limit).
+  let deleted = 0;
+  for (let i = 0; i < toDelete.length; i += 1000) {
+    const chunk = toDelete.slice(i, i + 1000);
+    try {
+      await env.PORTRAITS.delete(chunk);
+      deleted += chunk.length;
+    } catch (err) {
+      console.warn(`[gallery-bulk] chunk delete failed at offset ${i}: ${err?.message}`);
+    }
+  }
+
+  console.log(`[gallery-bulk] deleted ${deleted}/${toDelete.length} portraits before ts=${ts} (${new Date(ts).toISOString()})`);
+  return new Response(JSON.stringify({ ok: true, deleted, candidates: toDelete.length, cutoffMs: ts }), { status: 200, headers: jsonHeaders });
+}
+
 // GET /scan — the QR-code target. Counts the scan (best-effort) then
 // 302-redirects to the live site with ?src=wall so any further analytics
 // can distinguish QR-sourced traffic. Public — no auth.
@@ -2564,7 +2620,7 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
 <html><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Von Peach — Portrait Gallery</title>
+  <title>Von Peach — The Game Changer Gallery</title>
   <!-- QR generator for the "scan to win" CTA card. ~5KB lazy-loaded. -->
   <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <style>
@@ -2585,24 +2641,38 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
     }
     /* Header — sized up for 16:9 event-display viewing distance. */
     header {
-      padding:30px 48px 20px;
+      padding:24px 48px 20px;
       display:flex; align-items:center; justify-content:space-between; gap:24px;
       border-bottom:1px solid rgba(255,214,187,0.10);
       background:linear-gradient(180deg, rgba(13,3,8,0.92), rgba(13,3,8,0.72));
       position:sticky; top:0; z-index:10;
       backdrop-filter:blur(12px);
       -webkit-backdrop-filter:blur(12px);
+      flex-wrap:wrap;
+    }
+    .header-left { display:flex; align-items:center; gap:22px; min-width:0; }
+    /* Von Peach logo — uses the PNG as a CSS mask, recoloured to brand
+       peach. Same trick used by the static site so we don't ship a
+       separate tinted PNG. */
+    .brand-logo {
+      display:block;
+      width:200px; height:44px;
+      background-color: var(--peach);
+      -webkit-mask:url('https://tarot.vonpeach.com/vonpeach-logo.png') no-repeat left center / contain;
+              mask:url('https://tarot.vonpeach.com/vonpeach-logo.png') no-repeat left center / contain;
+      flex-shrink:0;
     }
     header h1 {
-      margin:0; font-size:30px; font-weight:900; letter-spacing:0.10em;
+      margin:0; font-size:26px; font-weight:900; letter-spacing:0.08em;
       text-transform:uppercase;
       background:linear-gradient(135deg, var(--orange) 0%, var(--red) 55%, var(--wine) 100%);
       -webkit-background-clip:text;
               background-clip:text;
       -webkit-text-fill-color:transparent;
+      line-height:1.1;
     }
-    .header-totals {
-      display:flex; gap:14px; align-items:center;
+    .header-right {
+      display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:flex-end;
     }
     .total {
       color:var(--peach);
@@ -2613,6 +2683,62 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
       font-size:14px; font-weight:700;
       letter-spacing:0.14em;
       text-transform:uppercase;
+    }
+    /* Cleanup button (bulk-delete-by-cutoff) */
+    .cleanup-btn {
+      appearance:none; border:0; cursor:pointer;
+      background:linear-gradient(135deg, var(--orange), var(--red) 60%, var(--wine));
+      color:#fff;
+      padding:9px 18px;
+      border-radius:999px;
+      font-size:13px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase;
+      box-shadow:0 6px 18px rgba(204,28,14,0.32);
+      font-family:inherit;
+    }
+    .cleanup-btn:hover { filter:brightness(1.08); }
+    /* Cleanup panel — drops below the header when the button is toggled */
+    .cleanup-panel {
+      padding:18px 48px;
+      display:flex; flex-wrap:wrap; gap:14px; align-items:center;
+      background:rgba(204,28,14,0.10);
+      border-bottom:1px solid rgba(204,28,14,0.30);
+    }
+    .cleanup-panel label { font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:rgba(255,214,187,0.85); font-weight:700; }
+    .cleanup-panel input[type="datetime-local"] {
+      background:var(--card-bg);
+      color:var(--peach);
+      border:1px solid rgba(255,214,187,0.20);
+      border-radius:10px;
+      padding:9px 14px;
+      font-size:14px;
+      font-family:inherit;
+      color-scheme:dark;
+    }
+    .cleanup-panel button {
+      appearance:none; border:0; cursor:pointer;
+      padding:9px 18px;
+      border-radius:999px;
+      font-size:13px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase;
+      font-family:inherit;
+    }
+    .cleanup-panel .preview-btn {
+      background:rgba(255,214,187,0.10);
+      color:var(--peach);
+      border:1px solid rgba(255,214,187,0.20);
+    }
+    .cleanup-panel .execute-btn {
+      background:linear-gradient(135deg, #CC1C0E, #99112F);
+      color:#fff;
+      box-shadow:0 6px 18px rgba(204,28,14,0.4);
+    }
+    .cleanup-panel .execute-btn:disabled { opacity:0.45; cursor:not-allowed; box-shadow:none; }
+    .cleanup-panel .preset { font-size:12px; letter-spacing:0.10em; text-transform:uppercase; padding:6px 12px; background:rgba(255,214,187,0.06); border:1px solid rgba(255,214,187,0.14); }
+    .cleanup-result {
+      margin-left:auto;
+      color:var(--peach);
+      font-size:13px;
+      letter-spacing:0.06em;
+      opacity:0.75;
     }
     .filters {
       padding:18px 48px; display:flex; flex-wrap:wrap; gap:10px;
@@ -2726,12 +2852,25 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
   </style>
 </head><body>
   <header>
-    <h1>Portrait Gallery</h1>
-    <div class="header-totals">
+    <div class="header-left">
+      <span class="brand-logo" aria-label="Von Peach"></span>
+      <h1>The Game Changer Gallery</h1>
+    </div>
+    <div class="header-right">
       <span class="total" id="portraitTotal">${totalCount} total</span>
       <span class="total" id="scanTotal" title="QR scans on the event wall">— scans</span>
+      <button class="cleanup-btn" id="cleanupBtn" title="Bulk-delete portraits older than a chosen date/time">Cleanup older</button>
     </div>
   </header>
+  <!-- Cleanup panel — toggled by the Cleanup button. Lets admin pick a
+       cutoff datetime and bulk-delete every portrait older than that. -->
+  <div class="cleanup-panel" id="cleanupPanel" hidden>
+    <label for="cleanupCutoff">Delete everything older than</label>
+    <input type="datetime-local" id="cleanupCutoff" step="1" />
+    <button class="preview-btn" id="cleanupPreview">Preview</button>
+    <button class="execute-btn" id="cleanupExecute" disabled>Delete</button>
+    <span class="cleanup-result" id="cleanupResult">Pick a cutoff, then preview</span>
+  </div>
   <div class="filters">
     ${filterLink("",          "All")}
     ${filterLink("charmer",   "Charmer")}
@@ -2829,6 +2968,80 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
             btn.textContent = "×";
           }
         });
+      });
+
+      // ---------- Bulk cleanup by cutoff ----------
+      // Click "Cleanup older" → datetime panel drops down. Pick a cutoff,
+      // click Preview to see how many portraits would be deleted, then
+      // click Delete to execute. Uses the bulk DELETE /gallery/before
+      // endpoint which deletes via R2's bulk-delete API.
+      const cleanupBtn     = document.getElementById("cleanupBtn");
+      const cleanupPanel   = document.getElementById("cleanupPanel");
+      const cleanupCutoff  = document.getElementById("cleanupCutoff");
+      const cleanupPreview = document.getElementById("cleanupPreview");
+      const cleanupExecute = document.getElementById("cleanupExecute");
+      const cleanupResult  = document.getElementById("cleanupResult");
+
+      // Default cutoff = NOW in the user's local timezone, in the
+      // datetime-local input format (YYYY-MM-DDTHH:MM:SS, no TZ).
+      function nowLocalISO() {
+        const d = new Date();
+        const off = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - off).toISOString().slice(0, 19);
+      }
+      cleanupCutoff.value = nowLocalISO();
+
+      cleanupBtn.addEventListener("click", function () {
+        cleanupPanel.hidden = !cleanupPanel.hidden;
+      });
+
+      cleanupPreview.addEventListener("click", async function () {
+        const cutoffMs = new Date(cleanupCutoff.value).getTime();
+        if (!Number.isFinite(cutoffMs)) {
+          cleanupResult.textContent = "Pick a valid date/time first";
+          return;
+        }
+        cleanupResult.textContent = "Counting…";
+        cleanupExecute.disabled = true;
+        try {
+          const res = await fetch("/gallery.json?window=all", { cache: "no-store" });
+          const data = await res.json();
+          const matches = (data.items || []).filter(function (it) { return it.ts < cutoffMs; });
+          cleanupResult.textContent = matches.length === 0
+            ? "Nothing older than that cutoff"
+            : "Would delete " + matches.length + " portrait" + (matches.length === 1 ? "" : "s");
+          cleanupExecute.disabled = matches.length === 0;
+          cleanupExecute.dataset.count = String(matches.length);
+          cleanupExecute.dataset.cutoff = String(cutoffMs);
+          cleanupExecute.textContent = matches.length > 0 ? ("Delete " + matches.length) : "Delete";
+        } catch (err) {
+          cleanupResult.textContent = "Preview failed: " + (err && err.message ? err.message : err);
+        }
+      });
+
+      cleanupExecute.addEventListener("click", async function () {
+        const cutoff = cleanupExecute.dataset.cutoff;
+        const count  = cleanupExecute.dataset.count;
+        if (!cutoff) return;
+        if (!confirm("Delete " + count + " portrait" + (count === "1" ? "" : "s") + "? This can't be undone.")) return;
+        cleanupExecute.disabled = true;
+        cleanupExecute.textContent = "Deleting…";
+        cleanupResult.textContent = "";
+        try {
+          const url = "/gallery/before?key=" + KEY + "&ts=" + encodeURIComponent(cutoff);
+          const res = await fetch(url, { method: "DELETE" });
+          if (!res.ok) {
+            const detail = await res.text().catch(function(){return "";});
+            throw new Error("HTTP " + res.status + (detail ? " — " + detail.slice(0, 120) : ""));
+          }
+          const data = await res.json();
+          cleanupResult.textContent = "Deleted " + (data.deleted || 0) + " — refreshing…";
+          setTimeout(function () { location.reload(); }, 1200);
+        } catch (err) {
+          cleanupResult.textContent = "Delete failed: " + (err && err.message ? err.message : err);
+          cleanupExecute.disabled = false;
+          cleanupExecute.textContent = "Try again";
+        }
       });
     })();
   </script>
