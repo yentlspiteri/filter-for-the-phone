@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 <meta name="theme-color" content="#1a0610" />
 <title>Von Peach — Filter for the Phone</title>
+<!-- QR code generator — used by the phone-only fallback screen to render
+     a scannable QR of the current URL so desktop visitors can hop to their
+     phone instead. ~5 KB. Loaded with `defer` so it doesn't block paint. -->
+<script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <!-- Google Analytics (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-2EZN956L15"></script>
 <script>
@@ -312,6 +316,46 @@
     line-height: 1.55;
     color: rgba(255,214,187,0.88);
     margin: 0 0 32px 0;
+  }
+
+  /* Phone-only fallback screen — QR + copy-link affordance for desktop
+     users whose browser doesn't expose the camera API. */
+  #screenPhoneOnly h1 { max-width: 600px; }
+  .qr-wrap {
+    background: var(--peach);
+    padding: 14px;
+    border-radius: 18px;
+    width: fit-content;
+    margin: 12px auto 28px;
+    box-shadow: 0 18px 44px rgba(204, 28, 14, 0.28);
+    line-height: 0; /* tighten around the img/svg inside */
+  }
+  .qr-wrap img,
+  .qr-wrap svg {
+    display: block;
+    width: min(220px, 60vw);
+    height: auto;
+  }
+  .phone-only-fine {
+    font-family: "General Sans", sans-serif;
+    font-size: 13px;
+    color: rgba(255, 214, 187, 0.65);
+    max-width: 460px;
+    line-height: 1.55;
+    margin: 0 auto;
+  }
+  .phone-only-fine code {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 6px 12px;
+    background: rgba(255, 214, 187, 0.08);
+    border: 1px solid rgba(255, 214, 187, 0.18);
+    border-radius: 999px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--peach);
+    word-break: break-all;
+    letter-spacing: 0.02em;
   }
   .btn {
     appearance: none;
@@ -825,6 +869,22 @@
     <div id="introErr" style="margin-top:14px; display:none;" class="err"></div>
   </div>
 
+  <!-- Phone-only fallback — shown when the browser can't use a camera
+       (desktop without webcam API, in-app browsers like Slack/Teams/
+       LinkedIn that disable mediaDevices, HTTP context, etc.). The brand
+       experience requires an on-the-spot photo, so instead of an upload
+       fallback we route the user to their phone via a scannable QR. -->
+  <div class="screen" id="screenPhoneOnly">
+    <span class="brand-logo sm intro-logo" aria-label="Von Peach"></span>
+    <h1>This works best on your phone.</h1>
+    <p class="lede" id="phoneOnlyReason">Your camera is the magic — scan to open on your phone.</p>
+    <div class="qr-wrap" id="qrWrap" aria-label="QR code to open this on your phone"></div>
+    <p class="phone-only-fine">
+      Or copy this link and open it in Safari or Chrome on your phone:<br />
+      <code id="phoneOnlyUrl"></code>
+    </p>
+  </div>
+
   <!-- gameplay overlay -->
   <div class="overlay" id="play" style="display:none;">
     <div class="topbar">
@@ -1068,6 +1128,10 @@ const brandLogoReady = new Promise(res => {
 const $ = id => document.getElementById(id);
 const startBtn = $("startBtn");
 const introScreen = $("screenIntro");
+const phoneOnlyScreen = $("screenPhoneOnly");
+const phoneOnlyReason = $("phoneOnlyReason");
+const phoneOnlyUrl = $("phoneOnlyUrl");
+const qrWrap = $("qrWrap");
 const playOverlay = $("play");
 const resultScreen = $("screenResult");
 const qText = $("qText");
@@ -1154,6 +1218,20 @@ async function begin() {
     loop();
   } catch (e) {
     console.error(e);
+    // Specific errors that mean "this browser/context just can't do camera"
+    // → route to the phone-only screen with QR rather than asking the user
+    // to retry a hopeless action. NotAllowedError = user denied permission;
+    // we still let them try again (they might allow it on retry). The "no
+    // mediaDevices" path is caught earlier on page load.
+    const msg = String(e?.message || e || "");
+    const looksUnavailable =
+      e?.name === "NotFoundError" ||                                     // no camera hardware
+      /getUserMedia/i.test(msg) ||                                       // API missing
+      /mediaDevices/i.test(msg);                                         // API missing
+    if (looksUnavailable) {
+      showPhoneOnlyScreen("camera-unavailable");
+      return;
+    }
     introErr.textContent = "Couldn't start the camera: " + (e?.message || e) +
       ".  On phones, you'll need to open this via HTTPS.";
     introErr.style.display = "block";
@@ -1161,6 +1239,101 @@ async function begin() {
     startBtn.textContent = "Try again";
   }
 }
+
+// ---------- PHONE-ONLY FALLBACK ----------
+// When a desktop browser (or an in-app browser, or Brave with shields up)
+// can't open the camera, we keep the brand experience intact by routing the
+// user to their phone instead of offering an upload bypass. The screen
+// shows a scannable QR code of the current URL plus the URL as text.
+//
+// Detected two ways:
+//   1. On page load: `navigator.mediaDevices` undefined → no camera API at
+//      all in this context → show phone-only immediately.
+//   2. In begin()'s catch: if getUserMedia throws NotFoundError or a
+//      mediaDevices-reference error → same fate, show phone-only.
+//
+// Permission-denied (NotAllowedError) is treated as recoverable — the
+// user may allow on retry, so we keep them on intro with the "Try again"
+// button.
+function isCameraApiUnavailable() {
+  return !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function";
+}
+
+function showPhoneOnlyScreen(reason) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("show"));
+  phoneOnlyScreen.classList.add("show");
+
+  const url = window.location.href;
+  phoneOnlyUrl.textContent = url;
+
+  // Tailor the subtext to the failure mode.
+  if (reason === "in-app-browser") {
+    phoneOnlyReason.textContent =
+      "This browser can't access the camera. Open the link in Safari or Chrome on your phone.";
+  } else if (reason === "insecure-context") {
+    phoneOnlyReason.textContent =
+      "The camera needs a secure (HTTPS) connection. Open this link on your phone instead.";
+  } else {
+    phoneOnlyReason.textContent =
+      "Your camera is the magic — scan to open on your phone.";
+  }
+
+  // Render the QR if the library has loaded. It's loaded with `defer` so
+  // typically ready by the time we get here; if not, retry once shortly.
+  renderQrInto(qrWrap, url);
+}
+
+function renderQrInto(el, url) {
+  if (typeof window.qrcode !== "function") {
+    // Library hasn't loaded yet — retry in a tick.
+    return void setTimeout(() => renderQrInto(el, url), 200);
+  }
+  try {
+    const qr = window.qrcode(0, "M");  // type 0 = auto-size, error correction "M"
+    qr.addData(url);
+    qr.make();
+    // createImgTag(cellSize, margin) — 8px per module, 0px padding (the
+    // .qr-wrap div already provides its own padding).
+    el.innerHTML = qr.createImgTag(8, 0);
+    // Strip the inline width attribute the library adds; CSS handles sizing.
+    const img = el.querySelector("img");
+    if (img) {
+      img.removeAttribute("width");
+      img.removeAttribute("height");
+      img.setAttribute("alt", "Scan with your phone to open");
+    }
+  } catch (err) {
+    console.warn("QR render failed", err);
+    // Fall back: just show the URL text — `phoneOnlyUrl` already has it.
+    el.innerHTML = "";
+  }
+}
+
+// Detect at page load. Two cases route to phone-only:
+//   - The mediaDevices API isn't there at all (in-app browser, HTTP, very
+//     old browser).
+//   - The page is on http: rather than https: (no secure context).
+// Skip detection on plain `localhost` for local-dev convenience.
+(function detectCameraAvailabilityOnLoad() {
+  const isLocalhost =
+    location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1" ||
+    location.hostname.endsWith(".local");
+  if (isLocalhost) return;
+
+  if (!window.isSecureContext) {
+    showPhoneOnlyScreen("insecure-context");
+    return;
+  }
+  if (isCameraApiUnavailable()) {
+    // In-app browsers (Slack, Teams, LinkedIn, Facebook, Instagram, etc.)
+    // strip mediaDevices for security. Detect via UA so we can show a more
+    // helpful message.
+    const ua = navigator.userAgent || "";
+    const inAppBrowserPatterns = /FBAV|FBAN|FB_IAB|Instagram|Twitter|LinkedInApp|Slack|Teams|MicroMessenger|WhatsApp|Line\//i;
+    showPhoneOnlyScreen(inAppBrowserPatterns.test(ua) ? "in-app-browser" : "camera-unavailable");
+  }
+})();
 
 function sizeStage() {
   if (!stage) return;
