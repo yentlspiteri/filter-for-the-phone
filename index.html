@@ -736,6 +736,117 @@
     transition: opacity 260ms ease;
   }
 
+  /* Email-capture form on the painting/loading screen. Lives just below
+     the hint slot. Submitting captures the email to client-side state;
+     when the AI portrait is ready, the result screen auto-sends instead
+     of showing the email button. Skipping hides the form for the rest of
+     the wait — the email button on the result screen is the fallback. */
+  .painting-email-form {
+    width: 100%;
+    max-width: 360px;
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    transition: opacity 200ms ease;
+  }
+  /* `display: flex` above wins over the UA's implicit [hidden] { display: none },
+     so the JS toggle stops working. Restore the hidden behaviour explicitly. */
+  .painting-email-form[hidden] { display: none; }
+  .painting-email-form.fading { opacity: 0; pointer-events: none; }
+  .painting-email-label {
+    font-family: "General Sans", sans-serif;
+    font-size: 13px;
+    color: rgba(255,214,187,0.85);
+    letter-spacing: 0.02em;
+    text-align: center;
+  }
+  .painting-email-row {
+    width: 100%;
+    display: flex;
+    gap: 6px;
+    background: rgba(255,214,187,0.08);
+    border: 1px solid rgba(255,214,187,0.20);
+    border-radius: 999px;
+    padding: 4px 4px 4px 16px;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+  .painting-email-row:focus-within {
+    border-color: rgba(253,136,57,0.55);
+    background: rgba(255,214,187,0.10);
+  }
+  .painting-email-row input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: var(--peach);
+    font-family: "General Sans", sans-serif;
+    font-size: 15px;
+    padding: 8px 0;
+    letter-spacing: 0.01em;
+  }
+  .painting-email-row input::placeholder { color: rgba(255,214,187,0.40); }
+  .painting-email-submit {
+    appearance: none; border: 0; cursor: pointer;
+    background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-family: "Aileron", sans-serif;
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    box-shadow: 0 6px 14px rgba(204,28,14,0.30);
+    transition: transform 140ms ease, filter 140ms ease;
+  }
+  .painting-email-submit:hover { filter: brightness(1.08); }
+  .painting-email-submit:active { transform: translateY(1px); }
+  .painting-email-submit:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+  .painting-email-skip {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: rgba(255,214,187,0.55);
+    font-family: "General Sans", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    padding: 6px 4px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: rgba(255,214,187,0.25);
+  }
+  .painting-email-skip:hover { color: rgba(255,214,187,0.80); }
+  /* Acknowledgement shown after submit during the wait */
+  .painting-email-ack {
+    width: 100%;
+    max-width: 360px;
+    margin-top: 22px;
+    text-align: center;
+    font-family: "General Sans", sans-serif;
+    font-size: 14px;
+    color: var(--peach);
+    background: rgba(253,136,57,0.10);
+    border: 1px solid rgba(253,136,57,0.30);
+    border-radius: 14px;
+    padding: 14px 18px;
+    animation: ack-in 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .painting-email-tick {
+    display: inline-block;
+    color: var(--orange);
+    font-weight: 800;
+    margin-right: 6px;
+  }
+  @keyframes ack-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
   /* Email-capture button arrangement: primary full-width, secondaries split */
   #screenResult .btnrow {
     flex-direction: row;
@@ -981,6 +1092,20 @@
         <div class="painting-hint-slot">
           <p class="painting-hint" id="paintingHint">Sit tall and look into the lens.</p>
         </div>
+        <!-- Email capture during the AI wait. If user submits, the email
+             gets queued in state; when the card is ready, the result
+             screen auto-sends it instead of showing the email button. -->
+        <form class="painting-email-form" id="paintingEmailForm">
+          <label for="paintingEmailInput" class="painting-email-label">Where should we send your card?</label>
+          <div class="painting-email-row">
+            <input type="email" id="paintingEmailInput" placeholder="you@example.com" autocomplete="email" inputmode="email" required />
+            <button type="submit" class="painting-email-submit">Send</button>
+          </div>
+          <button type="button" class="painting-email-skip" id="paintingEmailSkip">No thanks, just show me the card</button>
+        </form>
+        <div class="painting-email-ack" id="paintingEmailAck" hidden>
+          <span class="painting-email-tick">✓</span> Got it — we'll send it as soon as your card is ready.
+        </div>
       </div>
     </div>
   </div>
@@ -1162,6 +1287,16 @@ const emailForm = $("emailForm");
 const emailInput = $("emailInput");
 const emailSubmit = $("emailSubmit");
 const emailState = $("emailState");
+// Painting-screen email capture (asked during the AI loading wait).
+// If the user submits, the email is held in `prefilledEmail` until
+// renderTarotCard finishes and shareCanvas is populated, then the
+// portrait email auto-sends. If they hit skip (or never submit), the
+// result-screen email button is the fallback.
+const paintingEmailForm   = $("paintingEmailForm");
+const paintingEmailInput  = $("paintingEmailInput");
+const paintingEmailSkip   = $("paintingEmailSkip");
+const paintingEmailAck    = $("paintingEmailAck");
+let prefilledEmail = null;
 
 startBtn.addEventListener("click", begin);
 againBtn.addEventListener("click", reset);
@@ -1171,6 +1306,12 @@ emailMeBtn.addEventListener("click", openEmailModal);
 emailClose.addEventListener("click", closeEmailModal);
 emailModal.addEventListener("click", (e) => { if (e.target === emailModal) closeEmailModal(); });
 emailForm.addEventListener("submit", submitEmail);
+// Painting-screen email capture wiring
+paintingEmailForm.addEventListener("submit", submitPaintingEmail);
+paintingEmailSkip.addEventListener("click", function () {
+  paintingEmailForm.classList.add("fading");
+  setTimeout(function () { paintingEmailForm.hidden = true; }, 220);
+});
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && emailModal.classList.contains("show")) closeEmailModal();
 });
@@ -1467,6 +1608,11 @@ async function beginPose() {
   playOverlay.style.display = "none";
   wash.style.display = "none";
   resultScreen.classList.add("show");
+
+  // If the user submitted their email during the painting wait, send the
+  // card now (shareCanvas was just populated by renderTarotCard). Runs in
+  // the background; the result screen stays interactive either way.
+  autoSendPrefilledEmail();
 }
 
 function runPoseCountdown() {
@@ -1731,6 +1877,20 @@ function reset() {
   aiPortraitDataUrl = null;
   frozenFrame = null;
   frozenArchetype = null;
+  // Reset the painting-screen email-capture state for the next round —
+  // form goes back to its untouched state, ack hidden, prefilled cleared.
+  prefilledEmail = null;
+  paintingEmailForm.classList.remove("fading");
+  paintingEmailForm.hidden = false;
+  paintingEmailInput.value = "";
+  paintingEmailInput.style.borderColor = "";
+  paintingEmailAck.hidden = true;
+  // Restore the email button to its default state (the autoSend handler
+  // mutated text + style on success)
+  emailMeBtn.disabled = false;
+  emailMeBtn.textContent = "Email me my photo";
+  emailMeBtn.style.background = "";
+  emailMeBtn.style.border = "";
   stopPaintingMessages();
   if (faceLandmarker && stream) {
     playOverlay.style.display = "flex";
@@ -2240,6 +2400,30 @@ function closeEmailModal() {
   emailModal.setAttribute("aria-hidden", "true");
 }
 
+// Email-send core. Used by both the result-screen modal submit
+// (submitEmail) and the auto-fire after pre-capture during loading
+// (autoSendPrefilledEmail). Returns whatever fetch returned so each
+// caller can do its own UI on top.
+async function sendPortraitEmail(email) {
+  // Email body shows the framed card preview (visual continuity with
+  // what the user saw on screen). The attachment is the *clean* AI
+  // portrait — full resolution, no tarot framing — so the recipient
+  // can upload it straight to LinkedIn without cropping.
+  const inlineImage     = shareCanvasForEmail() || $("shareCanvas").toDataURL("image/jpeg", 0.88);
+  const attachmentImage = aiPortraitDataUrl || $("shareCanvas").toDataURL("image/jpeg", 0.92);
+  return fetch(EMAIL_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      archetype: frozenArchetype,
+      archetypeName: ARCHETYPES[frozenArchetype].name,
+      image: inlineImage,
+      imageAttachment: attachmentImage,
+    })
+  });
+}
+
 async function submitEmail(e) {
   e.preventDefault();
   const email = emailInput.value.trim();
@@ -2254,23 +2438,7 @@ async function submitEmail(e) {
   emailState.className = "modal-state";
 
   try {
-    // Email body shows the framed card preview (visual continuity with
-    // what the user saw on screen). The attachment is the *clean* AI
-    // portrait — full resolution, no tarot framing — so the recipient
-    // can upload it straight to LinkedIn without cropping.
-    const inlineImage     = shareCanvasForEmail() || $("shareCanvas").toDataURL("image/jpeg", 0.88);
-    const attachmentImage = aiPortraitDataUrl || $("shareCanvas").toDataURL("image/jpeg", 0.92);
-    const res = await fetch(EMAIL_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        archetype: frozenArchetype,
-        archetypeName: ARCHETYPES[frozenArchetype].name,
-        image: inlineImage,
-        imageAttachment: attachmentImage,
-      })
-    });
+    const res = await sendPortraitEmail(email);
     if (!res.ok) throw new Error("HTTP " + res.status);
     emailState.textContent = "Sent — check your inbox.";
     emailState.className = "modal-state success";
@@ -2282,6 +2450,51 @@ async function submitEmail(e) {
     emailState.className = "modal-state error";
     emailSubmit.disabled = false;
     emailSubmit.textContent = "Send it";
+  }
+}
+
+// Painting-screen email submit. Captures the email to client-side state,
+// shows an acknowledgement, and does NOT send yet — the actual send
+// happens after renderTarotCard populates the shareCanvas (see
+// autoSendPrefilledEmail at the end of beginPose).
+function submitPaintingEmail(e) {
+  e.preventDefault();
+  const email = paintingEmailInput.value.trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    paintingEmailInput.style.borderColor = "rgba(204,28,14,0.8)";
+    paintingEmailInput.focus();
+    return;
+  }
+  prefilledEmail = email;
+  paintingEmailForm.classList.add("fading");
+  setTimeout(function () {
+    paintingEmailForm.hidden = true;
+    paintingEmailAck.hidden = false;
+  }, 220);
+}
+
+// Called after renderTarotCard has populated shareCanvas. If the user
+// pre-submitted an email during the wait, fire the send in the
+// background and update the result-screen UI so they see confirmation
+// instead of the "Email me my photo" button.
+async function autoSendPrefilledEmail() {
+  if (!prefilledEmail || !EMAIL_ENDPOINT) return;
+  const email = prefilledEmail;
+  // Optimistically update the button to "Sent ✓ {email}" — if the send
+  // fails we revert.
+  const originalText = emailMeBtn.textContent;
+  emailMeBtn.disabled = true;
+  emailMeBtn.textContent = "Sending to " + email + "…";
+  try {
+    const res = await sendPortraitEmail(email);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    emailMeBtn.textContent = "✓ Sent to " + email;
+    emailMeBtn.style.background = "rgba(253,136,57,0.20)";
+    emailMeBtn.style.border = "1px solid rgba(253,136,57,0.45)";
+  } catch (err) {
+    console.warn("Pre-captured email send failed; user can retry from modal:", err);
+    emailMeBtn.disabled = false;
+    emailMeBtn.textContent = originalText;
   }
 }
 
