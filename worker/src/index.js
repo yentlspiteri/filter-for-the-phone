@@ -730,6 +730,7 @@ export default {
       if (url.pathname === "/scan")                    return handleScan(request, env);
       if (url.pathname === "/stats")                   return handleStats(request, env, url);
       if (url.pathname.startsWith("/portrait-image/")) return handlePortraitImage(request, env, url);
+      if (url.pathname.startsWith("/p/"))               return handlePortraitShare(request, env, url);
       return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
     }
 
@@ -768,9 +769,16 @@ async function handlePortrait(request, env, ctx, cors) {
     const url = new URL(request.url);
     const pipelineOverride = url.searchParams.get("pipeline");
     const dataUrl = await runSelectedPipeline(env, image, archetype, face, pipelineOverride);
-    // Detached save to R2 — don't block the client response.
-    ctx.waitUntil(saveToGallery(env, archetype, dataUrl));
-    return jsonResp({ image: dataUrl }, 200, cors);
+    // Await the save so we can return a per-portrait share URL alongside the
+    // image. R2 put is ~100ms — negligible next to the multi-second AI render
+    // — and the URL is what powers the LinkedIn-share OG-preview flow + the
+    // /p/<key> share page. If the save fails we still return the image (just
+    // without a sharePath), so the experience degrades gracefully.
+    const galleryKey = await saveToGallery(env, archetype, dataUrl);
+    const sharePath = galleryKey ? "/p/" + encodeURIComponent(galleryKey) : null;
+    const origin = url.origin;
+    const shareUrl = sharePath ? origin + sharePath : null;
+    return jsonResp({ image: dataUrl, sharePath, shareUrl }, 200, cors);
   } catch (err) {
     const msg = err?.message || "server";
     const status = /upstream/i.test(msg) ? 502 : 500;
@@ -798,14 +806,19 @@ async function handlePortraitEmail(request, env, ctx, cors) {
       console.log(`[portrait-email] background start email=${email} archetype=${archetype}`);
       try {
         const portraitDataUrl = await runSelectedPipeline(env, image, archetype, face);
-        // Best-effort gallery save before sending the email.
-        await saveToGallery(env, archetype, portraitDataUrl);
+        // Best-effort gallery save before sending the email — also gives us
+        // the R2 key for the per-portrait share URL embedded in the email.
+        const galleryKey = await saveToGallery(env, archetype, portraitDataUrl);
+        const reqUrl = new URL(request.url);
+        const sharePath = galleryKey ? "/p/" + encodeURIComponent(galleryKey) : null;
         console.log(`[portrait-email] pipeline done t+${Date.now()-bgT0}ms, sending via Resend`);
         await sendCardEmail(env, {
           email,
           archetype,
           archetypeName,
           image: portraitDataUrl,
+          sharePath,
+          shareOrigin: reqUrl.origin,
         });
         console.log(`[portrait-email] send complete t+${Date.now()-bgT0}ms`);
       } catch (err) {
@@ -1763,7 +1776,11 @@ async function handleSendCard(request, env, cors) {
     if (!email || !archetype || !image) return jsonResp({ error: "missing_fields" }, 400, cors);
     if (!isValidEmail(email))           return jsonResp({ error: "invalid_email" }, 400, cors);
 
-    const data = await sendCardEmail(env, body);
+    // Thread the request origin so sendCardEmail can build absolute URLs for
+    // the per-portrait share page (LinkedIn needs an absolute URL to scrape OG
+    // meta), even when the client doesn't echo back the worker origin.
+    const reqUrl = new URL(request.url);
+    const data = await sendCardEmail(env, { ...body, shareOrigin: reqUrl.origin });
     return jsonResp({ ok: true, id: data?.id }, 200, cors);
   } catch (err) {
     const msg = err?.message || "server";
@@ -1828,11 +1845,17 @@ async function addToMailchimp(env, email, archetype) {
 }
 
 // ---------- email send: posts to Resend, throws on failure ----------
-// `image` is shown inline in the email body (small framed card preview);
-// `imageAttachment` is what gets attached for download (clean AI portrait
-// without tarot framing — uploadable to LinkedIn). If imageAttachment isn't
-// provided we fall back to attaching the inline image.
-async function sendCardEmail(env, { email, archetype, archetypeName, image, imageAttachment }) {
+// `image` is shown inline in the email body AND attached for download. We
+// used to attach the raw AI portrait (`imageAttachment`) on the theory that
+// a frameless version was more LinkedIn-friendly, but the current Kontext
+// pipeline lets the AI invent its own tarot frame with gibberish text at the
+// bottom — so the "clean" version actually looks worse than the framed one.
+// Always attach the framed shareCanvas image now (covers the AI's gibberish
+// pill with our brand pill). `sharePath` is a `/p/<key>` URL fragment built
+// from the R2 key; combined with `shareOrigin` it gives the email a real
+// per-portrait share URL so the LinkedIn button previews the user's own
+// card instead of a generic site preview.
+async function sendCardEmail(env, { email, archetype, archetypeName, image, imageAttachment, sharePath, shareOrigin }) {
   if (!env.RESEND_KEY) throw new Error("no_resend_key");
 
   const read = READS[archetype] || {};
@@ -1842,15 +1865,25 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image, imag
   const from = env.FROM_EMAIL || "Von Peach <onboarding@resend.dev>";
 
   // Strip "data:image/jpeg;base64," prefix — Resend wants raw base64.
-  const attachmentSrc = imageAttachment || image;
+  // Prefer the framed `image` (shareCanvas) over `imageAttachment` (raw AI
+  // with gibberish text). The legacy fallback to imageAttachment is kept for
+  // backwards compatibility with any old clients still in the wild.
+  const attachmentSrc = image || imageAttachment;
   const attachmentB64 = String(attachmentSrc).split(",").pop();
+
+  // Build the per-portrait share URL. If the gallery save failed (no
+  // sharePath) we fall back to the campaign root so the LinkedIn button still
+  // works — it just won't preview the user's specific card.
+  const shareUrl = (sharePath && shareOrigin)
+    ? shareOrigin + sharePath
+    : "https://tarot.vonpeach.com";
 
   const payload = {
     from,
     to: [email],
     subject: `Your Von Peach photo — ${name}`,
-    html: emailHtml(name, tagline, paragraphs, image),
-    text: emailText(name, tagline, paragraphs),
+    html: emailHtml(name, tagline, paragraphs, image, shareUrl),
+    text: emailText(name, tagline, paragraphs, shareUrl),
     attachments: [
       { filename: `von-peach-${archetype}.jpg`, content: attachmentB64 },
     ],
@@ -1948,7 +1981,7 @@ function jsonResp(data, status, extraHeaders) {
 // Best-effort: returns silently if PORTRAITS binding isn't configured or
 // the put fails — the user's portrait still gets returned/emailed.
 async function saveToGallery(env, archetype, imageDataUrl) {
-  if (!env.PORTRAITS) return;
+  if (!env.PORTRAITS) return null;
   try {
     const b64 = String(imageDataUrl).split(",").pop();
     const bytes = base64ToUint8Array(b64);
@@ -1966,8 +1999,13 @@ async function saveToGallery(env, archetype, imageDataUrl) {
         iso: now.toISOString(),
       },
     });
+    // Returned so callers (handlePortrait, handlePortraitEmail) can build a
+    // per-portrait share URL (/p/<key>) that LinkedIn etc. preview with the
+    // user's actual card as the OG image, instead of a generic site preview.
+    return key;
   } catch (err) {
     console.warn("gallery save failed:", err?.message);
+    return null;
   }
 }
 
@@ -2033,6 +2071,420 @@ async function handlePortraitImage(_request, env, url) {
       "Cache-Control": "public, max-age=300",
     },
   });
+}
+
+// GET /p/<key>
+//   Public per-portrait share page. The "/p/" prefix is shorter than the
+//   underlying R2 key for nicer link previews (and so we can change the
+//   page's HTML/UX without changing the underlying storage layout).
+//
+//   The page exists for two distinct purposes:
+//
+//     1. OG-preview target for link unfurlers. When a user shares the page
+//        URL to LinkedIn / Slack / iMessage / wherever, the unfurler scrapes
+//        these <meta property="og:image"> + og:title tags and renders the
+//        user's actual card as the preview thumbnail. Without this page,
+//        LinkedIn would just show a generic tarot.vonpeach.com preview.
+//
+//     2. Landing page with explicit clickable share options when someone
+//        opens the link directly. The email's "Open Your Share Page" button
+//        takes the recipient here, where they can pick: Share on LinkedIn,
+//        Copy link, Download image, native Share (mobile Web Share API),
+//        or Take another (back to the campaign root).
+//
+//   The R2 object's key is opaque (timestamp + random id) so the URLs aren't
+//   trivially enumerable. They're not strictly secret either — anyone with
+//   the link can view the card — but that matches the share-by-link intent.
+async function handlePortraitShare(_request, env, url) {
+  if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
+
+  const objectKey = decodeURIComponent(url.pathname.slice("/p/".length));
+  if (!objectKey) return new Response("Bad request.", { status: 400 });
+
+  // HEAD instead of GET so we don't pull the JPEG bytes into the worker —
+  // just verifying existence + reading custom metadata to label the page.
+  const head = await env.PORTRAITS.head(objectKey);
+  if (!head) {
+    return new Response(renderShareNotFoundHtml(), {
+      status: 404,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  }
+
+  const meta = head.customMetadata || {};
+  const archetypeKey = meta.archetype || "";
+  const read = READS[archetypeKey] || {};
+  const archetypeName = read.name || "Your Von Peach archetype";
+  const tagline = read.tagline || "";
+
+  const imageUrl = url.origin + "/portrait-image/" + encodeURIComponent(objectKey);
+  const pageUrl = url.origin + "/p/" + encodeURIComponent(objectKey);
+  const downloadName = `von-peach-${archetypeKey || "card"}.jpg`;
+
+  const html = renderSharePageHtml({
+    archetypeName,
+    tagline,
+    imageUrl,
+    pageUrl,
+    downloadName,
+  });
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      // Short cache so LinkedIn's scraper can refresh the OG preview if we
+      // tune the meta tags, but long enough that hot shares don't hammer R2.
+      "Cache-Control": "public, max-age=300",
+    },
+  });
+}
+
+// HTML fallback for /p/<key> when the key doesn't resolve in R2 — most
+// likely the portrait was deleted from the gallery after the link was sent.
+function renderShareNotFoundHtml() {
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Card not found — Von Peach</title>
+<style>
+  body { margin:0; background:#0d0308; color:#FFE9D6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; padding:32px; text-align:center; }
+  h1 { font-size:24px; margin:0 0 12px 0; color:#FD8839; }
+  p { font-size:15px; margin:0 0 24px 0; opacity:0.75; max-width:340px; }
+  a { display:inline-block; background:linear-gradient(135deg,#FD8839 0%,#CC1C0E 60%,#99112F 100%); color:#fff; text-decoration:none; padding:12px 26px; border-radius:999px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; font-size:12px; }
+</style></head>
+<body>
+  <div>
+    <h1>Card not found</h1>
+    <p>This share link expired or was removed. Take the test to mint a new one.</p>
+    <a href="https://tarot.vonpeach.com">Start your card →</a>
+  </div>
+</body></html>`;
+}
+
+// Build the per-portrait share page. The HTML has two layers:
+//   - SEO/OG meta (head) — for link unfurlers (LinkedIn, Slack, Messages…)
+//   - On-page UI (body) — for human visitors landing on the page directly
+function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downloadName }) {
+  const title = `I'm ${archetypeName} — my Von Peach archetype`;
+  const description = tagline
+    ? `${tagline} — discover your own at tarot.vonpeach.com`
+    : "Discover your own Game Changer archetype at tarot.vonpeach.com";
+  const linkedInUrl = buildLinkedInShareUrl(pageUrl);
+
+  // Escape for embedding inside HTML attributes / text nodes / JS strings.
+  // Defensive — the inputs are server-controlled but the page renders user-
+  // adjacent strings (archetype name) so we keep the discipline.
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const jsStr = (s) => JSON.stringify(String(s));
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>${esc(title)}</title>
+  <meta name="description" content="${esc(description)}" />
+
+  <!-- Open Graph — LinkedIn, Slack, iMessage, Discord all consume this. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Von Peach" />
+  <meta property="og:title" content="${esc(title)}" />
+  <meta property="og:description" content="${esc(description)}" />
+  <meta property="og:image" content="${esc(imageUrl)}" />
+  <meta property="og:image:width" content="1024" />
+  <meta property="og:image:height" content="1820" />
+  <meta property="og:url" content="${esc(pageUrl)}" />
+
+  <!-- Twitter / X — separate tag set; "summary_large_image" gives a big card. -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${esc(title)}" />
+  <meta name="twitter:description" content="${esc(description)}" />
+  <meta name="twitter:image" content="${esc(imageUrl)}" />
+
+  <link rel="icon" href="https://tarot.vonpeach.com/favicon.png" />
+
+  <style>
+    :root {
+      --peach: #FFD6BB;
+      --peach-soft: #FFE9D6;
+      --wine: #99112F;
+      --red: #CC1C0E;
+      --orange: #FD8839;
+      --ink: #3a0812;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(80% 60% at 50% 0%, rgba(253,136,57,0.18) 0%, transparent 60%),
+        radial-gradient(70% 50% at 50% 100%, rgba(153,17,47,0.22) 0%, transparent 60%),
+        #0d0308;
+      color: var(--peach-soft);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 20px 56px 20px;
+      gap: 24px;
+    }
+    .share-page {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
+    }
+    .brand {
+      font-family: "Georgia", "Times New Roman", serif;
+      letter-spacing: 0.32em;
+      font-size: 11px;
+      text-transform: uppercase;
+      color: rgba(255,233,214,0.7);
+      margin: 0;
+    }
+    .card-frame {
+      width: 100%;
+      max-width: 360px;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow:
+        0 24px 56px rgba(0,0,0,0.55),
+        0 0 0 1px rgba(255,214,187,0.16) inset;
+      background: rgba(255,233,214,0.04);
+    }
+    .card-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .meta {
+      text-align: center;
+    }
+    .meta h1 {
+      font-family: "Georgia", "Times New Roman", serif;
+      font-size: 26px;
+      letter-spacing: 0.02em;
+      margin: 0 0 6px 0;
+      color: var(--peach);
+      font-weight: 700;
+    }
+    .meta p {
+      margin: 0;
+      font-size: 13px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--orange);
+    }
+
+    /* Action options — these are the "click on the options" UI. Primary
+       LinkedIn button is the loudest, secondaries sit in a row below.    */
+    .actions {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .btn {
+      appearance: none;
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+      width: 100%;
+      padding: 14px 22px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      text-decoration: none;
+      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
+      color: #fff;
+      box-shadow: 0 12px 28px rgba(204,28,14,0.35);
+    }
+    .btn-primary:hover { box-shadow: 0 14px 32px rgba(204,28,14,0.45); }
+    .secondary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .btn-secondary {
+      background: rgba(255,214,187,0.10);
+      color: var(--peach);
+      border: 1px solid rgba(255,214,187,0.25);
+      backdrop-filter: blur(8px);
+    }
+    .btn-secondary:hover { background: rgba(255,214,187,0.16); }
+    .btn-ghost {
+      background: transparent;
+      color: rgba(255,233,214,0.7);
+      letter-spacing: 0.18em;
+      font-size: 11px;
+      padding: 10px 18px;
+    }
+    .btn-ghost:hover { color: var(--peach); }
+    .btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    /* Toast — shown after Copy link succeeds. */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 32px;
+      transform: translateX(-50%) translateY(10px);
+      background: rgba(13,3,8,0.92);
+      color: var(--peach);
+      border: 1px solid rgba(255,214,187,0.25);
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .footer {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,233,214,0.5);
+    }
+    .footer a { color: var(--orange); text-decoration: none; }
+
+    @media (max-width: 380px) {
+      .meta h1 { font-size: 22px; }
+      .secondary-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="share-page">
+    <p class="brand">Von Peach · Game Changer Card</p>
+
+    <div class="card-frame">
+      <img src="${esc(imageUrl)}" alt="${esc(archetypeName)} — Von Peach card" />
+    </div>
+
+    <div class="meta">
+      <h1>${esc(archetypeName)}</h1>
+      ${tagline ? `<p>${esc(tagline)}</p>` : ""}
+    </div>
+
+    <div class="actions">
+      <!-- Primary LinkedIn share — opens LinkedIn's share dialog with this
+           page URL pre-filled. LinkedIn scrapes the OG meta above and shows
+           the card image as the preview thumbnail. -->
+      <a class="btn btn-primary" href="${esc(linkedInUrl)}" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+        Share on LinkedIn
+      </a>
+
+      <!-- Native share — only renders on browsers that support Web Share API
+           (iOS Safari, Android Chrome, modern desktop Chrome+macOS). The
+           button is hidden via JS if navigator.share is missing so desktop
+           users on older browsers don't see a no-op control. -->
+      <button class="btn btn-primary" id="btnNativeShare" hidden>
+        <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7 0-.24-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
+        Share via…
+      </button>
+
+      <div class="secondary-row">
+        <button class="btn btn-secondary" id="btnCopyLink">
+          <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+          Copy link
+        </button>
+        <a class="btn btn-secondary" id="btnDownload" href="${esc(imageUrl)}" download="${esc(downloadName)}">
+          <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          Save image
+        </a>
+      </div>
+
+      <a class="btn btn-ghost" href="https://tarot.vonpeach.com">
+        ← Take another card
+      </a>
+    </div>
+
+    <div class="footer">
+      <a href="https://vonpeach.com">vonpeach.com</a>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">Link copied</div>
+
+  <script>
+    (function () {
+      var PAGE_URL = ${jsStr(pageUrl)};
+      var TITLE    = ${jsStr(title)};
+      var TEXT     = ${jsStr(description)};
+
+      var toast = document.getElementById("toast");
+      function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add("show");
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(function () { toast.classList.remove("show"); }, 1800);
+      }
+
+      // Copy link → clipboard. Modern API first, fallback to a hidden input
+      // for browsers without it (legacy Safari, some embedded webviews).
+      document.getElementById("btnCopyLink").addEventListener("click", function () {
+        var ok = false;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(PAGE_URL).then(function () {
+            showToast("Link copied");
+          }).catch(function () {
+            fallbackCopy();
+          });
+        } else {
+          fallbackCopy();
+        }
+        function fallbackCopy() {
+          try {
+            var inp = document.createElement("input");
+            inp.value = PAGE_URL;
+            document.body.appendChild(inp);
+            inp.select();
+            ok = document.execCommand("copy");
+            document.body.removeChild(inp);
+          } catch (e) {}
+          showToast(ok ? "Link copied" : "Copy failed — long-press the link");
+        }
+      });
+
+      // Native share (Web Share API) — only show the button if the browser
+      // actually supports it. iOS Safari + Android Chrome will surface the
+      // OS-level share sheet (with Instagram / WhatsApp / Mail / etc).
+      if (navigator.share) {
+        var btn = document.getElementById("btnNativeShare");
+        btn.hidden = false;
+        btn.addEventListener("click", function () {
+          navigator.share({ title: TITLE, text: TEXT, url: PAGE_URL })
+            .catch(function () { /* user dismissed share sheet — fine */ });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>`;
 }
 
 // DELETE /portrait-image/<key>?key=<GALLERY_KEY>
@@ -3419,13 +3871,17 @@ function base64ToUint8Array(b64) {
 // Where the email pulls the logo from. Must be publicly fetchable.
 const LOGO_URL = "https://tarot.vonpeach.com/vonpeach-logo.png";
 
-// LinkedIn share dialog pre-filled with the campaign URL. LinkedIn scrapes
-// the page's OG tags for the preview thumbnail; recipients can attach their
-// portrait from the email manually in the compose step.
-const LINKEDIN_SHARE_URL =
-  "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftarot.vonpeach.com";
+// Build the LinkedIn share dialog URL from a per-portrait share URL. The
+// share URL points to a /p/<key> page on the worker that exposes the user's
+// actual card as the OG image — so when LinkedIn scrapes it, the post
+// preview shows their card, not a generic tarot.vonpeach.com thumbnail.
+function buildLinkedInShareUrl(shareUrl) {
+  return "https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(shareUrl);
+}
 
-function emailHtml(name, tagline, paragraphs, imageDataUrl) {
+function emailHtml(name, tagline, paragraphs, imageDataUrl, shareUrl) {
+  const safeShare = shareUrl || "https://tarot.vonpeach.com";
+  const linkedInUrl = buildLinkedInShareUrl(safeShare);
   // White inner card on dark outer with orange→red→wine accent stripes.
   // Layout: logo → hero tarot card (with wiggle) → archetype title →
   // italic tagline → archetype reading paragraphs → "your portrait is
@@ -3481,14 +3937,22 @@ function emailHtml(name, tagline, paragraphs, imageDataUrl) {
 
         <!-- Portrait-attached note -->
         <tr><td style="padding:22px 36px 0 36px;font-size:13px;line-height:1.55;color:rgba(58,8,18,0.72);">
-          Your portrait is attached. Share it, or keep it close as a reminder of what makes you special.
+          Your portrait is attached, and lives at a sharable link below. Post it, send it, or keep it close as a reminder of what makes you special.
         </td></tr>
 
-        <!-- Share-on-LinkedIn CTA -->
-        <tr><td align="center" style="padding:22px 36px 0 36px;">
-          <a href="${LINKEDIN_SHARE_URL}"
+        <!-- Share CTAs — primary "Open share page" (where the user gets buttons
+             for LinkedIn, copy-link, download, native share) + secondary
+             direct LinkedIn link for the desktop-email read flow. -->
+        <tr><td align="center" style="padding:22px 36px 4px 36px;">
+          <a href="${safeShare}"
              style="display:inline-block;background:linear-gradient(135deg,#FD8839 0%,#CC1C0E 60%,#99112F 100%);color:#FFFFFF;text-decoration:none;padding:14px 28px;border-radius:999px;font-family:inherit;font-weight:800;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;box-shadow:0 8px 18px rgba(204,28,14,0.30);">
-            Share on LinkedIn
+            Open Your Share Page
+          </a>
+        </td></tr>
+        <tr><td align="center" style="padding:8px 36px 0 36px;">
+          <a href="${linkedInUrl}"
+             style="display:inline-block;color:#99112F;text-decoration:underline;font-family:inherit;font-weight:700;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">
+            Or post straight to LinkedIn →
           </a>
         </td></tr>
 
@@ -3526,7 +3990,8 @@ function emailHtml(name, tagline, paragraphs, imageDataUrl) {
 </html>`;
 }
 
-function emailText(name, tagline, paragraphs) {
+function emailText(name, tagline, paragraphs, shareUrl) {
+  const safeShare = shareUrl || "https://tarot.vonpeach.com";
   return [
     "VON PEACH",
     "",
@@ -3534,7 +3999,8 @@ function emailText(name, tagline, paragraphs) {
     tagline ? tagline : null,
     "",
     ...(paragraphs || []).flatMap((p) => [p, ""]),
-    "Your portrait is attached. Share it, or keep it close as a reminder of what makes you special.",
+    "Your portrait is attached. Open your share page to post on LinkedIn, copy the link, or download the image:",
+    safeShare,
     "",
     "Ready to write the rest of your story?",
     "We'll help you get started.",
