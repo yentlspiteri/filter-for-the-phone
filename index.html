@@ -562,7 +562,7 @@
     line-height: 1;
     color: var(--peach);
     text-shadow: 0 4px 28px rgba(0,0,0,0.65);
-    animation: pose-pulse 800ms ease-in-out infinite;
+    animation: pose-pulse 1100ms ease-in-out infinite;
   }
   .pose-hint {
     margin-top: 18px;
@@ -1473,6 +1473,11 @@ function runPoseCountdown() {
   return new Promise((resolve) => {
     let n = 3;
     poseCount.textContent = n;
+    // 1100ms per tick (was 800ms) — total countdown ~3.3s instead of ~2.4s.
+    // Gives subjects a bit more time to compose their pose without making
+    // the count feel sluggish. The pose-pulse CSS animation duration is
+    // matched (1100ms) so the scale-pulse stays in sync with the digit
+    // change.
     const tick = setInterval(() => {
       n--;
       if (n > 0) {
@@ -1481,7 +1486,7 @@ function runPoseCountdown() {
         clearInterval(tick);
         resolve();
       }
-    }, 800);
+    }, 1100);
   });
 }
 
