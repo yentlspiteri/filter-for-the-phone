@@ -45,11 +45,20 @@
 // beard / hair pixel-by-pixel), then enriches with the tarot scene around
 // them. The Snapchat pipeline is dramatically better at identity preservation
 // but costs ~$0.06-0.08 per render (vs ~$0.04 for PuLID) and takes ~16-20s
-// (vs ~12s). Toggle via PIPELINE env var: "snapchat" (default) or "pulid".
-//   docs: https://fal.ai/models/fal-ai/face-to-many
+// (vs ~12s). Toggle via PIPELINE env var:
+//   "pulid"    (default, what's serving prod after the snapchat rollback)
+//   "kontext"  (NEW — single-call FLUX.1 Kontext, image-to-image with prompt-
+//              guided style transfer. Closest-to-Snapchat identity preservation.
+//              Per-request override available via ?pipeline=kontext for testing.)
+//   "snapchat" (legacy two-stage; face-to-many call body was malformed and the
+//              pipeline produced 4xx in prod. Kept disabled until #16's call
+//              body is corrected; do not enable.)
+//   docs: https://fal.ai/models/fal-ai/flux-pulid
+//         https://fal.ai/models/fal-ai/flux-pro/kontext     ($0.04/image)
+//         https://fal.ai/models/fal-ai/face-to-many         (legacy/broken)
 //         https://fal.ai/models/fal-ai/flux/dev/image-to-image
-//         https://fal.ai/models/fal-ai/flux-pulid
 const FAL_PULID_URL          = "https://fal.run/fal-ai/flux-pulid";
+const FAL_KONTEXT_URL        = "https://fal.run/fal-ai/flux-pro/kontext";
 const FAL_FACE_TO_MANY_URL   = "https://fal.run/fal-ai/face-to-many";
 const FAL_FLUX_I2I_URL       = "https://fal.run/fal-ai/flux/dev/image-to-image";
 // Back-compat alias (used by older log lines + may be referenced elsewhere)
@@ -689,7 +698,13 @@ async function handlePortrait(request, env, ctx, cors) {
   try {
     const { image, face, archetype } = (await request.json()) || {};
     if (!image || !archetype) return jsonResp({ error: "missing_fields" }, 400, cors);
-    const dataUrl = await runSelectedPipeline(env, image, archetype, face);
+    // Per-request pipeline override via ?pipeline=kontext (or pulid / snapchat).
+    // Lets us safely A/B test a new pipeline against prod by hitting the same
+    // worker with two different query params, without changing the global
+    // default. Falls back to PIPELINE env var, then to "pulid".
+    const url = new URL(request.url);
+    const pipelineOverride = url.searchParams.get("pipeline");
+    const dataUrl = await runSelectedPipeline(env, image, archetype, face, pipelineOverride);
     // Detached save to R2 — don't block the client response.
     ctx.waitUntil(saveToGallery(env, archetype, dataUrl));
     return jsonResp({ image: dataUrl }, 200, cors);
@@ -1226,17 +1241,125 @@ function parseSubjectJson(raw) {
   }
 }
 
-// Dispatcher — picks the active pipeline based on the PIPELINE env var.
-//   PIPELINE="snapchat"  (default) — runSnapchatPipeline (face-to-many + flux i2i)
-//   PIPELINE="pulid"               — runPortraitPipeline (legacy text-to-image)
-// Set with `wrangler secret put PIPELINE` or in wrangler.toml [vars]. Easy
-// rollback if the new pipeline misbehaves: flip the var and redeploy.
-async function runSelectedPipeline(env, image, archetype, faceImage) {
-  const choice = (env.PIPELINE || "snapchat").toLowerCase();
-  if (choice === "pulid") {
-    return runPortraitPipeline(env, image, archetype, faceImage);
+// Dispatcher — picks the active pipeline. Resolution order:
+//   1. `override` arg (set from ?pipeline=… query param on /portrait)
+//   2. PIPELINE env var (wrangler.toml [vars] or Cloudflare dashboard)
+//   3. fallback default "pulid"
+//
+// Valid values:
+//   "pulid"     — runPortraitPipeline (legacy flux-pulid text-to-image)
+//   "kontext"   — runKontextPipeline (NEW: FLUX.1 Kontext image-to-image,
+//                 Snapchat-style identity preservation)
+//   "snapchat"  — runSnapchatPipeline (legacy two-stage, face-to-many call
+//                 body malformed — kept only for reference, don't enable)
+//
+// The per-request override is the safe way to A/B test a new pipeline
+// against prod: keep PIPELINE="pulid" globally, hit
+// `/portrait?pipeline=kontext` from a test client to render through the
+// new pipeline only when explicitly requested.
+async function runSelectedPipeline(env, image, archetype, faceImage, override) {
+  const choice = (override || env.PIPELINE || "pulid").toLowerCase();
+  if (choice === "kontext")  return runKontextPipeline(env, image, archetype, faceImage);
+  if (choice === "snapchat") return runSnapchatPipeline(env, image, archetype, faceImage);
+  return runPortraitPipeline(env, image, archetype, faceImage);
+}
+
+// ---------- FLUX.1 Kontext pipeline ----------
+// SINGLE-CALL image-to-image with prompt-guided style transfer. The model
+// takes the user's actual photo as `image_url`, transforms it under our
+// styled prompt, and returns the result — same architecture Snapchat /
+// Lensa / Toonify use under the hood. Because the algorithm STARTS from
+// the user's photo and only TRANSFORMS pixels, identity preservation
+// (face structure, hair colour, eye colour, glasses, beard, skin tone)
+// is dramatically stronger than the text-to-image PuLID approach which
+// generates from a face embedding.
+//
+// Why this replaces the broken two-stage face-to-many pipeline:
+//   - Single fal call instead of two — half the latency, fewer failure modes.
+//   - Documented, stable API contract (verified against the model page
+//     before shipping this time).
+//   - Strong identity preservation by construction.
+//
+// Cost: $0.04 per render (per fal docs). Latency: ~6-10s typical.
+// Endpoint: POST https://fal.run/fal-ai/flux-pro/kontext
+//
+// Request body schema (from fal docs):
+//   image_url          (required) — input image as URL or data URL
+//   prompt             (required) — editing instruction
+//   guidance_scale     (optional) — prompt adherence, default works fine
+//   num_inference_steps(optional) — quality knob
+//   seed               (optional) — reproducibility
+//
+// Response: { images: [{ url, width, height }], seed, prompt, has_nsfw_concepts }
+async function runKontextPipeline(env, image, archetype, faceImage) {
+  if (!PROMPT_TEMPLATES[archetype]) throw new Error("unknown_archetype");
+  if (!env.FAL_KEY) throw new Error("no_fal_key");
+
+  const t0 = Date.now();
+  console.log(`[kontext-pipeline] start archetype=${archetype} hasFaceCrop=${!!faceImage}`);
+
+  // Vision pre-pass still useful — gives us the per-subject directive that
+  // tells the model what to preserve (specific hair colour, glasses, beard).
+  // Kontext is excellent at preserving what it sees in the photo, but the
+  // textual directive gives extra reinforcement.
+  const subject = await describeSubject(env, image, faceImage);
+  console.log(`[kontext-pipeline] subject pre-pass done t+${Date.now()-t0}ms hasSubject=${!!subject}`);
+
+  // Build the prompt: archetype + subject directives wrapped in an
+  // "transform this image while preserving identity" framing that Kontext
+  // understands as an editing instruction. The PRESERVE prefix is critical
+  // — without it Kontext may treat the prompt as a regenerate instruction
+  // and lose identity on heavy stylisation.
+  const archetypePrompt = getPromptFor(archetype, subject);
+  const kontextPrompt =
+    "TRANSFORM this portrait photo into an illustrated tarot card while " +
+    "PRESERVING THE PERSON'S EXACT identity from this photo — same face " +
+    "structure, same hair colour, same eye colour, same skin tone, same " +
+    "beard / stubble / glasses / distinctive features if present. Do NOT " +
+    "change who they are. Only transform the rendering STYLE and add the " +
+    "SCENE around them. " +
+    archetypePrompt;
+
+  const reqBody = {
+    image_url: image,
+    prompt: kontextPrompt,
+    // Kontext typically works at lower CFG than text-to-image generation
+    // (~3-4) — too high erodes identity preservation.
+    guidance_scale: 3.5,
+    num_inference_steps: 30,
+  };
+
+  const falRes = await fetch(FAL_KONTEXT_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Key ${env.FAL_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(reqBody),
+  });
+
+  if (!falRes.ok) {
+    const detail = await falRes.text();
+    console.error(`[kontext-pipeline] FAILED status=${falRes.status} detail=${detail.slice(0,500)}`);
+    throw new Error(`kontext_upstream:${falRes.status}:${detail.slice(0,200)}`);
   }
-  return runSnapchatPipeline(env, image, archetype, faceImage);
+
+  const data = await falRes.json();
+  const outputUrl = data?.images?.[0]?.url;
+  if (!outputUrl) {
+    console.error(`[kontext-pipeline] no image returned, data=${JSON.stringify(data).slice(0,400)}`);
+    throw new Error("kontext_no_image");
+  }
+  console.log(`[kontext-pipeline] kontext ok t+${Date.now()-t0}ms`);
+
+  // Proxy the final image as inline base64 — avoids leaking fal's transient
+  // CDN URLs to the client and dodges cross-origin canvas taint.
+  const imgRes = await fetch(outputUrl);
+  if (!imgRes.ok) throw new Error(`image_fetch_failed:${imgRes.status}`);
+  const buf = await imgRes.arrayBuffer();
+  const result = `data:image/jpeg;base64,${arrayBufferToBase64(buf)}`;
+  console.log(`[kontext-pipeline] done t+${Date.now()-t0}ms size=${buf.byteLength}b`);
+  return result;
 }
 
 // ---------- Snapchat-style pipeline: photo-translation + scene enrichment ----------
