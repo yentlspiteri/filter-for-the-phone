@@ -619,6 +619,19 @@
     justify-content: center;
     text-align: center;
     padding: 28px;
+    /* Allow scroll when the revealed-state content (card + eyebrow + name +
+       ack + button) exceeds the viewport on a small phone. -webkit-overflow-
+       scrolling: touch gives iOS momentum scrolling. */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* In revealed mode the content is taller (card stays + ack + button added)
+     so switch to top-justified to prevent the bottom button getting clipped
+     below the fold on a phone, and tighten the inter-element margins. */
+  #screenPainting.revealed .painting-stack {
+    justify-content: flex-start;
+    padding-top: 20px;
+    padding-bottom: 40px;
   }
   .painting-loading {
     display: flex;
@@ -729,9 +742,24 @@
     60%  { transform: scale(1.02); }
     100% { transform: scale(1); }
   }
+  /* Tighter vertical rhythm in revealed mode so all five blocks (card +
+     eyebrow + archetype + ack + button) fit on a typical phone viewport
+     (~600-700px usable). */
+  #screenPainting.revealed .painting-eyebrow {
+    margin-bottom: 14px;
+    margin-top: 18px;
+  }
+  #screenPainting.revealed .painting-hint-slot {
+    margin-top: 0;
+  }
+  #screenPainting.revealed .painting-email-ack {
+    margin-top: 14px;
+    padding: 10px 16px;
+    font-size: 13px;
+  }
   /* "Take another" — only visible once the card has been revealed. */
   .painting-again {
-    margin-top: 22px;
+    margin-top: 18px;
     appearance: none; border: 0; cursor: pointer;
     background: linear-gradient(135deg, var(--orange) 0%, var(--red) 60%, var(--wine) 100%);
     color: #fff;
@@ -748,6 +776,26 @@
   }
   .painting-again:hover { filter: brightness(1.08); transform: translateY(-1px); }
   #screenPainting.revealed .painting-again { display: inline-block; }
+  /* On shorter viewports (typical phones), shrink the card slightly so all
+     five revealed-mode blocks fit without scroll. Desktop unaffected. */
+  @media (max-height: 800px) {
+    #screenPainting.revealed .painting-skeleton {
+      width: min(220px, 50vw);
+    }
+    #screenPainting.revealed .painting-eyebrow {
+      margin-top: 14px;
+      margin-bottom: 10px;
+    }
+    #screenPainting.revealed .painting-email-ack {
+      margin-top: 12px;
+      padding: 8px 14px;
+    }
+    #screenPainting.revealed .painting-again {
+      margin-top: 14px;
+      padding: 10px 24px;
+      font-size: 12px;
+    }
+  }
   /* Fixed-height slot for the rotating hint. The slot reserves the space; the
      hint is absolutely positioned inside and cross-fades IN PLACE. This means a
      one-line vs two-line message can never change the block's height — so the
