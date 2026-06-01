@@ -201,8 +201,14 @@ const PROMPT_TEMPLATES = {
       "figure in flowing dramatic wine-red attire (robe, tunic, or " +
       "sharp open-collar coat — appropriate to the subject's gender) " +
       "with peach highlights, arms gracefully outstretched in a " +
-      "welcoming gesture, warm magnetic smile. Background swirling " +
-      "with decorative ribbon-like patterns and scattered roses. ",
+      "welcoming gesture, warm magnetic smile. Background of an " +
+      "elegant social scene — distant silhouetted dancers and " +
+      "refined-party guests in the middle distance, a chandelier " +
+      "glow above, scattered red roses and rose petals drifting " +
+      "through the air, ribbons of light swirling around the " +
+      "figure, vintage champagne coupes scattered decoratively, " +
+      "glowing candle motifs framing the corners — warm intimate " +
+      "atmosphere. ",
     props: [
       "Variant: arms wide open in a hosting gesture, large red roses " +
         "tumbling through the air around the figure, decorative " +
@@ -227,8 +233,14 @@ const PROMPT_TEMPLATES = {
       "figure in a sharp tailored dark blazer or structured overcoat " +
       "with rune-embroidered lapels and cuffs, crisp shirt visible " +
       "underneath, one hand raised commanding the elements, sharp " +
-      "determined gaze. Background swirling with abstract flame " +
-      "patterns and runic glyphs. ",
+      "determined gaze. Background of an arcane workshop — a " +
+      "glowing runic circle inscribed in the air around the " +
+      "figure, swirling abstract flame patterns rising upward, " +
+      "floating ancient glyphs and arcane sigils, a halo of small " +
+      "magical sparks, decorative occult symbols carved into the " +
+      "surrounding stone architecture, a distant vaulted-temple " +
+      "silhouette in the deep background — dramatic occult " +
+      "atmosphere. ",
     props: [
       "Variant: one arm raised high holding a slim wand or staff, " +
         "flames and rune symbols swirling in a halo around the upper " +
@@ -254,8 +266,14 @@ const PROMPT_TEMPLATES = {
       "rolled to the forearms over a tailored vest and crisp shirt, " +
       "rune-embroidered pocket square and lapel detail in brand " +
       "orange, focused determined expression, one hand gesturing " +
-      "over a steaming vessel. Background swirling with smoke and " +
-      "runic transformation symbols. ",
+      "over a steaming vessel. Background of an alchemist's " +
+      "laboratory — bubbling cauldrons and glass alembic flasks on " +
+      "shelves, copper distillation apparatus with curling vapor, " +
+      "stacked grimoires and leather-bound tomes, golden " +
+      "transmutation symbols floating in the smoke, a brass mortar " +
+      "and pestle, runic glyphs etched into the wall behind, " +
+      "decorative spirals of vapor rising into sigil patterns — " +
+      "atmospheric and scholarly. ",
     props: [
       "Variant: leaning over a bubbling cauldron with one hand " +
         "stirring above it, billowing smoke rising into runic glyphs " +
@@ -281,8 +299,14 @@ const PROMPT_TEMPLATES = {
       "wine-red blazer or open overcoat over a silky shirt or " +
       "blouse, with celestial-embroidered trim along the collar and " +
       "lapels — a serene knowing expression with eyes that seem to " +
-      "look past the viewer. Background filled with stars, " +
-      "celestial swirls, and abstract eye motifs. ",
+      "look past the viewer. Background of a celestial divination " +
+      "chamber — floating crystal orbs reflecting starfields, " +
+      "scattered tarot cards drifting through the air, glowing " +
+      "moon-phase symbols, an all-seeing eye motif framed by " +
+      "decorative ornament, swirling constellations and zodiac " +
+      "wheel fragments, an open book of prophecy with luminescent " +
+      "script, ribbons of stardust wrapping around the figure — " +
+      "mystical and otherworldly. ",
     props: [
       "Variant: both hands cradling a glowing crystal orb at chest " +
         "height, the orb radiating decorative light beams, stars and " +
@@ -306,8 +330,14 @@ const PROMPT_TEMPLATES = {
       "Illustrated tarot card: 'The Rebel'. Dynamic full-body figure " +
       "in a leather jacket and battered trousers, mid-leap or " +
       "defiant stance, wry knowing half-smile and fierce eyes. " +
-      "Background of cracked stone, jagged flame patterns, and " +
-      "broken chain motifs. ",
+      "Background of disruption and defiance — a cracked stone " +
+      "wall behind the figure with deep fissures, jagged flame " +
+      "patterns leaping upward, broken chains scattering through " +
+      "the air, torn-up rule scrolls and shredded paper drifting, " +
+      "graffiti-style decorative tags on the surrounding surfaces, " +
+      "sparks and stone shards flying outward, a distant burning " +
+      "institutional building silhouette — high-energy and " +
+      "rebellious. ",
     props: [
       "Variant: leaping forward with arms raised triumphantly, broken " +
         "chains scattering in the air, flame motifs swirling at the " +
@@ -333,8 +363,14 @@ const PROMPT_TEMPLATES = {
       "minimalist tailored attire — a clean unbuttoned linen-style " +
       "shirt under an open structured peach-and-wine coat, " +
       "understated but high-quality — eyes gently closed or open " +
-      "with quiet directness. Background of radiating lines, lotus " +
-      "petals, and abstract mountain silhouettes. ",
+      "with quiet directness. Background of serene contemplation — " +
+      "distant mist-shrouded mountain silhouettes layered into the " +
+      "deep distance, an ancient temple roof framed at one edge, " +
+      "a koi-pond surface rippling at the figure's feet, lotus " +
+      "petals drifting upward in clusters, a halo of concentric " +
+      "radiating lines around the head, bamboo silhouettes in the " +
+      "middle distance, prayer flags fluttering at the upper edges, " +
+      "decorative cloud motifs — quiet meditative atmosphere. ",
     props: [
       "Variant: seated in lotus position with palms upward in the " +
         "lap, halo of concentric circles radiating outward, lotus " +
@@ -357,9 +393,16 @@ const PROMPT_TEMPLATES = {
     base:
       "Illustrated tarot card: 'The Architect'. Three-quarter-body " +
       "figure in a structured long coat with geometric trim, focused " +
-      "considered expression. Background filled with blueprint grid " +
-      "lines, geometric structures, and abstract cityscape " +
-      "silhouettes in peach and wine. ",
+      "considered expression. Background of a visionary's design " +
+      "studio — an unrolled blueprint scroll spreading across the " +
+      "lower portion with sketched-line buildings emerging from " +
+      "it, floating geometric solids (cube, sphere, pyramid) " +
+      "suspended in the air, a brass drafting compass overlaying " +
+      "the scene, ruled grid paper textures behind, an abstract " +
+      "cityscape silhouette of modernist towers in the far " +
+      "distance, golden-ratio spirals decorating the corners, " +
+      "paper airplanes drifting through — visionary and ordered, " +
+      "in peach and wine. ",
     props: [
       "Variant: holding a large brass compass / divider open between " +
         "both hands at chest height, geometric grid patterns and " +
@@ -384,9 +427,16 @@ const PROMPT_TEMPLATES = {
       "figure in a sharp tailored ceremonial blazer or executive " +
       "long coat with ornamental gold-and-wine trim along the " +
       "lapels and cuffs, crisp shirt visible underneath, open " +
-      "confident smile, radiant presence. Background of radial " +
-      "sun-rays, decorative halo motifs, and abstract throne " +
-      "silhouettes. ",
+      "confident smile, radiant presence. Background of a " +
+      "commanding stage — rays of golden light fanning outward " +
+      "from behind the figure's head as a halo, an abstract " +
+      "throne silhouette at the figure's back, a crowd of small " +
+      "silhouetted admirers facing the figure in the lower " +
+      "portion, banners and pennants unfurling from the upper " +
+      "corners, decorative laurel-wreath motifs framing the scene, " +
+      "decorative columns and arches suggesting a grand hall, a " +
+      "podium or platform at the figure's feet — bright commanding " +
+      "atmosphere. ",
     props: [
       "Variant: standing tall with one hand raised in greeting, the " +
         "other holding a tall slim staff, halo of radial sun-rays " +
