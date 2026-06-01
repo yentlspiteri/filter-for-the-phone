@@ -1332,7 +1332,8 @@ let rafId = null;
 let frozenFrame = null;       // canvas snapshot of camera at moment of result
 let frozenArchetype = null;   // key into ARCHETYPES
 let usingAIPortrait = false;  // true once an AI-painted portrait has replaced frozenFrame
-let aiPortraitDataUrl = null; // the clean AI portrait as a data URL, for the email (LinkedIn-ready, no card framing)
+let aiPortraitDataUrl = null; // the raw AI portrait as a data URL (legacy — used to be the email attachment, now superseded by shareCanvas)
+let sharePathFromWorker = null; // /p/<key> path returned by /portrait — used to build the LinkedIn share URL in the email
 let paintingMsgInterval = null; // rotates the "Catching the light…" hints during the loader
 let paintingMsgTimeout = null;  // pending text-swap inside a fade; cleared on stop
 
@@ -1957,6 +1958,12 @@ async function requestAIPortrait(canvas, archetype) {
   if (!res.ok) throw new Error(`AI endpoint returned ${res.status}`);
   const data = await res.json();
   if (!data || !data.image) throw new Error("AI response missing image");
+  // The worker now returns a `sharePath` alongside the image when the
+  // gallery save succeeds — capture it so subsequent /send-card calls can
+  // embed a per-portrait LinkedIn URL in the outgoing email. Falsy when
+  // the R2 binding is missing or the put failed; the email send then
+  // falls back to the campaign root URL.
+  sharePathFromWorker = data.sharePath || null;
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -2015,6 +2022,7 @@ function reset() {
   answers = [];
   usingAIPortrait = false;
   aiPortraitDataUrl = null;
+  sharePathFromWorker = null;
   frozenFrame = null;
   frozenArchetype = null;
   // Reset the painting-screen email-capture state for the next round —
@@ -2562,12 +2570,14 @@ function closeEmailModal() {
 // (autoSendPrefilledEmail). Returns whatever fetch returned so each
 // caller can do its own UI on top.
 async function sendPortraitEmail(email) {
-  // Email body shows the framed card preview (visual continuity with
-  // what the user saw on screen). The attachment is the *clean* AI
-  // portrait — full resolution, no tarot framing — so the recipient
-  // can upload it straight to LinkedIn without cropping.
-  const inlineImage     = shareCanvasForEmail() || $("shareCanvas").toDataURL("image/jpeg", 0.88);
-  const attachmentImage = aiPortraitDataUrl || $("shareCanvas").toDataURL("image/jpeg", 0.92);
+  // Both the inline preview AND the attachment now use the framed shareCanvas
+  // (Von Peach brand pill on top of the AI portrait). We used to attach the
+  // raw AI portrait (`aiPortraitDataUrl`) on the theory that an unframed
+  // version was more LinkedIn-friendly, but the Kontext pipeline generates
+  // its OWN tarot frame with gibberish auto-text at the bottom — so the
+  // "clean" attachment was the version showing "THE STAIUCTUE" / similar.
+  // The framed shareCanvas covers that gibberish with our brand pill.
+  const inlineImage = shareCanvasForEmail() || $("shareCanvas").toDataURL("image/jpeg", 0.88);
   return fetch(EMAIL_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2576,7 +2586,11 @@ async function sendPortraitEmail(email) {
       archetype: frozenArchetype,
       archetypeName: ARCHETYPES[frozenArchetype].name,
       image: inlineImage,
-      imageAttachment: attachmentImage,
+      // Per-portrait share URL fragment ("/p/<r2-key>") captured from the
+      // /portrait response. The worker uses it to build the LinkedIn share
+      // URL in the email so LinkedIn's link preview shows the user's actual
+      // card (via og:image on the share page), not a generic preview.
+      sharePath: sharePathFromWorker || null,
     })
   });
 }
