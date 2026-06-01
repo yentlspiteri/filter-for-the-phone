@@ -2355,18 +2355,38 @@ function renderWallHtml(win) {
       position: fixed;
       bottom: 28px; right: 28px;
       background: var(--peach);
-      padding: 18px 18px 14px;
-      border-radius: 22px;
-      box-shadow: 0 18px 44px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.15);
+      padding: 22px 22px 16px;
+      border-radius: 24px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.15);
       z-index: 5;
       text-align: center;
+      max-width: 220px;
+    }
+    .qr-prize {
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 800;
+      font-size: 18px;
+      color: var(--wine);
+      line-height: 1.15;
+      margin-bottom: 14px;
+      letter-spacing: 0.02em;
+    }
+    .qr-prize .accent {
+      display: block;
+      background: linear-gradient(135deg, var(--orange), var(--red) 60%, var(--wine));
+      -webkit-background-clip: text;
+              background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 22px;
+      letter-spacing: 0.04em;
     }
     .qr-frame {
-      width: 168px; height: 168px;
+      width: 172px; height: 172px;
       line-height: 0;
       background: #fff;
       border-radius: 10px;
       padding: 6px;
+      margin: 0 auto;
     }
     .qr-frame img, .qr-frame svg { width: 100%; height: 100%; display: block; }
     .qr-eyebrow {
@@ -2375,16 +2395,8 @@ function renderWallHtml(win) {
       font-family: Georgia, "Times New Roman", serif;
       font-weight: 700;
       font-size: 12px;
-      letter-spacing: 0.24em;
+      letter-spacing: 0.22em;
       text-transform: uppercase;
-    }
-    .qr-url {
-      margin-top: 4px;
-      color: var(--wine);
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 13px;
-      letter-spacing: 0.02em;
-      opacity: 0.78;
     }
   </style>
 </head>
@@ -2398,10 +2410,10 @@ function renderWallHtml(win) {
   </header>
   <div class="wall" id="wall"></div>
 
-  <aside class="qr-card" aria-label="Scan with your phone to try the experience">
+  <aside class="qr-card" aria-label="Scan to create yours and win a surprise prize">
+    <div class="qr-prize">Win a <span class="accent">surprise prize</span></div>
     <div class="qr-frame" id="qrFrame"></div>
-    <div class="qr-eyebrow">Scan to try</div>
-    <div class="qr-url">tarot.vonpeach.com</div>
+    <div class="qr-eyebrow">Scan to create yours</div>
   </aside>
 
   <script>
@@ -2507,7 +2519,7 @@ function renderWallHtml(win) {
         if (img) {
           img.removeAttribute("width");
           img.removeAttribute("height");
-          img.setAttribute("alt", "Scan to try the Von Peach experience");
+          img.setAttribute("alt", "Scan to create yours and win a prize");
         }
       } catch (err) {
         console.warn("QR render failed", err);
@@ -2553,44 +2565,74 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Von Peach — Portrait Gallery</title>
+  <!-- QR generator for the "scan to win" CTA card. ~5KB lazy-loaded. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <style>
     :root {
       --wine:#99112F; --red:#CC1C0E; --orange:#FD8839; --peach:#FFD6BB;
       --bg:#0d0308; --card-bg:#1a0610;
     }
-    * { box-sizing:border-box; }
+    *, *::before, *::after { box-sizing:border-box; }
     body {
-      margin:0; padding:0; background:var(--bg); color:var(--peach);
+      margin:0; padding:0;
+      background:
+        radial-gradient(60% 50% at 15% 10%, rgba(253,136,57,0.18) 0%, transparent 60%),
+        radial-gradient(70% 60% at 95% 100%, rgba(153,17,47,0.30) 0%, transparent 60%),
+        var(--bg);
+      color:var(--peach);
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
       min-height:100vh;
     }
+    /* Header — sized up for 16:9 event-display viewing distance. */
     header {
-      padding:32px 24px 16px; display:flex; align-items:center; gap:14px;
+      padding:30px 48px 20px;
+      display:flex; align-items:center; justify-content:space-between; gap:24px;
       border-bottom:1px solid rgba(255,214,187,0.10);
+      background:linear-gradient(180deg, rgba(13,3,8,0.92), rgba(13,3,8,0.72));
+      position:sticky; top:0; z-index:10;
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
     }
     header h1 {
-      margin:0; font-size:22px; font-weight:800; letter-spacing:0.04em;
+      margin:0; font-size:30px; font-weight:900; letter-spacing:0.10em;
+      text-transform:uppercase;
+      background:linear-gradient(135deg, var(--orange) 0%, var(--red) 55%, var(--wine) 100%);
+      -webkit-background-clip:text;
+              background-clip:text;
+      -webkit-text-fill-color:transparent;
+    }
+    .header-totals {
+      display:flex; gap:14px; align-items:center;
+    }
+    .total {
+      color:var(--peach);
+      background:rgba(255,214,187,0.10);
+      border:1px solid rgba(255,214,187,0.18);
+      padding:8px 16px;
+      border-radius:999px;
+      font-size:14px; font-weight:700;
+      letter-spacing:0.14em;
       text-transform:uppercase;
     }
-    header .total { color:rgba(255,214,187,0.55); font-size:14px; }
     .filters {
-      padding:14px 24px; display:flex; flex-wrap:wrap; gap:8px;
+      padding:18px 48px; display:flex; flex-wrap:wrap; gap:10px;
       border-bottom:1px solid rgba(255,214,187,0.10);
     }
     .filter {
-      display:inline-flex; align-items:center; gap:8px;
-      padding:8px 14px; border-radius:999px;
+      display:inline-flex; align-items:center; gap:10px;
+      padding:10px 18px; border-radius:999px;
       background:rgba(255,214,187,0.06); color:var(--peach);
-      text-decoration:none; font-size:12px; font-weight:700;
-      letter-spacing:0.14em; text-transform:uppercase;
+      text-decoration:none; font-size:13px; font-weight:700;
+      letter-spacing:0.16em; text-transform:uppercase;
       border:1px solid rgba(255,214,187,0.14); transition:background 120ms;
     }
-    .filter:hover { background:rgba(255,214,187,0.10); }
+    .filter:hover { background:rgba(255,214,187,0.12); }
     .filter.active { background:linear-gradient(135deg,var(--orange),var(--red) 60%,var(--wine)); border-color:transparent; color:#fff; }
-    .filter-count { background:rgba(0,0,0,0.18); padding:2px 8px; border-radius:999px; font-size:11px; }
+    .filter-count { background:rgba(0,0,0,0.20); padding:3px 10px; border-radius:999px; font-size:12px; }
+    /* Bigger tiles — sized for 1080p+ viewing rather than laptop curation. */
     .grid {
-      display:grid; gap:16px; padding:20px 24px 60px;
-      grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+      display:grid; gap:22px; padding:28px 48px 120px;
+      grid-template-columns:repeat(auto-fill, minmax(300px, 1fr));
     }
     .card {
       position:relative;
@@ -2632,19 +2674,81 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
     .del-btn:focus  { opacity:1; outline:2px solid var(--peach); outline-offset:2px; }
     .del-btn:disabled { opacity:0.6; cursor:wait; transform:none; }
     .card.deleting { opacity:0; transform:scale(0.92); pointer-events:none; }
+
+    /* "Scan to win" QR card — fixed bottom-right, matching the event wall.
+       Same prize CTA so the gallery view doubles as a 16:9 secondary
+       event display when this URL is loaded on a projector. */
+    .qr-card {
+      position:fixed; bottom:28px; right:28px;
+      background:var(--peach);
+      padding:22px 22px 16px;
+      border-radius:24px;
+      box-shadow:0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.15);
+      z-index:5; text-align:center;
+      max-width:220px;
+    }
+    .qr-prize {
+      font-family:Georgia, "Times New Roman", serif;
+      font-weight:800;
+      font-size:18px;
+      color:var(--wine);
+      line-height:1.15;
+      margin-bottom:14px;
+      letter-spacing:0.02em;
+    }
+    .qr-prize .accent {
+      display:block;
+      background:linear-gradient(135deg,var(--orange),var(--red) 60%,var(--wine));
+      -webkit-background-clip:text;
+              background-clip:text;
+      -webkit-text-fill-color:transparent;
+      font-size:22px;
+      letter-spacing:0.04em;
+    }
+    .qr-frame {
+      width:172px; height:172px;
+      line-height:0;
+      background:#fff;
+      border-radius:10px;
+      padding:6px;
+      margin:0 auto;
+    }
+    .qr-frame img, .qr-frame svg { width:100%; height:100%; display:block; }
+    .qr-eyebrow {
+      margin-top:12px;
+      color:var(--wine);
+      font-family:Georgia, "Times New Roman", serif;
+      font-weight:700;
+      font-size:12px;
+      letter-spacing:0.22em;
+      text-transform:uppercase;
+    }
   </style>
 </head><body>
   <header>
     <h1>Portrait Gallery</h1>
-    <span class="total" id="portraitTotal">${totalCount} total</span>
-    <span class="total" id="scanTotal" title="QR scans on the event wall">— scans</span>
+    <div class="header-totals">
+      <span class="total" id="portraitTotal">${totalCount} total</span>
+      <span class="total" id="scanTotal" title="QR scans on the event wall">— scans</span>
+    </div>
   </header>
   <div class="filters">
-    ${filterLink("", "All")}
-    ${filterLink("charmer", "Charmer")}
-    ${filterLink("magician", "Magician")}
+    ${filterLink("",          "All")}
+    ${filterLink("charmer",   "Charmer")}
+    ${filterLink("magician",  "Magician")}
     ${filterLink("alchemist", "Alchemist")}
+    ${filterLink("oracle",    "Oracle")}
+    ${filterLink("rebel",     "Rebel")}
+    ${filterLink("monk",      "Monk")}
+    ${filterLink("architect", "Architect")}
+    ${filterLink("luminary",  "Luminary")}
   </div>
+
+  <aside class="qr-card" aria-label="Scan to create your card — win a surprise prize">
+    <div class="qr-prize">Win a <span class="accent">surprise prize</span></div>
+    <div class="qr-frame" id="qrFrame"></div>
+    <div class="qr-eyebrow">Scan to create yours</div>
+  </aside>
   ${items.length === 0
     ? `<div class="empty">No portraits yet.${currentFilter ? " Try removing the filter." : ""}</div>`
     : `<div class="grid">${cards}</div>`}
@@ -2675,6 +2779,31 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
       }
       refreshScanCount();
       setInterval(refreshScanCount, 5000);
+
+      // Render the "scan to win" QR. Points at /scan (worker endpoint,
+      // same origin) which counts the scan in R2 and 302-redirects to
+      // tarot.vonpeach.com. Retry once if the lib hasn't loaded yet.
+      function renderQR() {
+        if (typeof window.qrcode !== "function") {
+          return void setTimeout(renderQR, 200);
+        }
+        try {
+          const qr = window.qrcode(0, "M");
+          qr.addData(window.location.origin + "/scan");
+          qr.make();
+          const frame = document.getElementById("qrFrame");
+          if (!frame) return;
+          frame.innerHTML = qr.createImgTag(5, 0);
+          const img = frame.querySelector("img");
+          if (img) {
+            img.removeAttribute("width");
+            img.removeAttribute("height");
+            img.setAttribute("alt", "Scan to create yours and win a prize");
+          }
+        } catch (err) { console.warn("QR render failed", err); }
+      }
+      renderQR();
+
       document.querySelectorAll(".del-btn").forEach(function (btn) {
         btn.addEventListener("click", async function (e) {
           e.preventDefault(); e.stopPropagation();
