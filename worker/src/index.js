@@ -2015,16 +2015,15 @@ async function handlePortraitImage(_request, env, url) {
 // auto-refreshing grid; new portraits "pop" in at the top of the wall with
 // a "NEW" badge for 30 seconds, older portraits flow down.
 //
-// Two endpoints:
-//   GET /wall?key=<GALLERY_KEY>[&window=today|hour|all]
+// Two endpoints — both PUBLIC, no passcode required:
+//   GET /wall[?window=today|hour|all]
 //       Returns the HTML page. The page polls /gallery.json every 5s.
-//   GET /gallery.json?key=<GALLERY_KEY>[&window=today|hour|all]
+//   GET /gallery.json[?window=today|hour|all]
 //       Returns the current list of portrait items (most recent first)
 //       as JSON. Cheap; used by the wall's polling loop.
 //
-// Both endpoints are passcode-gated by the existing GALLERY_KEY secret,
-// the same one that gates /gallery and /portrait-image — no extra secret
-// to provision.
+// Admin curation lives on /gallery which IS still GALLERY_KEY-gated.
+//
 // The wall is PUBLIC — no passcode required, so anyone with the URL can pull
 // it up on a phone / projector during the event. Admin curation stays on
 // /gallery which is still gated by GALLERY_KEY.
