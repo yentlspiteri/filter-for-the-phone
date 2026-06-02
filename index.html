@@ -3218,6 +3218,16 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
 // (we tailor the share text + hint copy) or "any" for the generic share.
 async function shareSnapshot(forceDownload, target = "any") {
   shareHint.textContent = "";
+
+  // Per-portrait share URL — points at /p/<key> which has og:image meta
+  // for the user's actual card, so when LinkedIn scrapes the URL the
+  // preview shows their personal card (not a generic site preview).
+  // Falls back to the campaign root if the gallery save didn't surface
+  // a sharePath (e.g. R2 wasn't bound or the save errored).
+  const personalShareUrl = sharePathFromWorker
+    ? WORKER_BASE + sharePathFromWorker
+    : "https://tarot.vonpeach.com";
+
   const c = $("shareCanvas");
   const blob = await new Promise(res => c.toBlob(b => res(b), "image/jpeg", 0.92));
   const fileName = "von-peach-card.jpg";
@@ -3225,8 +3235,8 @@ async function shareSnapshot(forceDownload, target = "any") {
 
   const archeName = ARCHETYPES[frozenArchetype].name;
   const shareText = target === "linkedin"
-    ? `I'm ${archeName} — my Von Peach game-changer archetype. Find yours: https://tarot.vonpeach.com`
-    : `I'm ${archeName}. Find yours.`;
+    ? `I'm ${archeName} — my Von Peach game-changer archetype. Find yours: ${personalShareUrl}`
+    : `I'm ${archeName}. Find yours: ${personalShareUrl}`;
 
   // Mobile path: Web Share API with file — the OS share sheet opens with the
   // photo already attached. Picking LinkedIn from the sheet results in a new
@@ -3236,38 +3246,61 @@ async function shareSnapshot(forceDownload, target = "any") {
       await navigator.share({
         files: [file],
         title: "Von Peach — your card",
-        text: shareText
+        text: shareText,
+        url: personalShareUrl,
       });
       shareHint.textContent = target === "linkedin"
         ? "Pick LinkedIn in the share sheet — your photo will attach to the post."
         : "Pick LinkedIn, Instagram or another app in the share sheet.";
       return;
     } catch (e) {
+      // AbortError = user cancelled the share sheet, nothing to do.
       if (e?.name === "AbortError") return;
+      // NotAllowedError / other errors → fall through to the download +
+      // direct-open path below so the user still gets SOMETHING.
+      console.warn("[share] navigator.share failed, falling back:", e?.name, e?.message);
     }
   }
 
-  // Desktop / no-files-share fallback: download the JPEG so the user has the
-  // file locally, then (for LinkedIn) also open the LinkedIn composer in a new
-  // tab so they can drag-and-drop or upload the just-downloaded image into the
-  // post. The window.open call sits inside the original user click handler so
-  // popup blockers should allow it.
+  // LinkedIn-specific shortcut: open the LinkedIn share-offsite dialog
+  // BEFORE the download nudges the browser to switch focus. LinkedIn
+  // scrapes the URL's og:image meta — the user's actual card appears
+  // in the preview thumbnail. window.open from inside the click handler
+  // should bypass most popup blockers; if it doesn't return a window
+  // handle, fall back to setting location.href so the user still ends
+  // up on LinkedIn (in this tab instead of a new one).
+  if (target === "linkedin") {
+    const liUrl = "https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(personalShareUrl);
+    const popup = window.open(liUrl, "_blank", "noopener,noreferrer");
+    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+      // Popup blocked — navigate this tab to LinkedIn so the click DOES
+      // do something. The user can hit back to return to the card.
+      console.warn("[share] LinkedIn popup blocked — navigating in-place");
+      shareHint.textContent = "Opening LinkedIn…";
+      window.location.href = liUrl;
+      return;
+    }
+    // Also kick off the download so the user has the high-res JPEG to
+    // attach to their LinkedIn post (LinkedIn's URL-share dialog only
+    // carries the link preview, not the image itself).
+    triggerDownload(blob, fileName);
+    shareHint.textContent = "LinkedIn opened in a new tab. Your card downloaded — drag it onto the post for the high-res version.";
+    return;
+  }
+
+  // Generic non-LinkedIn fallback: just download the JPEG.
+  triggerDownload(blob, fileName);
+  shareHint.textContent = "Image saved. Open LinkedIn or Instagram and attach this photo to your post.";
+}
+
+// Small helper — kicks off a JPEG download via an invisible anchor.
+// Extracted so the LinkedIn + generic paths share the same code.
+function triggerDownload(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = fileName;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
-
-  if (target === "linkedin") {
-    window.open(
-      "https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftarot.vonpeach.com",
-      "_blank",
-      "noopener"
-    );
-    shareHint.textContent = "Photo downloaded. In the LinkedIn post that just opened, attach the photo from your downloads.";
-  } else {
-    shareHint.textContent = "Image saved. Open LinkedIn or Instagram and attach this photo to your post.";
-  }
 }
 
 // ---------- EMAIL CAPTURE ----------
