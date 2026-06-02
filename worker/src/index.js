@@ -1350,6 +1350,11 @@ export default {
       if (url.pathname === "/stats")                   return handleStats(request, env, url);
       if (url.pathname.startsWith("/portrait-image/")) return handlePortraitImage(request, env, url);
       if (url.pathname.startsWith("/p/"))               return handlePortraitShare(request, env, url);
+      // Admin debug endpoint — verify the Mailchimp integration with a
+      // synthetic add. Passcode-gated by GALLERY_KEY so only admins can
+      // hit it. Returns the addToMailchimp result verbatim plus the
+      // computed dc and list URL so we can sanity-check the wiring.
+      if (url.pathname === "/debug/mailchimp")          return handleMailchimpDebug(request, env, url, cors);
       return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
     }
 
@@ -2528,6 +2533,45 @@ async function handleSendCard(request, env, cors) {
   }
 }
 
+// ---------- Mailchimp debug — verify integration on-demand ----------
+// GET /debug/mailchimp?key=<GALLERY_KEY>&email=<test@email>&archetype=<key>
+//   Synthetic add. Returns the addToMailchimp result + meta about the
+//   computed dc / list URL so we can confirm:
+//     1. The secrets are loaded into env
+//     2. The dc parses correctly from the API key
+//     3. The list ID resolves
+//     4. Mailchimp accepts the contact (status "added") or already has
+//        them (status "existing")
+//   Use this BEFORE an event to confirm wiring; use it AFTER an event
+//   if no contacts show up in Mailchimp.
+async function handleMailchimpDebug(_request, env, url, cors) {
+  if (!env.GALLERY_KEY) return jsonResp({ error: "no_key_config" }, 500, cors);
+  const auth = url.searchParams.get("key") || "";
+  if (auth !== env.GALLERY_KEY) return jsonResp({ error: "forbidden" }, 403, cors);
+
+  const email = url.searchParams.get("email");
+  const archetype = url.searchParams.get("archetype") || "charmer";
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return jsonResp({ error: "bad_email", hint: "pass ?email=<address>" }, 400, cors);
+  }
+
+  // Surface the env-side wiring so the user can see what's configured
+  // even before the add runs.
+  const apiKeyParts = String(env.MAILCHIMP_API_KEY || "").split("-");
+  const dc = apiKeyParts.length > 1 ? apiKeyParts[apiKeyParts.length - 1] : null;
+  const config = {
+    has_api_key: !!env.MAILCHIMP_API_KEY,
+    has_list_id: !!env.MAILCHIMP_LIST_ID,
+    parsed_datacenter: dc,
+    api_url: dc && env.MAILCHIMP_LIST_ID
+      ? `https://${dc}.api.mailchimp.com/3.0/lists/${env.MAILCHIMP_LIST_ID}/members`
+      : null,
+  };
+
+  const result = await addToMailchimp(env, email, archetype);
+  return jsonResp({ config, result, tested_with: { email, archetype } }, 200, cors);
+}
+
 // ---------- Mailchimp: add the email to the audience after every send ----------
 // Tags the contact with "filter-for-the-phone" + their archetype so the
 // downstream audience can be segmented. Best-effort: if MAILCHIMP_API_KEY
@@ -2538,14 +2582,22 @@ async function handleSendCard(request, env, cors) {
 //   wrangler secret put MAILCHIMP_API_KEY   (looks like xxxx-us12)
 //   wrangler secret put MAILCHIMP_LIST_ID   (the audience / list id)
 async function addToMailchimp(env, email, archetype) {
-  if (!env.MAILCHIMP_API_KEY || !env.MAILCHIMP_LIST_ID) return null;
+  // Return shape: { status: "added" | "existing" | "skipped" | "failed",
+  //                 reason?: string, httpStatus?: number, detail?: string }
+  // — so callers and the /debug/mailchimp endpoint can surface the
+  // outcome without re-parsing. Logs every outcome with a [mailchimp]
+  // prefix so `wrangler tail` filtering is one-liner.
+  if (!env.MAILCHIMP_API_KEY || !env.MAILCHIMP_LIST_ID) {
+    console.warn(`[mailchimp] skipped: ${!env.MAILCHIMP_API_KEY ? "MAILCHIMP_API_KEY" : "MAILCHIMP_LIST_ID"} secret not set`);
+    return { status: "skipped", reason: "secret_not_set" };
+  }
 
   // The datacenter is the suffix after the dash in the API key (e.g. "us12").
   const parts = String(env.MAILCHIMP_API_KEY).split("-");
-  const dc = parts[parts.length - 1];
+  const dc = parts.length > 1 ? parts[parts.length - 1] : "";
   if (!dc) {
-    console.warn("Mailchimp: couldn't parse datacenter from API key");
-    return null;
+    console.warn("[mailchimp] skipped: API key has no `-<datacenter>` suffix (expected format like `xxxxxx-us12`)");
+    return { status: "skipped", reason: "no_datacenter" };
   }
 
   const url = `https://${dc}.api.mailchimp.com/3.0/lists/${env.MAILCHIMP_LIST_ID}/members`;
@@ -2566,20 +2618,29 @@ async function addToMailchimp(env, email, archetype) {
       },
       body: JSON.stringify(body),
     });
-    if (res.ok) return await res.json();
-
-    // 400 with "already a list member" or "exists" is success-equivalent:
-    // they're already subscribed, nothing more we need to do.
-    const detail = await res.text();
-    if (res.status === 400 && /already a list member|exists/i.test(detail)) {
-      return { existing: true };
+    if (res.ok) {
+      console.log(`[mailchimp] added: ${email} (archetype=${archetype})`);
+      return { status: "added" };
     }
 
-    console.warn("Mailchimp add failed:", res.status, detail);
-    return null;
+    // 400 with "already a list member" or "exists" is success-equivalent:
+    // they're already subscribed, which means we've already captured them
+    // previously. Mailchimp's API requires the lowercase-MD5 subscriber
+    // hash to PATCH tags on an existing member, and Workers crypto
+    // doesn't expose MD5 — so we skip the tag update for existing members.
+    // If you need to backfill archetype tags later, do it in bulk via
+    // Mailchimp's CSV import or a one-off script.
+    const detail = await res.text();
+    if (res.status === 400 && /already a list member|exists/i.test(detail)) {
+      console.log(`[mailchimp] existing: ${email} (archetype=${archetype})`);
+      return { status: "existing" };
+    }
+
+    console.warn(`[mailchimp] failed: HTTP ${res.status} for ${email} — ${detail.slice(0, 240)}`);
+    return { status: "failed", httpStatus: res.status, detail: detail.slice(0, 500) };
   } catch (err) {
-    console.warn("Mailchimp add threw:", err?.message);
-    return null;
+    console.warn(`[mailchimp] threw: ${err?.message}`);
+    return { status: "failed", reason: "exception", detail: err?.message };
   }
 }
 
