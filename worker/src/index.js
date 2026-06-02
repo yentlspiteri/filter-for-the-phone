@@ -512,6 +512,431 @@ const PROMPT_TEMPLATES = {
         "watching from a stack of leather-bound spellbooks.",
     ],
   },
+  // ============================================================
+  // RARE: MAJOR ARCANA ADDITIONS (PR B of deck expansion).
+  // ============================================================
+  // Each of these is a rare card gated by RARE_RULES on the client.
+  // Patterns are designed to be non-overlapping where possible; when
+  // they overlap, the FIRST matching rule in RARE_RULES wins.
+  // Wardrobe stays modern (per global STYLE_LEAD); thematic motifs
+  // appear as background, trim, and props — not as fantasy costume.
+
+  // The Fool — curious wanderer, beginnings, the leap of faith.
+  // Visual shorthand: a small dog companion, a bag on a stick, a
+  // cliff edge with bright sky beyond.
+  fool: {
+    base:
+      "Illustrated tarot card: 'The Fool'. Three-quarter-body " +
+      "figure in a structured deep-wine-red coat or sharp tailored " +
+      "jacket worn open over a casual collared shirt — modern " +
+      "wanderer silhouette with peach-embroidered trim along the " +
+      "lapels and a small cloud-and-sun motif at the cuffs. Bright, " +
+      "open expression with a half-smile of curiosity, eyes lifted " +
+      "to the horizon. Background of a sunlit clifftop edge against " +
+      "a peach sky — golden-orange sunrise low on the horizon, " +
+      "scattered drifting clouds catching the warm light, a small " +
+      "loyal dog companion at the figure's heel looking up, a " +
+      "leather satchel slung over one shoulder, distant mountains " +
+      "and a winding road snaking out behind, white birds " +
+      "scattering upward into decorative spiral motifs, swirling " +
+      "wind patterns sweeping the cliff edge — open, hopeful, " +
+      "edge-of-everything atmosphere. ",
+    props: [
+      "Variant: one foot stepped forward over the cliff edge with " +
+        "arms spread wide in an open-armed leap of faith, dog at " +
+        "the heels, sunrise filling the background.",
+      "Variant: holding a small white flower up to the light in " +
+        "one hand, satchel over the shoulder, the dog companion " +
+        "trotting alongside, swirling cloud motifs in the sky.",
+      "Variant: walking forward looking back over one shoulder with " +
+        "a knowing smile, hand on the satchel strap, the road " +
+        "behind disappearing into distant peach mountains.",
+      "Variant: arms stretched up to the sky in a celebratory " +
+        "gesture, scattered white birds bursting upward, the dog " +
+        "leaping joyfully at the feet.",
+      "Variant: standing at the very edge of the cliff with one hand " +
+        "shading the eyes looking outward, walking-stick planted at " +
+        "the side, swirling wind patterns through the hair.",
+    ],
+  },
+
+  // The Empress — abundance, creativity, fertile ground, the source.
+  // Visual shorthand: crown of stars, grain and pomegranates, a
+  // verdant garden, flowing water.
+  empress: {
+    base:
+      "Illustrated tarot card: 'The Empress'. Three-quarter-body " +
+      "figure in a flowing deep-wine-red dress or layered drape " +
+      "with peach embroidered vine-and-pomegranate motifs along " +
+      "the neckline and sleeves, a delicate circlet of twelve small " +
+      "stars resting on the brow, soft knowing smile, eyes steady " +
+      "and generous. Background of a verdant abundant garden — " +
+      "ripe pomegranates and golden wheat heads framing the figure, " +
+      "trailing peach roses and ivy vines, a small stream of " +
+      "shimmering water curling through the foreground, a heart-and-" +
+      "Venus glyph carved into a decorative stone tablet to one " +
+      "side, lush trees in the deep background, butterflies " +
+      "scattering through the air, decorative spiral and floral " +
+      "motifs in the corners — fertile, generous, growing-everywhere " +
+      "atmosphere. ",
+    props: [
+      "Variant: one hand resting on a stylised pomegranate-laden " +
+        "scepter, the other extended palm-up offering wheat heads, " +
+        "garden vines climbing the background.",
+      "Variant: arms wrapped gently around a bouquet of peach roses " +
+        "and ripe pomegranates, the stream curling behind, " +
+        "butterflies drifting around the figure.",
+      "Variant: one hand placed protectively over the heart, the " +
+        "other lifting a pomegranate to inspect it, twelve-star " +
+        "circlet glowing faintly above the head.",
+      "Variant: seated-pose feeling, leaning gracefully against a " +
+        "decorative garden bench, vines and roses spiralling around " +
+        "the figure, golden grain motifs filling the corners.",
+      "Variant: standing tall with both hands raised offering " +
+        "scattered seeds to the wind, sprouting vines following the " +
+        "gesture, decorative Venus glyph centred behind.",
+    ],
+  },
+
+  // The Hierophant — tradition, teaching, structured wisdom.
+  // Visual shorthand: triple crown, crossed keys, pillared chamber.
+  hierophant: {
+    base:
+      "Illustrated tarot card: 'The Hierophant'. Three-quarter-body " +
+      "figure in a sharp tailored deep-wine-red coat or structured " +
+      "long jacket over a high-collared shirt, peach embroidered " +
+      "geometric trim along the lapels and cuffs, a small triple-" +
+      "tiered emblem at the throat, calm authoritative expression. " +
+      "Background of a vaulted teaching chamber — two stone pillars " +
+      "framing the figure, an open ancient codex floating mid-air " +
+      "with glowing peach script, a pair of crossed brass keys " +
+      "displayed prominently in the upper background, decorative " +
+      "rosette and quatrefoil motifs carved into the stone, a row " +
+      "of small candle flames floating at the foot, geometric " +
+      "interlocking patterns filling the architecture, scattered " +
+      "scrolls and parchment fragments — scholarly, structured, " +
+      "weight-of-tradition atmosphere. ",
+    props: [
+      "Variant: one hand raised in a teaching gesture with two " +
+        "fingers extended, the other holding a slim staff topped " +
+        "with the triple-tier emblem, crossed keys glowing behind.",
+      "Variant: both hands resting on an open codex held at chest " +
+        "height, candle flames floating around the figure, pillars " +
+        "framing the composition.",
+      "Variant: holding a single brass key forward as if offering " +
+        "it to the viewer, the other crossed key floating in the " +
+        "background, scrolls scattered at the feet.",
+      "Variant: one hand placed on a stone tablet inscribed with " +
+        "geometric glyphs, the other holding a smoking censer, " +
+        "decorative rose-window motif glowing behind the head.",
+      "Variant: arms folded across the chest in a stance of quiet " +
+        "authority, the triple-tier emblem floating above the head, " +
+        "candle flames lining the lower foreground.",
+    ],
+  },
+
+  // The Lovers — partnership, choice, the bond.
+  // Visual shorthand: two figures (but we render one), an angel
+  // above, a sun, a garden of choice.
+  lovers: {
+    base:
+      "Illustrated tarot card: 'The Lovers'. Three-quarter-body " +
+      "figure in flowing deep-wine-red attire — tailored open-collar " +
+      "jacket or soft draped layer over a crisp shirt — with " +
+      "peach-embroidered heart-and-flame motifs along the lapel and " +
+      "a small linked-rings emblem at the cuff. Warm open expression " +
+      "with a knowing smile, one hand resting over the heart. " +
+      "Background of a garden-at-choice — a large radiant sun " +
+      "centred high above with peach rays spreading wide, a stylised " +
+      "winged figure or angel motif sketched into the upper sky in " +
+      "peach linework, two paths diverging into the lower background, " +
+      "flowering trees on either side (one full of fruit, one in " +
+      "bloom), scattered intertwined ribbons in peach and wine, " +
+      "decorative heart and flame motifs framing the corners — " +
+      "warm, charged, choice-and-connection atmosphere. ",
+    props: [
+      "Variant: one hand placed over the heart, the other extended " +
+        "to the side as if offering a hand to an unseen partner, " +
+        "sun radiating wide above.",
+      "Variant: arms crossed gently with linked-rings emblem held " +
+        "between the hands, the angel motif glowing softly above, " +
+        "flowering trees framing the background.",
+      "Variant: one hand holding a single long-stemmed peach rose, " +
+        "the other resting at the side, intertwined ribbons curling " +
+        "around the figure.",
+      "Variant: leaning slightly forward with both hands open as " +
+        "if presenting the heart, scattered flame and heart motifs " +
+        "drifting upward through the air.",
+      "Variant: standing tall with arms raised gracefully overhead, " +
+        "the sun directly behind the head as a peach halo, the " +
+        "diverging paths sweeping out from the feet.",
+    ],
+  },
+
+  // The Chariot — willpower, drive, victory through control.
+  // Visual shorthand: two sphinxes, a starry canopy, a charging
+  // chariot — we render the driver standing tall.
+  chariot: {
+    base:
+      "Illustrated tarot card: 'The Chariot'. Three-quarter-body " +
+      "figure in a structured deep-wine-red blazer or armoured " +
+      "tailored coat with peach-embroidered star-and-laurel trim at " +
+      "the shoulders and lapels, a small crescent emblem at each " +
+      "shoulder, determined forward-leaning expression with steady " +
+      "focused eyes. Background of a charging chariot in motion — " +
+      "two opposing motion lines (one peach, one wine) streaking " +
+      "past either side of the figure suggesting the harnessed " +
+      "tension of two beasts pulled together, a star-dotted canopy " +
+      "arching overhead, a victory laurel wreath floating prominently " +
+      "above the head, smoke and dust kicked up below, decorative " +
+      "wheel-spoke motifs spiralling in the lower corners, distant " +
+      "fortified city silhouette in the deep background — driving, " +
+      "powerful, harnessed-forward-motion atmosphere. ",
+    props: [
+      "Variant: both hands gripping invisible reins held forward at " +
+        "chest height, motion lines streaking behind, laurel wreath " +
+        "glowing above the head.",
+      "Variant: one hand raised commanding forward with a small " +
+        "scepter or rod, the other on the hip, motion lines and " +
+        "wheel-spoke motifs filling the background.",
+      "Variant: arms crossed confidently across the chest with the " +
+        "victory wreath haloing the head, dust and smoke trailing " +
+        "behind the figure.",
+      "Variant: leaning sharply forward as if mid-charge, one hand " +
+        "extended pointing the way, two opposing-colour motion " +
+        "streaks past either shoulder.",
+      "Variant: standing tall with one fist raised in a triumphant " +
+        "gesture, the laurel wreath descending toward the head, " +
+        "star-dotted canopy filling the upper background.",
+    ],
+  },
+
+  // Wheel of Fortune — cycles, fate, the turn.
+  // Visual shorthand: a great spoked wheel, four corner symbols
+  // (lion, eagle, ox, angel), inscribed letters.
+  wheel: {
+    base:
+      "Illustrated tarot card: 'Wheel of Fortune'. Three-quarter-body " +
+      "figure in a flowing deep-wine-red robe or layered cape over " +
+      "a structured tailored under-layer, peach-embroidered cosmic " +
+      "spiral motifs swirling across the lapels and sleeves, " +
+      "centred steady expression with a hint of amused wisdom. " +
+      "Background of a great spoked wheel filling the upper " +
+      "background — a peach-and-wine concentric mandala wheel with " +
+      "eight glowing spokes and inscribed glyphs around the rim, " +
+      "four small allegorical creature motifs (a lion, an eagle, " +
+      "an ox, a winged figure) in the corners as decorative " +
+      "ornament, swirling clouds curling around the wheel's edge, " +
+      "scattered playing-card-like tarot symbols drifting through " +
+      "the air, decorative spiral and cycle motifs everywhere — " +
+      "cosmic, turning, this-too-shall-pass atmosphere. ",
+    props: [
+      "Variant: one hand reaching up to touch the spinning wheel " +
+        "rim, the other resting on the hip, the wheel glowing " +
+        "brightly behind the head.",
+      "Variant: arms raised wide as if conducting the wheel's turn, " +
+        "decorative glyphs and spiral motifs orbiting the figure.",
+      "Variant: both hands held palm-up at waist height with a small " +
+        "glowing orb hovering between them, the great wheel filling " +
+        "the upper background.",
+      "Variant: holding a single tarot card forward as if mid-draw, " +
+        "the wheel turning behind, scattered cards drifting around.",
+      "Variant: standing serene at the wheel's centre with arms " +
+        "folded peacefully, the four corner creatures glowing as " +
+        "decorative emblems at the card corners.",
+    ],
+  },
+
+  // Justice — balance, fairness, accountability.
+  // Visual shorthand: a sword (vertical), scales (suspended), a
+  // single bare pillar.
+  justice: {
+    base:
+      "Illustrated tarot card: 'Justice'. Three-quarter-body figure " +
+      "in a sharp structured deep-wine-red blazer or tailored long " +
+      "coat with peach-embroidered scales-and-sword motifs at the " +
+      "lapels, a small balanced-scales emblem at the throat, calm " +
+      "level expression with steady direct eyes. Background of a " +
+      "minimal stone chamber — a single set of balanced golden " +
+      "scales suspended in the upper background, a tall stylised " +
+      "sword held vertically beside the figure, two simple stone " +
+      "pillars framing the composition, a checkerboard floor " +
+      "pattern receding into the deep background, decorative " +
+      "geometric Greek-key motifs along the architecture, scattered " +
+      "feathers (truth) drifting gently in the air, small peach " +
+      "weighing-coins floating around the scales — measured, " +
+      "balanced, accountable atmosphere. ",
+    props: [
+      "Variant: one hand gripping the hilt of a vertical sword held " +
+        "upright at the side, the other extended palm-up offering " +
+        "the balanced scales.",
+      "Variant: both hands holding the scales aloft above the head, " +
+        "perfectly level, sword leaning against the figure's side.",
+      "Variant: one hand pointing forward with two fingers extended " +
+        "as if rendering a verdict, the scales floating beside the " +
+        "head.",
+      "Variant: arms folded across the chest with the sword held " +
+        "diagonally behind the shoulder, scales glowing above the " +
+        "head.",
+      "Variant: seated-pose feeling, one hand resting on the hilt " +
+        "of the sword placed before the body, the other holding " +
+        "the scales out to the side.",
+    ],
+  },
+
+  // The Star — hope, inspiration, calm after the storm.
+  // Visual shorthand: a large central star with seven small stars
+  // around it, two pitchers of water (one to land, one to sea),
+  // a kneeling figure under starry sky.
+  star: {
+    base:
+      "Illustrated tarot card: 'The Star'. Three-quarter-body figure " +
+      "in flowing deep-wine-red attire — soft draped layer or fluid " +
+      "tailored coat — with peach-embroidered seven-pointed-star " +
+      "motifs scattered across the shoulders and lapels, calm " +
+      "luminous expression with eyes turned slightly upward. " +
+      "Background of a deep peach starlit sky — one large radiant " +
+      "eight-pointed central star directly behind the head as a " +
+      "halo, seven smaller stars arranged in a constellation arc " +
+      "across the upper background, two stylised pitchers of " +
+      "shimmering water in the lower foreground (one pouring to a " +
+      "small pool, one pouring onto the ground), a calm reflective " +
+      "pool catching the starlight, distant low hills, scattered " +
+      "decorative star-and-spiral motifs through the air — hopeful, " +
+      "still, after-the-storm atmosphere. ",
+    props: [
+      "Variant: one hand cupping a small floating star, the other " +
+        "extended pouring water from a peach pitcher into the pool " +
+        "below, large central star haloing the head.",
+      "Variant: arms raised wide in a gesture of openness to the " +
+        "stars, the seven smaller stars arcing brightly above.",
+      "Variant: kneeling-pose feeling, one knee forward, both hands " +
+        "tilting two pitchers simultaneously (one to land, one to " +
+        "water), star reflections in the pool below.",
+      "Variant: one hand pressed gently to the heart, the other " +
+        "lifted with the palm catching falling starlight, stars " +
+        "scattered through the dark peach sky.",
+      "Variant: standing tall with a small bright star held aloft " +
+        "in one hand like a torch, the constellation arcing behind.",
+    ],
+  },
+
+  // The Moon — illusion, intuition, dream, the path through fear.
+  // Visual shorthand: a large moon with a face profile, two towers,
+  // a wolf and a dog howling, a crayfish emerging from water.
+  moon: {
+    base:
+      "Illustrated tarot card: 'The Moon'. Three-quarter-body figure " +
+      "in flowing deep-wine-red attire — layered hooded coat or " +
+      "soft draped robe — with peach-embroidered moon-phase-and-" +
+      "tear-drop motifs across the trim, knowing slightly secretive " +
+      "expression with steady reflective eyes. Background of a " +
+      "dreamscape moonlit pool — a large full moon with a subtle " +
+      "profile face hanging in the upper background dropping " +
+      "scattered teardrop-shaped peach light, two distant pillared " +
+      "towers framing the moon, a winding path leading from the " +
+      "foreground pool into the deep background, a stylised wolf " +
+      "and a small loyal dog standing in the lower foreground (one " +
+      "calm, one alert), shimmering reflections in a still pool, " +
+      "scattered decorative moon-phase glyph motifs through the air, " +
+      "mist curling around the path — dreamy, charged, illusion-and-" +
+      "truth atmosphere. ",
+    props: [
+      "Variant: one hand raised toward the moon as if drawing down " +
+        "its light, the other resting protectively on the dog's " +
+        "head, mist curling around the feet.",
+      "Variant: holding a small still mirror or polished disc " +
+        "reflecting the moon's face, the other hand extended palm-" +
+        "down over the pool below.",
+      "Variant: walking the lit path forward looking over the " +
+        "shoulder toward the viewer, the towers framing the figure, " +
+        "the wolf and dog flanking either side.",
+      "Variant: arms folded across the chest in a guarded gesture, " +
+        "the full moon glowing directly behind the head, teardrop " +
+        "lights falling around the figure.",
+      "Variant: kneeling at the pool's edge with one hand touching " +
+        "the water sending out ripples, the moon's reflection " +
+        "shattering into starlight motifs.",
+    ],
+  },
+
+  // Judgement — calling, awakening, rebirth, the trumpet's call.
+  // Visual shorthand: an angel with a trumpet, rising figures,
+  // mountain peaks.
+  judgement: {
+    base:
+      "Illustrated tarot card: 'Judgement'. Three-quarter-body " +
+      "figure in a structured deep-wine-red layered look — tailored " +
+      "blazer or open robe over a high-collared shirt — with " +
+      "peach-embroidered trumpet-and-wing motifs along the lapels " +
+      "and cuffs, lit-up awakened expression with eyes turned " +
+      "upward toward a calling, mouth slightly open as if drawing " +
+      "breath. Background of a great trumpet call — a stylised " +
+      "winged figure or angel motif sketched in peach linework in " +
+      "the upper background holding a long radiant trumpet, golden " +
+      "rays of awakening light bursting downward from the trumpet's " +
+      "mouth, distant mountain peaks rising in the deep background, " +
+      "small figures sketched in the lower background rising upward " +
+      "with arms raised, scattered decorative spiral and rising-" +
+      "light motifs through the air, swirling cloud patterns " +
+      "around the angelic figure — awakening, calling, rising " +
+      "atmosphere. ",
+    props: [
+      "Variant: both arms raised wide in an arms-open awakening " +
+        "gesture, golden rays of light streaming down onto the " +
+        "figure from above.",
+      "Variant: one hand pressed to the chest as if hearing the " +
+        "call, the other reaching upward, the trumpet glowing " +
+        "brightly behind in the upper background.",
+      "Variant: head tilted upward with eyes closed in receptive " +
+        "stillness, hands held open palm-up at waist level, " +
+        "rising-light motifs glowing around the figure.",
+      "Variant: standing tall with one hand raised to point upward " +
+        "toward the trumpet, mountain peaks framing the lower " +
+        "background, light rays bursting through clouds.",
+      "Variant: one foot stepped forward as if rising to the call, " +
+        "both hands lifted to ear-height in a listening pose, " +
+        "swirling cloud-and-wing motifs filling the upper sky.",
+    ],
+  },
+
+  // The World — completion, integration, the dance.
+  // Visual shorthand: a dancing figure inside a laurel wreath,
+  // four corner creatures (same as Wheel of Fortune).
+  world: {
+    base:
+      "Illustrated tarot card: 'The World'. Three-quarter-body " +
+      "figure in flowing deep-wine-red attire — graceful draped " +
+      "long coat or soft tailored layer — with peach-embroidered " +
+      "laurel-and-globe motifs along the lapels and shoulders, " +
+      "centred radiant expression with a quiet knowing smile of " +
+      "completion. Background of a great laurel wreath — an oval " +
+      "peach-and-wine laurel wreath encircling the figure in the " +
+      "central background, four small allegorical creature motifs " +
+      "(a lion, an eagle, an ox, a winged figure) sketched in the " +
+      "four corners as decorative ornament, a small floating globe " +
+      "or sphere held in the centre, swirling decorative spiral " +
+      "and infinity motifs around the wreath's edge, soft starlight " +
+      "scattered across the deep background — complete, integrated, " +
+      "everything-in-its-place atmosphere. ",
+    props: [
+      "Variant: arms raised gracefully outward with the laurel " +
+        "wreath encircling the whole figure, a small glowing globe " +
+        "held aloft in one hand.",
+      "Variant: one foot crossed slightly behind the other in a " +
+        "dance-pose feeling, arms held wide and gentle, decorative " +
+        "spiral motifs swirling around.",
+      "Variant: both hands cupping a small floating globe at chest " +
+        "height, the laurel wreath glowing behind, four corner " +
+        "creature emblems prominently visible.",
+      "Variant: head tilted slightly with a serene smile, one hand " +
+        "raised in a gesture of blessing, the wreath haloing the " +
+        "whole composition.",
+      "Variant: standing tall with arms folded peacefully across " +
+        "the chest, the great wreath encircling the figure, " +
+        "decorative laurel motifs filling the corners.",
+    ],
+  },
 };
 
 // Turn the vision pre-pass attributes into a hard identity directive. This is
@@ -771,6 +1196,95 @@ const READS = {
     paragraphs: [
       "You've drawn a rare one. The Witch isn't about pointed hats and broomsticks — she's about knowing what's true before anyone else does, and not needing permission to act on it.",
       "Most people are still consulting their checklists. You're already moving. Your instinct is the algorithm, and the people around you don't always see how much of the quiet magic is yours. Just remember: even witches have covens. Knowing when to share the spell — and when to keep it close — is the actual power.",
+    ],
+  },
+  // ---- Major Arcana additions (PR B). All rare; brand-tone readings.
+  fool: {
+    name: "The Fool",
+    tagline: "A rare draw · Beginnings & the leap",
+    paragraphs: [
+      "You've drawn The Fool — and not in the way people usually mean. The Fool steps off the cliff because they trust that the next step will appear when their foot lands.",
+      "You're the person who says yes before the plan is finished, and somehow the plan finishes itself in the doing. Just keep an eye on the dog at your heels — that's the part of you that knows. Pay attention to it before the next leap.",
+    ],
+  },
+  empress: {
+    name: "The Empress",
+    tagline: "A rare draw · Abundance & creation",
+    paragraphs: [
+      "You make things grow. People, projects, ideas — everything is more alive after spending time with you. That's not a soft skill; it's the rarest hard skill there is.",
+      "The Empress doesn't push the river. She knows that nourishment is its own kind of strategy. Just make sure you're not pouring into everyone else's garden while yours waits for water. Tend yours too.",
+    ],
+  },
+  hierophant: {
+    name: "The Hierophant",
+    tagline: "A rare draw · Tradition & teaching",
+    paragraphs: [
+      "You're a keeper of the keys. You know the rules deeply enough to choose which ones still serve and which ones are ready to be set down — and you teach others to read them, not just follow them.",
+      "The Hierophant gives people something to lean on. Your job is to keep the structure honest. Don't mistake the institution for the wisdom it was built to hold. The wisdom is the part that travels.",
+    ],
+  },
+  lovers: {
+    name: "The Lovers",
+    tagline: "A rare draw · Choice & connection",
+    paragraphs: [
+      "Every relationship in your life is a real choice — you don't just drift into people, you choose them, again and again. That's why the bonds you keep feel so unshakeable.",
+      "The Lovers card isn't only about romance. It's about the moment you commit. The thing you keep choosing — the work, the people, the path — is the thing that becomes your life. Choose like it matters, because it does.",
+    ],
+  },
+  chariot: {
+    name: "The Chariot",
+    tagline: "A rare draw · Drive & disciplined will",
+    paragraphs: [
+      "You hold two opposite forces in tension and somehow drive them in the same direction. That's not luck — that's harnessed will. It's also exhausting, and you know it.",
+      "The Chariot wins through control, not through force. The reins matter as much as the horses. Keep checking both — the version of you that wants it more isn't always the version that should be driving.",
+    ],
+  },
+  wheel: {
+    name: "Wheel of Fortune",
+    tagline: "A rare draw · Cycles & timing",
+    paragraphs: [
+      "You've drawn the Wheel — and that means you already know something most people learn the hard way: nothing stays. Not the bad days, not the good ones, not the version of you you used to be.",
+      "Your superpower isn't predicting where the wheel lands. It's staying centered while it turns. People around you panic at change; you find the still point. That's a kind of magic the world is short on right now.",
+    ],
+  },
+  justice: {
+    name: "Justice",
+    tagline: "A rare draw · Truth & accountability",
+    paragraphs: [
+      "You're the person in the room who actually asks the hard question. Justice doesn't draw the loudest people — it draws the ones who can hold the scales steady while everyone else is busy choosing sides.",
+      "Your sense of fair is a compass others borrow without even knowing. Just remember: the sword is for the work, not for yourself. Hold yourself accountable, yes — but with the same fairness you bring to everyone else.",
+    ],
+  },
+  star: {
+    name: "The Star",
+    tagline: "A rare draw · Hope & inspiration",
+    paragraphs: [
+      "After the storm, you're the one people look up at. The Star doesn't shout — she just keeps shining, and that's enough to navigate by. People orient their lives around your steadiness.",
+      "Your job isn't to fix everyone. It's to keep showing up bright, in the open, undimmed. That alone is the most generous thing you can do for the rooms you walk into. The pitchers are full. Pour.",
+    ],
+  },
+  moon: {
+    name: "The Moon",
+    tagline: "A rare draw · Intuition & shadow",
+    paragraphs: [
+      "You see in the dark. Not metaphorically — literally: the parts of conversations, situations and people that other people miss because the light's bad. You've been doing this since you were a kid.",
+      "The Moon teaches that not every shadow is a threat — some are just the parts that haven't been named yet. Stay curious about your own. The path under the moon goes somewhere; you just can't see all of it at once. Walk anyway.",
+    ],
+  },
+  judgement: {
+    name: "Judgement",
+    tagline: "A rare draw · The calling & the awakening",
+    paragraphs: [
+      "You've heard the call. Maybe more than once. The thing that won't leave you alone, that you keep pretending isn't the thing — Judgement is the moment you stop pretending.",
+      "This card draws the people who are about to step into who they actually are. The trumpet isn't loud; it just won't stop. Whatever it's pointing you toward, the universe has been patient enough. Your turn.",
+    ],
+  },
+  world: {
+    name: "The World",
+    tagline: "A rare draw · Completion & integration",
+    paragraphs: [
+      "You've drawn the final card. The World means you've actually done it — the thing, the chapter, the version of yourself you've been becoming. The wreath is around you, and you can feel it.",
+      "But the World isn't an ending. It's the moment the dance begins again, this time as the person who knows the steps. Whatever's next, you're not starting from zero. You're starting from everything you've already integrated. That's a different kind of beginning.",
     ],
   },
 };
