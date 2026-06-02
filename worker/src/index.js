@@ -1367,6 +1367,15 @@ export default {
     if (url.pathname === "/portrait")        return handlePortrait(request, env, ctx, cors);
     if (url.pathname === "/send-card")       return handleSendCard(request, env, cors);
     if (url.pathname === "/portrait-email")  return handlePortraitEmail(request, env, ctx, cors);
+    // POST /portrait-image/<key>/frame — REPLACE the R2 portrait bytes with
+    // the client-rendered framed version (shareCanvas with brand pill +
+    // sigil overlay). Removes the AI's bottom-pill gibberish from every
+    // surface that streams the R2 JPEG directly (wall tiles, gallery, the
+    // /p/<key> share page OG image preview). The /portrait flow uploads
+    // here automatically after renderTarotCard finishes.
+    if (url.pathname.startsWith("/portrait-image/") && url.pathname.endsWith("/frame")) {
+      return handlePortraitFrame(request, env, url, cors);
+    }
     return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
   },
 };
@@ -3279,6 +3288,56 @@ function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downlo
 //   /gallery view exposes the UI, but the endpoint can also be hit via curl
 //   for bulk-cleanup scripts.
 //
+// POST /portrait-image/<key>/frame
+//   Replace the R2 portrait bytes with the client-rendered framed version.
+//   The client passes the shareCanvas JPEG (with brand pill + sigil
+//   overlay drawn on top of the AI portrait) and we overwrite R2[<key>]
+//   with those bytes, preserving the original customMetadata so the
+//   gallery/wall enrichment still works.
+//
+//   This is the fix for the AI's auto-generated bottom-pill gibberish
+//   leaking into every surface that streams the R2 JPEG: the live /wall
+//   tiles, the /gallery admin grid, AND — critically — the LinkedIn OG
+//   preview thumbnail (which fetches /portrait-image/<key> directly and
+//   can't be CSS-overlaid). Once the framed bytes are in R2, every
+//   downstream surface sees a clean Von Peach-pilled card.
+//
+//   Unauthed. The key isn't trivially enumerable (timestamp + random
+//   suffix) and a malicious replacement is bounded — you can only
+//   overwrite a portrait if you already know its key, and the gallery
+//   already serves the same key publicly. Worst-case: someone replaces
+//   a stranger's portrait with another JPEG. Acceptable for the event-
+//   ephemera use case; tighten with an HMAC token if it becomes a problem.
+async function handlePortraitFrame(request, env, url, cors) {
+  if (!env.PORTRAITS) return jsonResp({ error: "no_r2" }, 500, cors);
+  // pathname = /portrait-image/<encodedKey>/frame
+  const p = url.pathname;
+  const inner = p.slice("/portrait-image/".length, p.length - "/frame".length);
+  const objectKey = decodeURIComponent(inner);
+  if (!objectKey) return jsonResp({ error: "bad_key" }, 400, cors);
+
+  try {
+    // HEAD the existing object so we can (a) confirm it exists and (b)
+    // preserve its customMetadata (archetype/ts/iso) across the replace.
+    const head = await env.PORTRAITS.head(objectKey);
+    if (!head) return jsonResp({ error: "not_found" }, 404, cors);
+
+    const body = await request.json();
+    if (!body?.image) return jsonResp({ error: "no_image" }, 400, cors);
+
+    const b64 = String(body.image).split(",").pop();
+    const bytes = base64ToUint8Array(b64);
+    await env.PORTRAITS.put(objectKey, bytes, {
+      httpMetadata: { contentType: "image/jpeg" },
+      customMetadata: head.customMetadata || {},
+    });
+    return jsonResp({ ok: true, size: bytes.length }, 200, cors);
+  } catch (err) {
+    console.warn(`[frame] replace failed for ${objectKey}: ${err?.message}`);
+    return jsonResp({ error: "frame_failed", message: err?.message }, 500, cors);
+  }
+}
+
 // Used by the per-tile "×" button on the admin gallery to clear out test
 // renders / unwanted portraits before an event. The corresponding tile is
 // removed from the wall on its next 5-second poll automatically.
