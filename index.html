@@ -1908,6 +1908,16 @@ async function beginPose() {
 
   await renderTarotCard();
 
+  // Fire-and-forget: replace the R2-saved raw AI image with the framed
+  // shareCanvas (brand pill + sigil overlay drawn on top of the AI's
+  // gibberish bottom text). This is the fix for LinkedIn OG-preview
+  // thumbnails / wall tiles / gallery showing the AI's auto-generated
+  // garbled tarot label. By the time anyone shares /p/<key>, the R2
+  // bytes have been overwritten with the clean framed version.
+  // Fire-and-forget so it doesn't block the result screen — the upload
+  // completes in ~500ms-1s while the user is reading their archetype.
+  uploadFramedToR2();
+
   // Branch: did the user submit their email during the loading wait?
   if (prefilledEmail) {
     // YES — keep them on the painting screen, reveal the rendered card
@@ -2160,6 +2170,40 @@ function extractFaceCropDataURL(srcCanvas, sizePx = 512, paddingFraction = 0.35)
   } catch (err) {
     console.warn("face crop failed", err);
     return null;
+  }
+}
+
+// Upload the framed shareCanvas (brand pill + sigil overlay drawn on top
+// of the AI portrait) to overwrite the raw R2 portrait. Fire-and-forget —
+// the caller doesn't await. Within ~500ms-1s the R2 bytes are replaced
+// so every downstream surface (wall tiles, gallery, LinkedIn OG preview
+// thumbnail, share page raw image) shows the clean framed version
+// instead of the AI's gibberish-pill original.
+//
+// Silent on failure: if the upload errors, the raw AI image stays in R2,
+// the LinkedIn preview still shows gibberish, but every other Von Peach
+// surface that overlays the brand pill at render time (live result
+// screen, email inline image, /p/<key> share page CSS overlay) is fine.
+async function uploadFramedToR2() {
+  if (!sharePathFromWorker) return;          // no R2 save happened (e.g. R2 binding missing server-side)
+  if (!AI_PORTRAIT_ENDPOINT) return;          // worker not configured
+  try {
+    // sharePathFromWorker is "/p/<encodedKey>"; we want the raw key for
+    // the /portrait-image/<key>/frame endpoint.
+    const encodedKey = sharePathFromWorker.slice("/p/".length);
+    const framed = $("shareCanvas").toDataURL("image/jpeg", 0.92);
+    const res = await fetch(WORKER_BASE + "/portrait-image/" + encodedKey + "/frame", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: framed }),
+    });
+    if (!res.ok) {
+      console.warn(`[frame-upload] HTTP ${res.status} replacing R2 portrait`);
+      return;
+    }
+    console.log("[frame-upload] R2 portrait replaced with framed version");
+  } catch (err) {
+    console.warn("[frame-upload] threw:", err?.message);
   }
 }
 
