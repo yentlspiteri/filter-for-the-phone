@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 <meta name="theme-color" content="#1a0610" />
 <title>Von Peach — Filter for the Phone</title>
+<!-- Von Peach favicon. SVG primary (modern browsers), PNG fallback for
+     older clients + iOS home-screen icon. Same favicon links are mirrored
+     into the worker-served pages (/wall, /gallery, /p/<key>) so every
+     surface that hosts a Von Peach page shows the brand mark in the tab. -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="alternate icon" type="image/png" href="/favicon.png" />
+<link rel="apple-touch-icon" href="/favicon.png" />
 <!-- QR code generator — used by the phone-only fallback screen to render
      a scannable QR of the current URL so desktop visitors can hop to their
      phone instead. ~5 KB. Loaded with `defer` so it doesn't block paint. -->
@@ -2162,7 +2169,13 @@ async function requestAIPortrait(canvas, archetype) {
   // identity source. Optional: if face detection fails, server falls back to
   // using the wide shot for both.
   const faceDataUrl = extractFaceCropDataURL(canvas);
-  const body = { image: dataUrl, archetype };
+  // Compute the user's COMMON archetype (the one they'd have got from
+  // Q1-Q3 without rare overrides) and send it alongside the rare archetype.
+  // If the server's gender gate rejects the rare (e.g. a male landing on
+  // Witch), it falls back to this common rather than rerolling randomly.
+  const code = answers.join("");
+  const commonArchetype = ARCHETYPE_MAP[code.slice(0, 3)] || "charmer";
+  const body = { image: dataUrl, archetype, commonArchetype };
   if (faceDataUrl) body.face = faceDataUrl;
   const res = await fetch(AI_PORTRAIT_ENDPOINT, {
     method: "POST",
@@ -2178,6 +2191,15 @@ async function requestAIPortrait(canvas, archetype) {
   // the R2 binding is missing or the put failed; the email send then
   // falls back to the campaign root URL.
   sharePathFromWorker = data.sharePath || null;
+  // The server may swap the archetype (gender-gate fallback) and echoes
+  // back the RESOLVED one. Update the global so renderTarotCard / READS /
+  // ARCHETYPES lookups all use the swapped value. Without this, a male
+  // who rolled Witch would still see "THE WITCH" on the card pill while
+  // the AI image renders as the common-fallback Magician — jarring.
+  if (data.archetype && data.archetype !== archetype && ARCHETYPES[data.archetype]) {
+    console.log(`[archetype] server resolved ${archetype} → ${data.archetype} (gender gate)`);
+    frozenArchetype = data.archetype;
+  }
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);

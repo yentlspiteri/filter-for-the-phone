@@ -203,6 +203,40 @@ const BASE_NEGATIVE_PROMPT =
 // at the back of every prompt (see getPromptFor below). Each archetype
 // has 5 scene variants for visual variety
 // across generations.
+// ---- GENDER-RESTRICTED RARES ----
+// Some Major Arcana cards are explicitly female-coded in their Kontext
+// prompts (Empress: flowing dress, pomegranate scepter, mother energy;
+// Witch: black cat familiar, knowing-feminine mischief). When a male
+// user lands on one via the client's RARE_RULES roll, the render either
+// fights the prompt or comes back uncanny. handlePortrait checks this
+// table BEFORE the AI render runs and swaps to the user's common
+// archetype if there's a mismatch.
+//
+// Values: "female" | "male". To add a male-coded restriction later
+// (e.g., if we add The Emperor or The Hierophant as exclusively male),
+// just add another entry here — no other code changes needed.
+const GENDER_RESTRICTIONS = {
+  witch:   "female",
+  empress: "female",
+};
+
+// Loose match — the detector returns phrases like "woman", "man", "male",
+// "female", sometimes with hedges. Substring match is the most forgiving.
+function genderMatches(detected, required) {
+  const d = String(detected).toLowerCase();
+  if (required === "female") return /\bwoman\b|\bfemale\b/.test(d);
+  if (required === "male")   return /\bman\b|\bmale\b/.test(d);
+  return true;
+}
+
+// Convert a data URL like "data:image/jpeg;base64,...." to a Uint8Array
+// for passing into the Workers AI vision detectors. Throws on invalid
+// input — caller is expected to guard upstream.
+function dataUrlToUint8Array(dataUrl) {
+  const b64 = String(dataUrl).split(",").pop();
+  return base64ToUint8Array(b64);
+}
+
 const PROMPT_TEMPLATES = {
   charmer: {
     base:
@@ -1345,8 +1379,38 @@ export default {
 // only send `image` continue to work.
 async function handlePortrait(request, env, ctx, cors) {
   try {
-    const { image, face, archetype } = (await request.json()) || {};
+    const body = (await request.json()) || {};
+    const { image, face, commonArchetype } = body;
+    let { archetype } = body;
     if (!image || !archetype) return jsonResp({ error: "missing_fields" }, 400, cors);
+
+    // Gender-gate rare archetypes. Witch + Empress are explicitly female-
+    // coded in their Kontext prompts (flowing dress, knowing-mother energy,
+    // black cat familiar, pomegranate-laden scepter, etc.). When a male
+    // user lands on one via the client's RARE_RULES roll, the AI render
+    // either fights the prompt (figure comes out androgynous and uncanny)
+    // or just looks wrong to the recipient. Resolve before render starts.
+    //
+    // We do a fast focused detectGender call (~1-2s, Workers AI) instead
+    // of the full describeSubject pre-pass to keep latency low. If the
+    // detector errors or is unavailable, we let the original archetype
+    // stand — better to risk a slightly-off render than to refuse outright.
+    if (GENDER_RESTRICTIONS[archetype] && env.AI) {
+      try {
+        const bytes = dataUrlToUint8Array(image);
+        const detected = await detectGender(env, bytes).catch(() => null);
+        if (detected && !genderMatches(detected, GENDER_RESTRICTIONS[archetype])) {
+          const fallback = commonArchetype && PROMPT_TEMPLATES[commonArchetype]
+            ? commonArchetype
+            : "charmer";
+          console.log(`[gender-gate] ${archetype} requires ${GENDER_RESTRICTIONS[archetype]}, detected="${detected}" → falling back to ${fallback}`);
+          archetype = fallback;
+        }
+      } catch (err) {
+        console.warn(`[gender-gate] detector errored, keeping original archetype: ${err?.message}`);
+      }
+    }
+
     // Per-request pipeline override via ?pipeline=kontext (or pulid / snapchat).
     // Lets us safely A/B test a new pipeline against prod by hitting the same
     // worker with two different query params, without changing the global
@@ -1363,7 +1427,9 @@ async function handlePortrait(request, env, ctx, cors) {
     const sharePath = galleryKey ? "/p/" + encodeURIComponent(galleryKey) : null;
     const origin = url.origin;
     const shareUrl = sharePath ? origin + sharePath : null;
-    return jsonResp({ image: dataUrl, sharePath, shareUrl }, 200, cors);
+    // `archetype` echoed back so the client can re-render its UI under the
+    // resolved archetype (it may have been swapped above by the gender gate).
+    return jsonResp({ image: dataUrl, archetype, sharePath, shareUrl }, 200, cors);
   } catch (err) {
     const msg = err?.message || "server";
     const status = /upstream/i.test(msg) ? 502 : 500;
@@ -2542,14 +2608,31 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image, imag
     ? shareOrigin + sharePath
     : "https://tarot.vonpeach.com";
 
+  // CID-attached inline image. Previously the email HTML embedded the
+  // ~700KB-1MB image as a data: URL inside <img src="data:...">, which:
+  //   1. Doubled the email size (image once inline + once attached) so
+  //      Gmail / Outlook frequently CLIPPED the email past their
+  //      102KB / ~150KB visible-content limit. Outlook mobile in
+  //      particular showed only the brand header + "view full message"
+  //      link — see screenshot from event prep.
+  //   2. Forced the recipient's client to base64-decode a huge string
+  //      to render the inline image, which Outlook handles slowly.
+  // Resend supports `content_id` on attachments — the same JPEG bytes
+  // serve BOTH the inline <img src="cid:..."> AND the downloadable
+  // attachment. Email size drops to ~few-KB HTML + 1 image attachment.
+  const cid = `vonpeach-card-${archetype}`;
   const payload = {
     from,
     to: [email],
     subject: `Your Von Peach photo — ${name}`,
-    html: emailHtml(name, tagline, paragraphs, image, shareUrl),
+    html: emailHtml(name, tagline, paragraphs, `cid:${cid}`, shareUrl),
     text: emailText(name, tagline, paragraphs, shareUrl),
     attachments: [
-      { filename: `von-peach-${archetype}.jpg`, content: attachmentB64 },
+      {
+        filename: `von-peach-${archetype}.jpg`,
+        content: attachmentB64,
+        content_id: cid,
+      },
     ],
     tags: [
       { name: "campaign", value: "filter-for-the-phone" },
@@ -2811,6 +2894,9 @@ function renderShareNotFoundHtml() {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Card not found — Von Peach</title>
+<link rel="icon" type="image/svg+xml" href="https://tarot.vonpeach.com/favicon.svg" />
+<link rel="alternate icon" type="image/png" href="https://tarot.vonpeach.com/favicon.png" />
+<link rel="apple-touch-icon" href="https://tarot.vonpeach.com/favicon.png" />
 <style>
   body { margin:0; background:#0d0308; color:#FFE9D6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; padding:32px; text-align:center; }
   h1 { font-size:24px; margin:0 0 12px 0; color:#FD8839; }
@@ -2866,7 +2952,9 @@ function renderSharePageHtml({ archetypeName, tagline, imageUrl, pageUrl, downlo
   <meta name="twitter:description" content="${esc(description)}" />
   <meta name="twitter:image" content="${esc(imageUrl)}" />
 
-  <link rel="icon" href="https://tarot.vonpeach.com/favicon.png" />
+  <link rel="icon" type="image/svg+xml" href="https://tarot.vonpeach.com/favicon.svg" />
+  <link rel="alternate icon" type="image/png" href="https://tarot.vonpeach.com/favicon.png" />
+  <link rel="apple-touch-icon" href="https://tarot.vonpeach.com/favicon.png" />
 
   <style>
     :root {
@@ -3343,7 +3431,9 @@ async function handleStats(_request, env, url) {
 async function handleWall(_request, env, url) {
   if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
 
-  const win = url.searchParams.get("window") || "today";
+  // Default changed from "today" → "48h" so the wall keeps showing yesterday's
+  // portraits across midnight UTC. Pass ?window=today for strict same-day only.
+  const win = url.searchParams.get("window") || "48h";
   const html = renderWallHtml(win);
   return new Response(html, {
     status: 200,
@@ -3361,7 +3451,9 @@ async function handleGalleryJson(_request, env, url) {
   const headers = { "Content-Type": "application/json", "Cache-Control": "no-cache" };
   if (!env.PORTRAITS) return new Response(JSON.stringify({ error: "no_r2" }), { status: 500, headers });
 
-  const win = url.searchParams.get("window") || "today";
+  // Default changed from "today" → "48h" so the wall keeps showing yesterday's
+  // portraits across midnight UTC. Pass ?window=today for strict same-day only.
+  const win = url.searchParams.get("window") || "48h";
   const cutoffMs = computeCutoffMs(win);
 
   // List up to 500 most recent objects from the bucket. R2 list orders
@@ -3393,11 +3485,15 @@ async function handleGalleryJson(_request, env, url) {
 //   "hour"   → last 60 minutes
 //   <unknown>→ treated as "today" (safe default for event use)
 function computeCutoffMs(win) {
-  if (win === "all") return 0;
-  if (win === "hour") return Date.now() - 60 * 60 * 1000;
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d.getTime();
+  if (win === "all")    return 0;
+  if (win === "hour")   return Date.now() - 60 * 60 * 1000;
+  if (win === "today")  { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d.getTime(); }
+  // Default ("48h" or anything unknown) — last 48 hours rolling. The wall
+  // is used at events that may span midnight UTC or run across multiple
+  // days; "today" alone hides yesterday's portraits the moment UTC ticks
+  // over, which is jarring during late-evening sessions. 48h is the
+  // event-friendly default; pass ?window=today to get strict today-only.
+  return Date.now() - 48 * 60 * 60 * 1000;
 }
 
 // Render the live wall HTML. Self-contained: inlines the auth key + window
@@ -3424,6 +3520,9 @@ function renderWallHtml(win) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Von Peach — The Game Changer Gallery</title>
+  <link rel="icon" type="image/svg+xml" href="https://tarot.vonpeach.com/favicon.svg" />
+  <link rel="alternate icon" type="image/png" href="https://tarot.vonpeach.com/favicon.png" />
+  <link rel="apple-touch-icon" href="https://tarot.vonpeach.com/favicon.png" />
   <!-- Public URL but not meant to be indexed; the wall is event-display
        ephemera, not a SEO target. -->
   <meta name="robots" content="noindex, nofollow" />
@@ -3840,7 +3939,7 @@ function renderWallHtml(win) {
       <h1>The Game Changer Gallery</h1>
     </div>
     <div class="meta">
-      <span class="window-label">${win === "all" ? "All time" : win === "hour" ? "Last hour" : "Today"}</span>
+      <span class="window-label">${win === "all" ? "All time" : win === "hour" ? "Last hour" : win === "today" ? "Today" : "Last 48h"}</span>
       <span class="count"><span id="count">—</span> revealed</span>
     </div>
   </header>
@@ -4151,6 +4250,9 @@ function renderGalleryHtml(items, authKey, currentFilter, totalCount) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Von Peach — The Game Changer Gallery</title>
+  <link rel="icon" type="image/svg+xml" href="https://tarot.vonpeach.com/favicon.svg" />
+  <link rel="alternate icon" type="image/png" href="https://tarot.vonpeach.com/favicon.png" />
+  <link rel="apple-touch-icon" href="https://tarot.vonpeach.com/favicon.png" />
   <!-- QR generator for the "scan to win" CTA card. ~5KB lazy-loaded. -->
   <script defer src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
   <style>
@@ -4612,19 +4714,40 @@ function emailHtml(name, tagline, paragraphs, imageDataUrl, shareUrl) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Force light-mode rendering. Outlook mobile + iOS Mail + Gmail dark
+       mode aggressively invert email colours when they detect a light
+       palette — our brand peach + dark-text-on-cream pattern turns into
+       muddy dark-on-darker which looked broken in the user's Outlook
+       screenshot. These two metas tell well-behaved clients to skip the
+       auto-invert. Outlook + Apple Mail respect them; Gmail still does
+       some adjustment but less destructively. -->
+  <meta name="color-scheme" content="light only" />
+  <meta name="supported-color-schemes" content="light" />
   <style>
+    /* Belt-and-braces for clients that DO honour <style>: tell them
+       explicitly that this email is single-mode. */
+    :root { color-scheme: light only; supported-color-schemes: light; }
     @keyframes vp-wiggle {
       0%, 100% { transform: rotate(-1.2deg) translateY(-2px); }
       50%      { transform: rotate(1.2deg)  translateY(2px); }
     }
     .vp-card { animation: vp-wiggle 5s ease-in-out infinite; transform-origin: center; }
     @media (prefers-reduced-motion: reduce) { .vp-card { animation: none; } }
+    /* Outlook desktop honours @media (prefers-color-scheme: dark) for
+       its own inversion logic — explicitly pin the inner card to light. */
+    @media (prefers-color-scheme: dark) {
+      .vp-bg          { background:#0d0308 !important; }
+      .vp-card-bg     { background:#FFFFFF !important; color:#3a0812 !important; }
+      .vp-text-dark   { color:#3a0812 !important; }
+      .vp-text-wine   { color:#99112F !important; }
+      .vp-text-orange { color:#CC1C0E !important; }
+    }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#0d0308;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3a0812;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0d0308;padding:32px 16px;">
+<body class="vp-bg" style="margin:0;padding:0;background:#0d0308;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#3a0812;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="vp-bg" style="background:#0d0308;padding:32px 16px;" bgcolor="#0d0308">
     <tr><td align="center">
-      <table role="presentation" width="100%" style="max-width:520px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 14px 38px rgba(153,17,47,0.20);" cellpadding="0" cellspacing="0">
+      <table role="presentation" width="100%" class="vp-card-bg" style="max-width:520px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 14px 38px rgba(153,17,47,0.20);" cellpadding="0" cellspacing="0" bgcolor="#FFFFFF">
 
         <!-- Top brand stripe — orange → red → wine -->
         <tr><td style="height:6px;line-height:0;font-size:0;background:linear-gradient(90deg,#FD8839 0%,#CC1C0E 50%,#99112F 100%);">&nbsp;</td></tr>
