@@ -1120,7 +1120,9 @@
     <div class="topbar">
       <span class="brand-logo sm" aria-label="Von Peach"></span>
       <div class="progress" id="progress">
-        <span></span><span></span><span></span>
+        <!-- 5 dots — one per question. PR B extended the quiz from 3 to
+             5 questions so users get more axes for rare-card mapping. -->
+        <span></span><span></span><span></span><span></span><span></span>
       </div>
     </div>
     <div class="center">
@@ -1312,6 +1314,20 @@ const ARCHETYPES = {
     duotone: { dark: [50, 8, 60],    light: [255, 214, 187] },
     accents: ["#99112F", "#FD8839", "#FFD6BB"]
   },
+  // ---- Major Arcana additions (PR B) — all rare. Each has a sigil
+  // (see SIGILS below) and a RARE_RULES entry that gates it on a
+  // specific 5-character answer pattern + probability roll.
+  fool:       { name: "The Fool",         tagline: "A rare draw · Beginnings & the leap",       rare: true, duotone: { dark: [120, 60, 20],  light: [255, 220, 180] }, accents: ["#FD8839", "#FFD6BB", "#99112F"] },
+  empress:    { name: "The Empress",      tagline: "A rare draw · Abundance & creation",        rare: true, duotone: { dark: [80, 30, 50],   light: [255, 214, 187] }, accents: ["#99112F", "#FFD6BB", "#FD8839"] },
+  hierophant: { name: "The Hierophant",   tagline: "A rare draw · Tradition & teaching",        rare: true, duotone: { dark: [100, 20, 30],  light: [253, 200, 150] }, accents: ["#CC1C0E", "#FFD6BB", "#FD8839"] },
+  lovers:     { name: "The Lovers",       tagline: "A rare draw · Choice & connection",         rare: true, duotone: { dark: [153, 17, 47],  light: [255, 220, 200] }, accents: ["#FD8839", "#CC1C0E", "#FFD6BB"] },
+  chariot:    { name: "The Chariot",      tagline: "A rare draw · Drive & disciplined will",    rare: true, duotone: { dark: [60, 10, 30],   light: [253, 136, 57]  }, accents: ["#CC1C0E", "#FD8839", "#99112F"] },
+  wheel:      { name: "Wheel of Fortune", tagline: "A rare draw · Cycles & timing",             rare: true, duotone: { dark: [70, 20, 60],   light: [255, 200, 130] }, accents: ["#FD8839", "#99112F", "#FFD6BB"] },
+  justice:    { name: "Justice",          tagline: "A rare draw · Truth & accountability",      rare: true, duotone: { dark: [40, 10, 20],   light: [240, 210, 170] }, accents: ["#99112F", "#FFD6BB", "#CC1C0E"] },
+  star:       { name: "The Star",         tagline: "A rare draw · Hope & inspiration",          rare: true, duotone: { dark: [30, 20, 80],   light: [255, 230, 200] }, accents: ["#FD8839", "#FFD6BB", "#99112F"] },
+  moon:       { name: "The Moon",         tagline: "A rare draw · Intuition & shadow",          rare: true, duotone: { dark: [20, 5, 50],    light: [220, 200, 180] }, accents: ["#99112F", "#FD8839", "#FFD6BB"] },
+  judgement:  { name: "Judgement",        tagline: "A rare draw · Calling & awakening",         rare: true, duotone: { dark: [100, 30, 20],  light: [253, 200, 100] }, accents: ["#FD8839", "#CC1C0E", "#FFD6BB"] },
+  world:      { name: "The World",        tagline: "A rare draw · Completion & integration",    rare: true, duotone: { dark: [80, 20, 50],   light: [255, 214, 187] }, accents: ["#FD8839", "#99112F", "#FFD6BB"] },
 };
 
 // ---- RARE-CARD FRAMEWORK ----
@@ -1321,25 +1337,121 @@ const ARCHETYPES = {
 //   1. `triggers(code)` returns true — a specific answer pattern matches
 //   2. `Math.random() < probability` — a probability roll succeeds
 //
-// Most users in the "witch zone" still get the common card; only a small
-// minority (probability * 1/total-patterns) ever draws the rare. Designed
-// to be the talked-about-at-the-event card.
+// Most users still get their common card; ~25% across the population
+// draw SOME rare (most often Witch / Wheel / Star / Moon — the broader-
+// trigger ones), and a smaller fraction draw the specific 5-axis rares
+// (Empress / Hierophant / Chariot — each ~1% overall).
 //
-// PR B will populate this with the rest of the Major Arcana rare cards
-// (Death, Devil, Tower, etc.) once the framework is proven.
+// PR B (this revision) populated 12 rare rules: Witch from PR A plus the
+// 11 Major Arcana cards (skipped: Death, Devil, Tower, Hanged Man per
+// the brand-tone scope decision). The order of rules matters when
+// patterns overlap — Wheel (universal) goes FIRST so its 3% roll always
+// gets a chance regardless of pattern. The 4 dark cards are intentionally
+// out-of-scope for the event deck.
+// Each rule has triggers(code) returning bool, and a probability 0..1.
+// First matching rule with a successful probability roll wins.
+//
+// Codes are 5-char strings (positions Q1..Q5). With 5 binary questions
+// there are 32 possible patterns; spreading 11 rare rules across them
+// keeps each individual rare card actually rare (~10-15% overall draw
+// rate across all users, weighted toward more common patterns).
+//
+// Rule ORDER matters when patterns overlap. The lowest-probability rule
+// (Wheel of Fortune, which can fire on ANY pattern) goes FIRST so it
+// gets its roll before more-specific rules can claim the slot.
 const RARE_RULES = {
-  // Witch fires on patterns where Q2 = Instinct (L) AND Q3 = Keeper-of-
-  // secrets (R) — the natural "intuitive secret-keeper" profile that maps
-  // best to the witch archetype. Codes: LLR (currently rebel) and RLR
-  // (currently monk). 20% probability — about 1 in 5 users who land in
-  // the zone will draw the witch instead.
+  // Wheel of Fortune — universal lucky draw. Fires on any pattern. Very
+  // low probability so it's the genuinely-random card (~3% of users
+  // overall draw the Wheel, regardless of answers).
+  wheel: {
+    triggers: (_code) => true,
+    probability: 0.03,
+  },
+
+  // The World — completion. Most "balanced" pattern: Own + Lit road +
+  // Who you became. The user who feels like things are coming together.
+  world: {
+    triggers: (code) => code.length >= 5 && code[0] === "L" && code[3] === "L" && code[4] === "L",
+    probability: 0.18,
+  },
+
+  // The Empress — abundance/creation. Read + Instinct + Force + Lit
+  // road + Who you became. Tender, generative.
+  empress: {
+    triggers: (code) => code.length >= 5 && code[0] === "R" && code[1] === "L" && code[2] === "L" && code[3] === "L" && code[4] === "L",
+    probability: 0.30,
+  },
+
+  // The Hierophant — tradition/teaching. Read + Strategy + Keeper +
+  // Lit road + What you built. Structured wisdom keeper.
+  hierophant: {
+    triggers: (code) => code.length >= 5 && code[0] === "R" && code[1] === "R" && code[2] === "R" && code[3] === "L" && code[4] === "R",
+    probability: 0.30,
+  },
+
+  // The Lovers — choice/connection. Own + Force + Who you became.
+  // Magnetic relational pattern.
+  lovers: {
+    triggers: (code) => code.length >= 5 && code[0] === "L" && code[2] === "L" && code[4] === "L",
+    probability: 0.18,
+  },
+
+  // The Chariot — willpower/drive. Own + Strategy + Force + New road +
+  // What you built. The disciplined driver.
+  chariot: {
+    triggers: (code) => code.length >= 5 && code[0] === "L" && code[1] === "R" && code[2] === "L" && code[3] === "R" && code[4] === "R",
+    probability: 0.30,
+  },
+
+  // Judgement — calling/awakening. Read + Strategy + New road. The
+  // user who's hearing a calling and ready to step into it.
+  judgement: {
+    triggers: (code) => code.length >= 5 && code[0] === "R" && code[1] === "R" && code[3] === "R",
+    probability: 0.18,
+  },
+
+  // Justice — balance/accountability. Keeper + Lit road + Built.
+  justice: {
+    triggers: (code) => code.length >= 5 && code[2] === "R" && code[3] === "L" && code[4] === "R",
+    probability: 0.18,
+  },
+
+  // The Star — hope/inspiration. Force + Lit road + Who you became.
+  // Steady inspirational presence.
+  star: {
+    triggers: (code) => code.length >= 5 && code[2] === "L" && code[3] === "L" && code[4] === "L",
+    probability: 0.18,
+  },
+
+  // The Moon — intuition/shadow. Instinct + New road + Who you became.
+  // The user who sees what's not lit yet.
+  moon: {
+    triggers: (code) => code.length >= 5 && code[1] === "L" && code[3] === "R" && code[4] === "L",
+    probability: 0.20,
+  },
+
+  // The Witch — rare-but-classic gate. Q2 = Instinct AND Q3 = Keeper —
+  // the natural "intuitive secret-keeper" profile. Probability lowered
+  // from PR A's 0.20 to 0.15 now that other rares compete for attention.
   witch: {
     triggers: (code) => code.length >= 3 && code[1] === "L" && code[2] === "R",
-    probability: 0.20,
+    probability: 0.15,
+  },
+
+  // The Fool — beginnings/leap. New road + Who you became — the user
+  // walking off the edge of the known.
+  fool: {
+    triggers: (code) => code.length >= 5 && code[3] === "R" && code[4] === "L",
+    probability: 0.15,
   },
 };
 
 const QUESTIONS = [
+  // Q1-Q3 unchanged — they still drive the COMMON archetype assignment via
+  // ARCHETYPE_MAP (8 patterns × 8 commons, 1:1). PR B adds Q4+Q5 as extra
+  // dimensions used ONLY by RARE_RULES to gate Major Arcana rare overrides.
+  // This keeps existing brand-deck assignments stable while letting new
+  // rare cards land on specific 5-trait patterns.
   {
     q: "When you enter a room, you are more likely to:",
     left:  { label: "Own it" },
@@ -1354,6 +1466,22 @@ const QUESTIONS = [
     q: "At heart, you are more of a:",
     left:  { label: "Force of nature" },
     right: { label: "Keeper of secrets" }
+  },
+  // Q4 — path / direction axis. Probes whether the user takes proven roads
+  // or blazes new ones. Used by rare rules for Hierophant (lit road),
+  // Fool/Chariot/Judgement (new road), etc.
+  {
+    q: "When the path forks, you:",
+    left:  { label: "Take the lit road" },
+    right: { label: "Make a new road" }
+  },
+  // Q5 — legacy axis. Probes whether the user's mark lives in WHO they
+  // became or WHAT they built. Used by rare rules for Empress/Lovers/World
+  // (became) vs Architect/Hierophant/Chariot (built).
+  {
+    q: "Your legacy lives most in:",
+    left:  { label: "Who you became" },
+    right: { label: "What you built" }
   }
 ];
 
@@ -1847,16 +1975,21 @@ function runPoseCountdown() {
 
 function pickArchetype() {
   const code = answers.join("");
-  const common = ARCHETYPE_MAP[code] || "charmer";
+  // Common-card lookup uses ONLY the first 3 chars of the code. PR B
+  // extended the quiz to 5 questions but kept ARCHETYPE_MAP at the
+  // original 3-question / 8-pattern layout — the extra 2 axes (Q4, Q5)
+  // feed RARE_RULES only. This means existing users see the same common
+  // archetype assignment they always did; rare cards are pure upgrade.
+  const common = ARCHETYPE_MAP[code.slice(0, 3)] || "charmer";
   // Rare-card overrides — first matching rule with a successful probability
-  // roll wins. Patterns are designed to be non-overlapping in PR B; for now
-  // there's only the witch rule so first-match is trivially fine. The roll
-  // is per-pickArchetype call, so the same user replaying the quiz with the
-  // same answers can flip between common and rare across attempts (which is
-  // the intended feel — "try again, see if the witch comes out").
+  // roll wins. Each rule rolls independently (so multiple rules can match
+  // the same pattern; the first to pass its probability gate gets the slot).
+  // The roll is per-pickArchetype call, so a user replaying with the same
+  // answers can flip between common and rare across attempts (intended —
+  // "try again, see if the witch comes out").
   for (const [rareKey, rule] of Object.entries(RARE_RULES)) {
     if (rule.triggers(code) && Math.random() < rule.probability) {
-      console.log(`[archetype] rare draw: ${rareKey} (pattern=${code} matched, roll succeeded)`);
+      console.log(`[archetype] rare draw: ${rareKey} (pattern=${code}, common-would-have-been=${common})`);
       return rareKey;
     }
   }
@@ -2383,18 +2516,15 @@ const SIGILS = {
     ctx.fill();
   },
   oracle: (ctx, x, y, s, color) => {
-    // Crescent moon — full circle minus an offset circle (destination-out).
+    // Crescent moon drawn as a single even-odd filled path (outer CCW,
+    // inner cutout CW) so the cutout shape can't escape the moon and
+    // erase part of the underlying peach disc.
     const r = s * 0.42;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(x - s * 0.05, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.save();
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(x + s * 0.12, y - s * 0.04, r * 0.92, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    ctx.arc(x - s * 0.05, y, r, 0, Math.PI * 2, false);
+    ctx.arc(x + s * 0.12, y - s * 0.04, r * 0.92, 0, Math.PI * 2, true);
+    ctx.fill("evenodd");
   },
   rebel: (ctx, x, y, s, color) => {
     // Lightning bolt — 6-point zigzag polygon.
@@ -2450,6 +2580,259 @@ const SIGILS = {
       i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
     }
     ctx.closePath();
+    ctx.fill();
+  },
+  // ---- Major Arcana additions ----
+  fool: (ctx, x, y, s, color) => {
+    // Sun-on-horizon — a small upward semicircle with three rays above
+    // a horizontal horizon line. The Fool's "stepping into the dawn".
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.08;
+    ctx.lineCap = "round";
+    // Horizon
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.40, y + s * 0.20);
+    ctx.lineTo(x + s * 0.40, y + s * 0.20);
+    ctx.stroke();
+    // Sun semicircle
+    ctx.beginPath();
+    ctx.arc(x, y + s * 0.20, s * 0.18, Math.PI, 0, false);
+    ctx.stroke();
+    // Three rays
+    [-0.35, 0, 0.35].forEach((dx) => {
+      ctx.beginPath();
+      ctx.moveTo(x + dx * s * 0.7, y - s * 0.10);
+      ctx.lineTo(x + dx * s * 0.7, y - s * 0.35);
+      ctx.stroke();
+    });
+  },
+  empress: (ctx, x, y, s, color) => {
+    // Venus glyph — circle with a cross below. Classic Empress symbol.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.09;
+    ctx.lineCap = "round";
+    // Circle (head)
+    ctx.beginPath();
+    ctx.arc(x, y - s * 0.10, s * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+    // Vertical line of the cross
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.12);
+    ctx.lineTo(x, y + s * 0.40);
+    ctx.stroke();
+    // Horizontal cross-bar
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.15, y + s * 0.28);
+    ctx.lineTo(x + s * 0.15, y + s * 0.28);
+    ctx.stroke();
+  },
+  hierophant: (ctx, x, y, s, color) => {
+    // Triple-tier crown — three stacked horizontal bars, decreasing in
+    // width. Traditional papal/hierophant emblem.
+    ctx.fillStyle = color;
+    const bars = [
+      { w: 0.60, y: 0.20 },
+      { w: 0.46, y: 0.02 },
+      { w: 0.30, y: -0.16 },
+    ];
+    bars.forEach(({ w, y: dy }) => {
+      const bw = s * w;
+      const bh = s * 0.10;
+      const bx = x - bw / 2;
+      const by = y + s * dy;
+      ctx.fillRect(bx, by, bw, bh);
+    });
+    // Small finial on top
+    ctx.beginPath();
+    ctx.arc(x, y - s * 0.27, s * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+  },
+  lovers: (ctx, x, y, s, color) => {
+    // Two linked rings — overlapping circles, the Lovers' bond.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.08;
+    ctx.beginPath();
+    ctx.arc(x - s * 0.16, y, s * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + s * 0.16, y, s * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+  },
+  chariot: (ctx, x, y, s, color) => {
+    // Eight-spoke chariot wheel — circle with eight radial spokes.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.07;
+    ctx.lineCap = "round";
+    // Outer wheel
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.36, 0, Math.PI * 2);
+    ctx.stroke();
+    // Hub
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    // Eight spokes
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * s * 0.10, y + Math.sin(a) * s * 0.10);
+      ctx.lineTo(x + Math.cos(a) * s * 0.32, y + Math.sin(a) * s * 0.32);
+      ctx.stroke();
+    }
+  },
+  wheel: (ctx, x, y, s, color) => {
+    // Concentric rings + a single radial mark — the Wheel of Fortune
+    // turning. Visually distinct from chariot's 8 spokes.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.07;
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.40, 0, Math.PI * 2);
+    ctx.stroke();
+    // Inner ring
+    ctx.lineWidth = s * 0.05;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+    // Hub dot
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    // Cardinal marks at 12, 3, 6, 9 (the four corner-creature anchors)
+    ctx.lineWidth = s * 0.06;
+    [-Math.PI/2, 0, Math.PI/2, Math.PI].forEach((a) => {
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * s * 0.30, y + Math.sin(a) * s * 0.30);
+      ctx.lineTo(x + Math.cos(a) * s * 0.40, y + Math.sin(a) * s * 0.40);
+      ctx.stroke();
+    });
+  },
+  justice: (ctx, x, y, s, color) => {
+    // Scales — central vertical line, horizontal beam, two pans hanging.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.06;
+    ctx.lineCap = "round";
+    // Central pole
+    ctx.beginPath();
+    ctx.moveTo(x, y - s * 0.36);
+    ctx.lineTo(x, y + s * 0.30);
+    ctx.stroke();
+    // Horizontal beam
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.30, y - s * 0.20);
+    ctx.lineTo(x + s * 0.30, y - s * 0.20);
+    ctx.stroke();
+    // Suspension lines to pans
+    [-0.28, 0.28].forEach((dx) => {
+      ctx.beginPath();
+      ctx.moveTo(x + dx * s, y - s * 0.20);
+      ctx.lineTo(x + dx * s, y + s * 0.02);
+      ctx.stroke();
+    });
+    // Pan curves
+    [-0.28, 0.28].forEach((dx) => {
+      ctx.beginPath();
+      ctx.arc(x + dx * s, y + s * 0.08, s * 0.12, Math.PI, 0, false);
+      ctx.stroke();
+    });
+    // Base
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.16, y + s * 0.30);
+    ctx.lineTo(x + s * 0.16, y + s * 0.30);
+    ctx.stroke();
+  },
+  star: (ctx, x, y, s, color) => {
+    // Seven-pointed star — distinct from the luminary's 8-point.
+    // Traditional Star card uses an 8-point + 7 small around it, but
+    // 7-point reads as more mystical / less leadership-y.
+    ctx.fillStyle = color;
+    const r = s * 0.42;
+    ctx.beginPath();
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 - Math.PI / 2;
+      const radius = i % 2 === 0 ? r : r * 0.44;
+      const px = x + Math.cos(a) * radius;
+      const py = y + Math.sin(a) * radius;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  },
+  moon: (ctx, x, y, s, color) => {
+    // Filled crescent + three small stars. Drawn as a single even-odd
+    // filled path (outer circle CCW, inner circle CW) so the cutout only
+    // affects the crescent shape itself — NOT the peach disc beneath
+    // (which is what the destination-out approach was breaking).
+    ctx.fillStyle = color;
+    const r = s * 0.36;
+    ctx.beginPath();
+    // Outer circle (counterclockwise → "outside" of the crescent)
+    ctx.arc(x - s * 0.04, y, r, 0, Math.PI * 2, false);
+    // Inner cutout circle (clockwise → "hole" in even-odd fill)
+    ctx.arc(x + s * 0.10, y - s * 0.03, r * 0.88, 0, Math.PI * 2, true);
+    ctx.fill("evenodd");
+    // Three small stars beside the crescent (separate sub-paths now,
+    // since the crescent already closed cleanly above).
+    [[0.30, -0.22], [0.36, 0.02], [0.26, 0.26]].forEach(([dx, dy]) => {
+      ctx.beginPath();
+      ctx.arc(x + dx * s, y + dy * s, s * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  },
+  judgement: (ctx, x, y, s, color) => {
+    // Trumpet — angled cone shape with a small flag/banner.
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.05;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    // Trumpet body (cone from upper-left small end to lower-right wide bell)
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.30, y - s * 0.30);
+    ctx.lineTo(x - s * 0.20, y - s * 0.22);
+    ctx.lineTo(x + s * 0.20, y + s * 0.28);
+    ctx.lineTo(x + s * 0.36, y + s * 0.14);
+    ctx.lineTo(x + s * 0.34, y + s * 0.30);
+    ctx.lineTo(x + s * 0.12, y + s * 0.38);
+    ctx.closePath();
+    ctx.fill();
+    // Mouthpiece nub
+    ctx.beginPath();
+    ctx.arc(x - s * 0.30, y - s * 0.30, s * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+  },
+  world: (ctx, x, y, s, color) => {
+    // Laurel wreath — two arching curves meeting at top and bottom,
+    // small leaf marks along each side.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.06;
+    ctx.lineCap = "round";
+    // Left arc
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.38, Math.PI * 0.55, Math.PI * 1.45, false);
+    ctx.stroke();
+    // Right arc
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.38, Math.PI * 1.55, Math.PI * 0.45, false);
+    ctx.stroke();
+    // Leaf marks on each side (small diagonal ticks)
+    ctx.lineWidth = s * 0.04;
+    [-1, 1].forEach((side) => {
+      [-0.30, -0.10, 0.10, 0.30].forEach((dy) => {
+        const baseX = x + side * (s * 0.38);
+        const baseY = y + s * dy;
+        ctx.beginPath();
+        ctx.moveTo(baseX, baseY);
+        ctx.lineTo(baseX + side * s * 0.08, baseY - s * 0.04);
+        ctx.stroke();
+      });
+    });
+    // Tiny globe dot in centre
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.06, 0, Math.PI * 2);
     ctx.fill();
   },
   witch: (ctx, x, y, s, color) => {
