@@ -3551,9 +3551,11 @@ async function handleStats(_request, env, url) {
 async function handleWall(_request, env, url) {
   if (!env.PORTRAITS) return new Response("R2 bucket not bound.", { status: 500 });
 
-  // Default changed from "today" → "48h" so the wall keeps showing yesterday's
-  // portraits across midnight UTC. Pass ?window=today for strict same-day only.
-  const win = url.searchParams.get("window") || "48h";
+  // Default: last 7 days rolling so attendees can find their card all
+  // week. Pass ?window=48h for the shorter event-night view (the previous
+  // default), ?window=today for strict same-day, or ?window=all for
+  // everything ever rendered.
+  const win = url.searchParams.get("window") || "week";
   const html = renderWallHtml(win);
   return new Response(html, {
     status: 200,
@@ -3571,15 +3573,20 @@ async function handleGalleryJson(_request, env, url) {
   const headers = { "Content-Type": "application/json", "Cache-Control": "no-cache" };
   if (!env.PORTRAITS) return new Response(JSON.stringify({ error: "no_r2" }), { status: 500, headers });
 
-  // Default changed from "today" → "48h" so the wall keeps showing yesterday's
-  // portraits across midnight UTC. Pass ?window=today for strict same-day only.
-  const win = url.searchParams.get("window") || "48h";
+  // Default: last 7 days rolling so attendees can find their card all
+  // week. Pass ?window=48h for the shorter event-night view (the previous
+  // default), ?window=today for strict same-day, or ?window=all for
+  // everything ever rendered.
+  const win = url.searchParams.get("window") || "week";
   const cutoffMs = computeCutoffMs(win);
 
-  // List up to 500 most recent objects from the bucket. R2 list orders
+  // List up to 1000 objects from the bucket. R2 list orders
   // alphabetically by key, and our key scheme is YYYY/MM/DD/archetype-ts-id
   // — so chronological-ish but not perfect, so we sort by metadata.ts below.
-  const list = await env.PORTRAITS.list({ limit: 500 });
+  // Bumped from 500 → 1000 to comfortably cover a week of event activity
+  // (~50 portraits/day × 7 days = 350 typical; 1000 leaves headroom for
+  // heavy days without paginating).
+  const list = await env.PORTRAITS.list({ limit: 1000 });
   const items = await Promise.all((list.objects || []).map(async (obj) => {
     const head = await env.PORTRAITS.head(obj.key);
     const meta = head?.customMetadata || {};
@@ -3603,17 +3610,18 @@ async function handleGalleryJson(_request, env, url) {
 //   "all"    → no cutoff (include everything in the bucket)
 //   "today"  → start of today (UTC), 00:00:00.000
 //   "hour"   → last 60 minutes
-//   <unknown>→ treated as "today" (safe default for event use)
+//   "48h"    → last 48 hours rolling (the old default; still selectable)
+//   <unknown>→ treated as the new 7-day default
 function computeCutoffMs(win) {
   if (win === "all")    return 0;
   if (win === "hour")   return Date.now() - 60 * 60 * 1000;
   if (win === "today")  { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d.getTime(); }
-  // Default ("48h" or anything unknown) — last 48 hours rolling. The wall
-  // is used at events that may span midnight UTC or run across multiple
-  // days; "today" alone hides yesterday's portraits the moment UTC ticks
-  // over, which is jarring during late-evening sessions. 48h is the
-  // event-friendly default; pass ?window=today to get strict today-only.
-  return Date.now() - 48 * 60 * 60 * 1000;
+  if (win === "48h")    return Date.now() - 48 * 60 * 60 * 1000;
+  // Default ("week" or anything unknown) — last 7 days rolling. Event
+  // portraits stay visible on the wall for a full week so attendees can
+  // still find their card in the days after the event. Pass ?window=48h
+  // for the shorter event-night view, or ?window=today for strict same-day.
+  return Date.now() - 7 * 24 * 60 * 60 * 1000;
 }
 
 // Render the live wall HTML. Self-contained: inlines the auth key + window
@@ -4059,7 +4067,7 @@ function renderWallHtml(win) {
       <h1>The Game Changer Gallery</h1>
     </div>
     <div class="meta">
-      <span class="window-label">${win === "all" ? "All time" : win === "hour" ? "Last hour" : win === "today" ? "Today" : "Last 48h"}</span>
+      <span class="window-label">${win === "all" ? "All time" : win === "hour" ? "Last hour" : win === "today" ? "Today" : win === "48h" ? "Last 48h" : "Last 7 days"}</span>
       <span class="count"><span id="count">—</span> revealed</span>
     </div>
   </header>
