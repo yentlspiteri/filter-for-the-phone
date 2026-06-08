@@ -1355,6 +1355,10 @@ export default {
       // hit it. Returns the addToMailchimp result verbatim plus the
       // computed dc and list URL so we can sanity-check the wiring.
       if (url.pathname === "/debug/mailchimp")          return handleMailchimpDebug(request, env, url, cors);
+      // Admin debug — fire a synthetic Slack ping. Same passcode gate as
+      // /debug/mailchimp. Use to confirm the webhook URL is configured
+      // before an event, or to debug "I'm not getting pings" mid-event.
+      if (url.pathname === "/debug/slack")              return handleSlackDebug(request, env, url, cors);
       return jsonResp({ error: "not_found", path: url.pathname }, 404, cors);
     }
 
@@ -2644,6 +2648,124 @@ async function addToMailchimp(env, email, archetype) {
   }
 }
 
+// ---------- Slack debug — verify the webhook on-demand ----------
+// GET /debug/slack?key=<GALLERY_KEY>&email=<addr>&archetype=<key>
+// Fires the same pingSlack call sendCardEmail makes, with the params
+// passed via query. Returns the structured outcome + meta so we can
+// see at a glance whether the secret is set and whether Slack accepted.
+async function handleSlackDebug(_request, env, url, cors) {
+  if (!env.GALLERY_KEY) return jsonResp({ error: "no_key_config" }, 500, cors);
+  const auth = url.searchParams.get("key") || "";
+  if (auth !== env.GALLERY_KEY) return jsonResp({ error: "forbidden" }, 403, cors);
+
+  const email = url.searchParams.get("email") || "test@vonpeach.com";
+  const archetype = url.searchParams.get("archetype") || "monk";
+  const read = READS[archetype] || {};
+  const archetypeName = read.name || archetype;
+
+  const config = {
+    has_webhook: !!env.SLACK_WEBHOOK_URL,
+    // Echo a redacted form — the URL ends in a secret token; show only
+    // the hosts.slack.com/services/T.../B... prefix to confirm shape
+    // without leaking the token in the response body.
+    webhook_prefix: env.SLACK_WEBHOOK_URL
+      ? String(env.SLACK_WEBHOOK_URL).split("/").slice(0, 6).join("/") + "/..."
+      : null,
+  };
+
+  const result = await pingSlack(env, {
+    email,
+    archetype,
+    archetypeName,
+    sharePath: url.searchParams.get("sharePath") || null,
+    shareOrigin: url.origin,
+  });
+
+  return jsonResp({ config, result, tested_with: { email, archetype } }, 200, cors);
+}
+
+// ---------- Slack: ping a webhook with each new email submission ----------
+// Posts a small notification card to a Slack channel via an Incoming
+// Webhook so we get live visibility into who's submitting emails during
+// an event. Best-effort: silent no-op if SLACK_WEBHOOK_URL isn't set,
+// swallows its own errors so the surrounding email send is never blocked.
+//
+// Set the webhook with:
+//   wrangler secret put SLACK_WEBHOOK_URL
+// Slack incoming-webhook URLs look like:
+//   https://hooks.slack.com/services/T.../B.../xxxxxxxx
+// Create one in Slack: App directory → Incoming Webhooks → Add to channel.
+//
+// The message uses Slack's Block Kit format so the recipient sees:
+//   - A short header (":star2: New Von Peach card")
+//   - A context line with the email + archetype
+//   - A button linking to the user's /p/<key> share page (preview shows
+//     their actual card via og:image, so the Slack preview unfurls nicely)
+async function pingSlack(env, { email, archetype, archetypeName, sharePath, shareOrigin }) {
+  if (!env.SLACK_WEBHOOK_URL) {
+    // Quiet on missing — keep the log only when present-but-broken.
+    return { status: "skipped", reason: "no_webhook" };
+  }
+
+  const shareUrl = (sharePath && shareOrigin)
+    ? shareOrigin + sharePath
+    : "https://tarot.vonpeach.com";
+
+  // Block Kit payload. Header is bold, context section gives the
+  // structured data, button gives the curator a one-click jump to the
+  // share page (which already auto-unfurls via OG tags in Slack, so the
+  // preview embed below the button shows the user's actual card).
+  const payload = {
+    text: `New Von Peach card: ${email} · ${archetypeName || archetype}`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `:sparkles: *New Von Peach card*\n*${escapeSlack(email)}* drew *${escapeSlack(archetypeName || archetype)}*`,
+        },
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: { type: "plain_text", text: "View card", emoji: true },
+            url: shareUrl,
+            style: "primary",
+          },
+        ],
+      },
+    ],
+  };
+
+  try {
+    const res = await fetch(env.SLACK_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      console.log(`[slack] pinged: ${email} (archetype=${archetype})`);
+      return { status: "ok" };
+    }
+    const detail = await res.text();
+    console.warn(`[slack] failed: HTTP ${res.status} — ${detail.slice(0, 240)}`);
+    return { status: "failed", httpStatus: res.status, detail: detail.slice(0, 500) };
+  } catch (err) {
+    console.warn(`[slack] threw: ${err?.message}`);
+    return { status: "failed", reason: "exception", detail: err?.message };
+  }
+}
+
+// Minimal Slack escape — Block Kit mrkdwn treats <, > and & as control
+// characters used to wrap user mentions, links and HTML entities. The
+// fields we pass in (email + archetype name) shouldn't contain them
+// under normal use, but defending against weird inputs is cheap.
+function escapeSlack(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // ---------- email send: posts to Resend, throws on failure ----------
 // `image` is shown inline in the email body AND attached for download. We
 // used to attach the raw AI portrait (`imageAttachment`) on the theory that
@@ -2730,6 +2852,12 @@ async function sendCardEmail(env, { email, archetype, archetypeName, image, imag
   // ctx.waitUntil() bounds; the helper swallows its own errors so this
   // can never throw past the email send that already succeeded.
   await addToMailchimp(env, email, archetype);
+
+  // Slack ping — same best-effort pattern as Mailchimp. Posts a small
+  // notification card to the #vonpeach-cards channel (or wherever the
+  // SLACK_WEBHOOK_URL points) with the new contact + a link to their
+  // portrait. Silent if the secret isn't configured.
+  await pingSlack(env, { email, archetype, archetypeName: name, sharePath, shareOrigin });
 
   return data;
 }
