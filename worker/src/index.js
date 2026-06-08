@@ -4019,6 +4019,40 @@ function renderWallHtml(win) {
       text-transform: uppercase;
     }
 
+    /* "Fullscreen" toggle for TV / event-display use. Hides the browser
+       chrome (URL bar, tabs, OS menu bar) so the wall fills the screen
+       edge-to-edge. Lives in the bottom-LEFT corner so it doesn't fight
+       the QR card in the bottom-right. Auto-hides once fullscreen is
+       active so it never appears on the wall in display mode.
+       Keyboard shortcut: F toggles. Esc exits (browser default). */
+    .fs-toggle {
+      position: fixed;
+      bottom: 28px; left: 28px;
+      z-index: 5;
+      appearance: none;
+      border: 0;
+      cursor: pointer;
+      background: rgba(255, 214, 187, 0.10);
+      color: var(--peach);
+      border: 1px solid rgba(255, 214, 187, 0.30);
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-family: "Aileron", "General Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      backdrop-filter: blur(8px);
+      transition: background 180ms, opacity 240ms, transform 180ms;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .fs-toggle:hover { background: rgba(255, 214, 187, 0.18); }
+    .fs-toggle:active { transform: translateY(1px); }
+    .fs-toggle svg { width: 14px; height: 14px; flex-shrink: 0; }
+    /* While fullscreen, hide the button entirely (it has done its job). */
+    :fullscreen .fs-toggle,
+    :-webkit-full-screen .fs-toggle { opacity: 0; pointer-events: none; }
+
     /* ------- Live archetype tally (small strip below the header) ------- */
     .tally {
       padding: 14px 48px 18px;
@@ -4224,6 +4258,19 @@ function renderWallHtml(win) {
     <div class="qr-frame" id="qrFrame"></div>
     <div class="qr-eyebrow">Scan to create yours</div>
   </aside>
+
+  <!-- TV / event-display fullscreen toggle. Hides the browser chrome so
+       the wall fills the screen edge-to-edge. Auto-hides itself once
+       fullscreen is active. Press F to toggle, Esc to exit. -->
+  <button class="fs-toggle" id="fsToggle" type="button" aria-label="Enter fullscreen (F)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M3 9 V3 H9" />
+      <path d="M21 9 V3 H15" />
+      <path d="M3 15 V21 H9" />
+      <path d="M21 15 V21 H15" />
+    </svg>
+    Fullscreen
+  </button>
 
   <script>
     const WIN = ${safeWin};
@@ -4467,6 +4514,42 @@ function renderWallHtml(win) {
       }
     }
     renderQR();
+
+    // ---------- Fullscreen toggle ----------
+    // TV / event-display ergonomics. The Fullscreen API requires a user
+    // gesture to enter (the click handler IS that gesture). F-key toggles
+    // for the AV person at the event; Esc exits via the browser default.
+    // Vendor prefixes for older Safari + WebKit-TV browsers (kiosk modes
+    // on smart-TV Chromecast-style devices sometimes only expose the
+    // webkit-prefixed API).
+    const fsBtn = document.getElementById("fsToggle");
+    function isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+    async function toggleFullscreen() {
+      try {
+        if (isFullscreen()) {
+          if (document.exitFullscreen)         await document.exitFullscreen();
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        } else {
+          const el = document.documentElement;
+          if (el.requestFullscreen)         await el.requestFullscreen({ navigationUI: "hide" });
+          else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        }
+      } catch (err) {
+        console.warn("Fullscreen toggle failed:", err && err.message || err);
+      }
+    }
+    fsBtn && fsBtn.addEventListener("click", toggleFullscreen);
+    // F = toggle. Don't fire when the user is mid-typing in a hypothetical
+    // future input field — Escape is the standard exit gesture.
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "f" || e.key === "F") {
+        if (e.target && /input|textarea/i.test(e.target.tagName)) return;
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    });
   </script>
 </body></html>`;
 }
