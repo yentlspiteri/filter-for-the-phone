@@ -3077,6 +3077,15 @@ async function saveToGallery(env, archetype, imageDataUrl) {
         archetype,
         ts: String(now.getTime()),
         iso: now.toISOString(),
+        // "false" = raw AI image with gibberish bottom-pill text. The wall
+        // filters these out so the gibberish never shows. The client will
+        // call /portrait-image/<key>/frame within ~1-2s with the framed
+        // shareCanvas (brand pill on top of the gibberish), and that
+        // handler flips this flag to "true" — tile then becomes visible
+        // on the wall on the next 5s poll. Legacy portraits without this
+        // flag are treated as framed (see handleGalleryJson) so we don't
+        // hide pre-existing tiles.
+        framed: "false",
       },
     });
     // Returned so callers (handlePortrait, handlePortraitEmail) can build a
@@ -3148,7 +3157,11 @@ async function handlePortraitImage(_request, env, url) {
     status: 200,
     headers: {
       "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
-      "Cache-Control": "public, max-age=300",
+      // Short cache so the wall picks up the framed-version replace within
+      // ~1 minute even when the browser/CDN has the raw image cached. Was
+      // 300s (5min) which left gibberish-pilled raw images visible for too
+      // long after handlePortraitFrame had already overwritten R2.
+      "Cache-Control": "public, max-age=60, must-revalidate",
     },
   });
 }
@@ -3214,7 +3227,11 @@ async function handlePortraitShare(_request, env, url) {
       "Content-Type": "text/html; charset=utf-8",
       // Short cache so LinkedIn's scraper can refresh the OG preview if we
       // tune the meta tags, but long enough that hot shares don't hammer R2.
-      "Cache-Control": "public, max-age=300",
+      // Short cache so the wall picks up the framed-version replace within
+      // ~1 minute even when the browser/CDN has the raw image cached. Was
+      // 300s (5min) which left gibberish-pilled raw images visible for too
+      // long after handlePortraitFrame had already overwritten R2.
+      "Cache-Control": "public, max-age=60, must-revalidate",
     },
   });
 }
@@ -3651,10 +3668,16 @@ async function handlePortraitFrame(request, env, url, cors) {
 
     const b64 = String(body.image).split(",").pop();
     const bytes = base64ToUint8Array(b64);
+    // Preserve original customMetadata, but flip `framed` → "true" so the
+    // wall stops hiding this tile. saveToGallery wrote "false" on the
+    // initial raw save; once the framed bytes land here, the tile is
+    // safe to show on every public surface (wall, gallery, OG preview).
+    const meta = { ...(head.customMetadata || {}), framed: "true" };
     await env.PORTRAITS.put(objectKey, bytes, {
       httpMetadata: { contentType: "image/jpeg" },
-      customMetadata: head.customMetadata || {},
+      customMetadata: meta,
     });
+    console.log(`[frame] replaced ${objectKey} with framed bytes (${bytes.length}b)`);
     return jsonResp({ ok: true, size: bytes.length }, 200, cors);
   } catch (err) {
     console.warn(`[frame] replace failed for ${objectKey}: ${err?.message}`);
@@ -3858,11 +3881,22 @@ async function handleGalleryJson(_request, env, url) {
       key: obj.key,
       archetype: meta.archetype || "—",
       ts,
+      // "false" → raw AI image with gibberish bottom-pill text; the client
+      // hasn't uploaded the framed shareCanvas yet. Wall hides these.
+      // Legacy portraits saved BEFORE the framed flag existed have no
+      // value here; treat them as framed (they've been visible for a
+      // while already, no point hiding them retroactively).
+      framed: meta.framed !== "false",
     };
   }));
 
+  // Pass ?showRaw=1 to include unframed tiles (admin debugging) — default
+  // hides them so the gibberish bottom-pill never makes it to the wall.
+  const showRaw = url.searchParams.get("showRaw") === "1";
+
   const filtered = items
     .filter((x) => x.ts >= cutoffMs)
+    .filter((x) => showRaw || x.framed)
     .sort((a, b) => b.ts - a.ts);
 
   return new Response(JSON.stringify({ items: filtered, now: Date.now(), window: win }), { status: 200, headers });
