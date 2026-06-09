@@ -21,6 +21,16 @@ FROM_EMAIL = "Von Peach <hello@vonpeach.com>"
 # Rollback if Kontext misbehaves: flip back to "pulid" and redeploy.
 PIPELINE = "kontext"
 
+# Per-event Mailchimp + Slack tag. Applied to every contact in addition to
+# the always-on "filter-for-the-phone" tag + the archetype tag, so we can
+# segment the Mailchimp audience by event afterwards. Also shows up in the
+# Slack ping eyebrow for live event context. Update this and redeploy
+# between events (just edit + push to main — the GitHub Action redeploys):
+#   Biocap → "Biocap"
+#   next event → "<new event name>"
+# Leave empty (MAILCHIMP_EVENT_TAG = "") to skip the per-event tag entirely.
+MAILCHIMP_EVENT_TAG = "Biocap"
+
 # R2 bucket for the admin portrait gallery — every successful generation is
 # written here. Create the bucket once with:
 #   wrangler r2 bucket create vonpeach-portraits
