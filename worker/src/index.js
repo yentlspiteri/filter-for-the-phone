@@ -4464,6 +4464,17 @@ function renderWallHtml(win) {
       img.loading = "lazy";
       img.alt = name;
       img.src = tileUrl(item);
+      // If the IMG fails to load (R2 404, network error, corrupted JPEG, etc.)
+      // remove the entire tile + clear it from seenKeys so the next poll has
+      // a chance to add it back if the image becomes available. Without this
+      // the wall accumulates broken-image tiles like the "THE —" one from
+      // the event screenshot — the IMG element 404s but the tile stays in
+      // the DOM showing the browser's broken-image icon forever.
+      img.addEventListener("error", function () {
+        console.warn("[wall] image failed to load, removing tile", item.key);
+        seenKeys.delete(item.key);
+        if (tile.parentNode) tile.parentNode.removeChild(tile);
+      });
       // Bottom fade — masks any gibberish text the AI tried to put at the
       // bottom of the image. The brand pill sits on top of this fade.
       const fade = document.createElement("div");
@@ -4489,6 +4500,14 @@ function renderWallHtml(win) {
       img.src = tileUrl(item);
       img.alt = NAMES[item.archetype] || item.archetype;
       pill.textContent = NAMES[item.archetype] || ("The " + item.archetype);
+      // Same error-recovery as the tile IMG — if the spotlight image fails
+      // to load (broken R2 obj), drop the reveal silently rather than show
+      // a broken-image icon at full-screen size.
+      img.onerror = function () {
+        console.warn("[wall] spotlight image failed to load, skipping reveal", item.key);
+        overlay.classList.remove("visible", "closing");
+        overlay.setAttribute("aria-hidden", "true");
+      };
       overlay.classList.remove("closing");
       overlay.classList.add("visible");
       overlay.setAttribute("aria-hidden", "false");
