@@ -1024,8 +1024,16 @@ function buildSubjectDirective(subject) {
       : "") +
     // Eye colour and hair colour are the two attributes Flux is most likely to
     // lose under stylization, so spell them out again as their own clauses.
+    // For LIGHT colours (green / grey / hazel / amber / blue-grey / grey-green),
+    // Kontext strongly defaults to a generic brown unless we lean on it hard
+    // — three sentences with explicit "NOT brown" and the exact colour
+    // requested again raises the hit rate dramatically vs a single mention.
     (subject.eyes
-      ? `Eye colour is critical: render clearly visible ${subject.eyes} — the iris colour must read unmistakably as ${subject.eyes}. `
+      ? (/\b(green|grey|gray|hazel|amber|blue-?grey|grey-?green)\b/i.test(subject.eyes)
+          ? `Eye colour is critical: render clearly visible ${subject.eyes} — the iris colour must read unmistakably as ${subject.eyes}. ` +
+            `DO NOT default to brown eyes; the subject's irises are ${subject.eyes}, not brown. ` +
+            `Both irises drawn the SAME colour, the SAME colour throughout — ${subject.eyes}, clearly visible against the white of the eye. `
+          : `Eye colour is critical: render clearly visible ${subject.eyes} — the iris colour must read unmistakably as ${subject.eyes}. `)
       : "") +
     (subject.hair && !isBald
       ? `Hair: ${subject.hair} — that exact colour and length, drawn unmistakably (NOT recoloured to brand orange or wine red). `
@@ -1136,6 +1144,13 @@ function buildSubjectNegative(subject) {
   }
   if (subject.hair && /bald|shaved head|no hair/i.test(subject.hair)) {
     parts.push("full head of hair, long hair, flowing locks, thick hair on top of head, hair covering the scalp");
+  }
+  // When the subject has LIGHT eyes (green / grey / hazel / amber / blue-grey),
+  // Kontext defaults toward generic brown irises under stylisation. Explicitly
+  // forbidding brown for these users dramatically raises the hit rate — the
+  // positive directive ("render green eyes") alone wasn't enough at the event.
+  if (subject.eyes && /\b(green|grey|gray|hazel|amber|blue-?grey|grey-?green)\b/i.test(subject.eyes)) {
+    parts.push("brown eyes on a light-eyed subject, dark brown irises, generic brown eye colour, default brown eyes");
   }
   return parts.join(", ");
 }
@@ -1521,8 +1536,29 @@ async function handlePortraitEmail(request, env, ctx, cors) {
 async function describeSubject(env, imageDataUrl, faceImageDataUrl) {
   // Premium path: GPT-4o-mini Vision (multi-image, JSON-mode guaranteed).
   if (env.OPENAI_API_KEY) {
-    const subject = await describeSubjectOpenAI(env, imageDataUrl, faceImageDataUrl);
-    if (subject) return subject;
+    // Run the omnibus AND a focused eye-colour call in parallel. The
+    // omnibus extractor buries the eye field in a long multi-attribute
+    // schema where GPT-4o-mini routinely defaults to "brown" or "blue"
+    // and misses green / grey / hazel / amber. The focused call asks
+    // ONLY about iris colour against the tight face crop, with the enum
+    // up front — much more reliable for the easy-to-miss colours.
+    const [subject, focusedEyes] = await Promise.all([
+      describeSubjectOpenAI(env, imageDataUrl, faceImageDataUrl),
+      detectEyeColorOpenAI(env, faceImageDataUrl || imageDataUrl).catch((err) => {
+        console.warn(`[pipeline] focused eye-colour (OpenAI) errored: ${err?.message}`);
+        return null;
+      }),
+    ]);
+    if (subject) {
+      if (focusedEyes) {
+        const merged = mergeEyeColor(subject.eyes, focusedEyes);
+        if (merged !== subject.eyes) {
+          console.log(`[pipeline] eye-colour (OpenAI focused): omnibus="${subject.eyes}" focused="${focusedEyes}" → "${merged}"`);
+          subject.eyes = merged;
+        }
+      }
+      return subject;
+    }
     // fall through to Workers AI if OpenAI is configured but errored — better
     // to degrade gracefully than to send a portrait with no identity directive
     console.warn("[pipeline] OpenAI vision returned nothing — falling back to Workers AI");
@@ -1754,6 +1790,90 @@ async function describeSubjectOpenAI(env, wideDataUrl, faceDataUrl) {
     return subject;
   } catch (err) {
     console.warn(`[pipeline] OpenAI vision threw: ${err?.message}`);
+    return null;
+  }
+}
+
+// Focused OpenAI eye-colour detector. GPT-4o-mini Vision against the tight
+// face crop, asking ONLY about iris colour with the enum up front. Run in
+// parallel with describeSubjectOpenAI; result is merged into the omnibus
+// subject by mergeEyeColor.
+//
+// Why this is needed even though the omnibus prompt enumerates eye colours:
+// in the long multi-attribute schema, the eye field is one of ten and the
+// model frequently picks "brown" or "blue" by default — burying the
+// "NEVER default" instruction. A single-purpose call with one field and
+// the option list at the top of the system prompt is dramatically more
+// reliable for the easy-to-miss colours (green, grey, hazel, amber).
+async function detectEyeColorOpenAI(env, faceDataUrl) {
+  if (!env.OPENAI_API_KEY || !faceDataUrl) return null;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a precise iris-colour detector. ONE JOB: look at the " +
+              "iris (the coloured ring around the pupil — NOT the pupil " +
+              "itself, NOT the white of the eye) of BOTH eyes in the photo. " +
+              "Pick the SINGLE most specific colour from this list:\n" +
+              "  brown, dark brown, light brown, hazel (brown with green or " +
+              "  gold flecks), amber (light brown with gold cast), blue, " +
+              "  light blue, deep blue, blue-grey, green, deep green, light " +
+              "  green, grey, grey-green\n" +
+              "Reply with ONE PHRASE in this exact format:\n" +
+              "  \"<colour> eyes\"\n" +
+              "Examples: \"green eyes\", \"hazel eyes\", \"grey eyes\", " +
+              "\"deep blue eyes\", \"light brown eyes\". " +
+              "NO other words, NO JSON, NO punctuation, NO hedging like " +
+              "\"possibly\" or \"approximately\". Just the phrase.\n" +
+              "CRITICAL RULES:\n" +
+              "  - Green, grey, hazel and amber are commonly missed because " +
+              "    flat indoor lighting desaturates the iris and they read " +
+              "    as muted blue or muted brown. Look HARDER before " +
+              "    defaulting.\n" +
+              "  - If the iris is clearly NOT dark brown and NOT a saturated " +
+              "    blue, the answer is probably green, grey, or hazel — pick " +
+              "    the most accurate of those three. Do NOT default to brown " +
+              "    or blue for light irises.\n" +
+              "  - Hazel = brown base with green/gold flecks or ring. Amber = " +
+              "    light brown with a gold/honey cast.\n" +
+              "  - Only return brown if the iris is clearly dark and uniform. " +
+              "    Only return blue if the iris is clearly saturated blue.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "What colour are this person's eyes? One phrase only." },
+              { type: "image_url", image_url: { url: faceDataUrl, detail: "high" } },
+            ],
+          },
+        ],
+        max_tokens: 24,
+        temperature: 0.1,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      console.warn(`[pipeline] OpenAI eye detector HTTP ${res.status}: ${detail.slice(0, 200)}`);
+      return null;
+    }
+    const data = await res.json();
+    const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+    const cleaned = raw.replace(/^["'`]+|["'`.,;:!?]+$/g, "").trim().toLowerCase();
+    if (!cleaned) return null;
+    // Must look like an eye phrase
+    if (!/\beyes?\b/.test(cleaned)) return null;
+    return cleaned;
+  } catch (err) {
+    console.warn(`[pipeline] OpenAI eye detector threw: ${err?.message}`);
     return null;
   }
 }
