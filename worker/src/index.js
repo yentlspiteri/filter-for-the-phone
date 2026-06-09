@@ -3872,8 +3872,14 @@ async function handleGalleryJson(_request, env, url) {
   // Bumped from 500 → 1000 to comfortably cover a week of event activity
   // (~50 portraits/day × 7 days = 350 typical; 1000 leaves headroom for
   // heavy days without paginating).
-  const list = await env.PORTRAITS.list({ limit: 1000 });
-  const items = await Promise.all((list.objects || []).map(async (obj) => {
+  // Skip non-portrait R2 objects (e.g. gallery-stats.json — the counter
+  // file that handleScan/handleStats maintains in the same bucket).
+  // Portrait keys follow YYYY/MM/DD/<archetype>-<id>.jpg; anything that
+  // doesn't end in .jpg is system / metadata / counter data and would
+  // 404 when the wall tries to render it as an <img>. That's what was
+  // creating the broken "THE —" tile on the event TV.
+  const objects = (list.objects || []).filter((o) => /\.jpg$/i.test(o.key));
+  const items = await Promise.all(objects.map(async (obj) => {
     const head = await env.PORTRAITS.head(obj.key);
     const meta = head?.customMetadata || {};
     const ts = meta.ts ? Number(meta.ts) : (obj.uploaded?.getTime?.() || 0);
@@ -3897,6 +3903,12 @@ async function handleGalleryJson(_request, env, url) {
   const filtered = items
     .filter((x) => x.ts >= cutoffMs)
     .filter((x) => showRaw || x.framed)
+    // Also defensive: drop any tile where archetype is still "—" after
+    // metadata enrichment. Either the .jpg lost its customMetadata
+    // (manual upload, restore from backup) or there's a key we missed
+    // in the .jpg filter above. Either way, it can't render properly
+    // on the wall — better to hide than display "THE —".
+    .filter((x) => x.archetype && x.archetype !== "—" && x.archetype !== "-")
     .sort((a, b) => b.ts - a.ts);
 
   return new Response(JSON.stringify({ items: filtered, now: Date.now(), window: win }), { status: 200, headers });
