@@ -2570,6 +2570,7 @@ async function handleMailchimpDebug(_request, env, url, cors) {
     api_url: dc && env.MAILCHIMP_LIST_ID
       ? `https://${dc}.api.mailchimp.com/3.0/lists/${env.MAILCHIMP_LIST_ID}/members`
       : null,
+    event_tag: String(env.MAILCHIMP_EVENT_TAG || "").trim() || null,
   };
 
   const result = await addToMailchimp(env, email, archetype);
@@ -2607,10 +2608,16 @@ async function addToMailchimp(env, email, archetype) {
   const url = `https://${dc}.api.mailchimp.com/3.0/lists/${env.MAILCHIMP_LIST_ID}/members`;
   const auth = btoa(`anystring:${env.MAILCHIMP_API_KEY}`);
 
+  // Tags applied to every contact:
+  //   - "filter-for-the-phone"     always-on campaign tag (across all events)
+  //   - <archetype>                so the audience can be segmented by card
+  //   - MAILCHIMP_EVENT_TAG        per-event tag set in wrangler.toml (e.g.
+  //                                "Biocap" for the current event); skip if blank
+  const eventTag = String(env.MAILCHIMP_EVENT_TAG || "").trim();
   const body = {
     email_address: email,
     status: "subscribed",
-    tags: ["filter-for-the-phone", archetype].filter(Boolean),
+    tags: ["filter-for-the-phone", archetype, eventTag].filter(Boolean),
   };
 
   try {
@@ -2671,6 +2678,7 @@ async function handleSlackDebug(_request, env, url, cors) {
     webhook_prefix: env.SLACK_WEBHOOK_URL
       ? String(env.SLACK_WEBHOOK_URL).split("/").slice(0, 6).join("/") + "/..."
       : null,
+    event_tag: String(env.MAILCHIMP_EVENT_TAG || "").trim() || null,
   };
 
   const result = await pingSlack(env, {
@@ -2711,18 +2719,25 @@ async function pingSlack(env, { email, archetype, archetypeName, sharePath, shar
     ? shareOrigin + sharePath
     : "https://tarot.vonpeach.com";
 
+  // Per-event tag from wrangler.toml — shown in the Slack header so the
+  // curator can see at a glance which event a ping belongs to when
+  // multiple are active or recently finished.
+  const eventTag = String(env.MAILCHIMP_EVENT_TAG || "").trim();
+  const eventPrefix = eventTag ? ` · *${escapeSlack(eventTag)}*` : "";
+  const titleEventBit = eventTag ? ` (${eventTag})` : "";
+
   // Block Kit payload. Header is bold, context section gives the
   // structured data, button gives the curator a one-click jump to the
   // share page (which already auto-unfurls via OG tags in Slack, so the
   // preview embed below the button shows the user's actual card).
   const payload = {
-    text: `New Von Peach card: ${email} · ${archetypeName || archetype}`,
+    text: `New Von Peach card${titleEventBit}: ${email} · ${archetypeName || archetype}`,
     blocks: [
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `:sparkles: *New Von Peach card*\n*${escapeSlack(email)}* drew *${escapeSlack(archetypeName || archetype)}*`,
+          text: `:sparkles: *New Von Peach card*${eventPrefix}\n*${escapeSlack(email)}* drew *${escapeSlack(archetypeName || archetype)}*`,
         },
       },
       {
