@@ -975,9 +975,6 @@
     margin-top: 4px;
   }
   #screenResult #emailMeBtn { flex-basis: 100%; }
-  /* "Share on LinkedIn" is the explicit user-requested CTA, so it gets its
-     own full-width row above the smaller Share + Try-again pair. */
-  #screenResult #shareLinkedinBtn { flex-basis: 100%; }
   #screenResult .ghost { flex: 1; min-width: 0; }
 
   /* Email-capture modal (slides up from the bottom) */
@@ -1176,7 +1173,6 @@
     </div>
     <div class="btnrow">
       <button class="btn" id="emailMeBtn">Email me my photo</button>
-      <button class="btn ghost" id="shareLinkedinBtn">Share on LinkedIn</button>
       <button class="btn ghost" id="shareBtn">Share</button>
       <button class="btn ghost" id="againBtn">Try again</button>
       <div class="hint" id="shareHint"></div>
@@ -1566,7 +1562,7 @@ const leftFill = $("leftFill"), rightFill = $("rightFill");
 const choiceLeft = $("choiceLeft"), choiceRight = $("choiceRight");
 const needle = $("needle");
 const introErr = $("introErr");
-const shareBtn = $("shareBtn"), againBtn = $("againBtn"), shareLinkedinBtn = $("shareLinkedinBtn");
+const shareBtn = $("shareBtn"), againBtn = $("againBtn");
 const shareHint = $("shareHint");
 const resultPreview = $("resultPreview");
 const wash = $("wash");
@@ -1602,7 +1598,6 @@ let prefilledEmail = null;
 startBtn.addEventListener("click", begin);
 againBtn.addEventListener("click", reset);
 shareBtn.addEventListener("click", () => shareSnapshot(false, "any"));
-shareLinkedinBtn.addEventListener("click", () => shareSnapshot(false, "linkedin"));
 emailMeBtn.addEventListener("click", openEmailModal);
 emailClose.addEventListener("click", closeEmailModal);
 emailModal.addEventListener("click", (e) => { if (e.target === emailModal) closeEmailModal(); });
@@ -1927,12 +1922,19 @@ async function beginPose() {
     revealOnPaintingScreen();
     autoSendPrefilledEmail();
   } else {
-    // NO — existing behaviour: transition to the full result screen
-    // where the email button + share + try again live.
+    // NO — transition to the full result screen where the email button
+    // + share + try again live. Then auto-open the email-capture modal:
+    // these users haven't given us their email yet, and the event team
+    // wants every card-recipient nudged toward signing up. A small
+    // delay (1.2s) lets them register their card first so the modal
+    // doesn't feel like it's gating the reveal.
     paintingScreen.classList.remove("show");
     playOverlay.style.display = "none";
     wash.style.display = "none";
     resultScreen.classList.add("show");
+    if (EMAIL_ENDPOINT) {
+      setTimeout(openEmailModal, 1200);
+    }
   }
 }
 
