@@ -3872,6 +3872,7 @@ async function handleGalleryJson(_request, env, url) {
   // Bumped from 500 → 1000 to comfortably cover a week of event activity
   // (~50 portraits/day × 7 days = 350 typical; 1000 leaves headroom for
   // heavy days without paginating).
+  const list = await env.PORTRAITS.list({ limit: 1000 });
   // Skip non-portrait R2 objects (e.g. gallery-stats.json — the counter
   // file that handleScan/handleStats maintains in the same bucket).
   // Portrait keys follow YYYY/MM/DD/<archetype>-<id>.jpg; anything that
