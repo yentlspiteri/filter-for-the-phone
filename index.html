@@ -2332,6 +2332,10 @@ function reset() {
   // Clear the swapped skeleton background — paintPortrait will re-set it
   // from the next frozen frame on the next round.
   paintingSkeletonImg.style.backgroundImage = "";
+  // Clear the result-preview <img> so the previous round's card can't
+  // momentarily reappear when the result screen re-opens. Belt-and-
+  // braces with the `await resultPreview.decode()` in renderTarotCard.
+  resultPreview.removeAttribute("src");
   // Restore the email button to its default state (the autoSend handler
   // mutated text + style on success)
   emailMeBtn.disabled = false;
@@ -2516,9 +2520,24 @@ async function renderTarotCard() {
     ctx.fillText("VON PEACH", W / 2, H - 80);
   }
 
-  // Push into preview <img>
+  // Push into preview <img>. Setting img.src kicks off an ASYNC decode
+  // of the dataURL — for a 1080×1920 JPEG that's ~600-800KB base64 and
+  // takes 100-500ms on mobile. Without awaiting, beginPose continues and
+  // adds `.show` to the result screen WHILE the new image is still
+  // decoding, leaving the OLD card (from the previous round) visible to
+  // the user until the decode finishes. That's the "two cards / broken
+  // one before the good one" the event team kept seeing on rapid replay.
+  // `await img.decode()` blocks until the decode is done, so the result
+  // screen only shows the new card.
   const dataUrl = c.toDataURL("image/jpeg", 0.92);
   resultPreview.src = dataUrl;
+  try {
+    await resultPreview.decode();
+  } catch (_) {
+    // decode() throws if the image fails to load. Non-fatal — the browser
+    // will still try to render it once it's ready; we just lose the wait
+    // guarantee. Falls through silently.
+  }
 }
 
 // ---------- CREST SIGILS ----------
